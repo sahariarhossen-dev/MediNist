@@ -1,48 +1,39 @@
 
 
-## Make Sign In Functional with Supabase Auth
+## Bottom Navigation Bar
+
+### Overview
+Add a floating bottom navigation bar with 4 items (Dashboard, Sales, AI, More) matching the reference image. Create placeholder pages for Sales, AI, and More. Integrate with protected routing.
 
 ### New Files
 
 | File | Purpose |
 |------|---------|
-| `src/pages/Login.tsx` | Login page with email/password form, Supabase auth |
-| `src/contexts/AuthContext.tsx` | Auth context provider with session persistence, profile fetching |
+| `src/components/BottomNav.tsx` | Floating bottom nav bar component with 4 items |
+| `src/components/AppLayout.tsx` | Layout wrapper that renders children + BottomNav (for protected routes) |
+| `src/pages/Sales.tsx` | Placeholder page |
+| `src/pages/AI.tsx` | Placeholder page |
+| `src/pages/More.tsx` | Placeholder page |
 
 ### Changes to Existing Files
 
 **`src/App.tsx`**
-- Add `/login` route
-- Wrap routes with `AuthContext` provider
-- Protect `/` route — redirect to `/login` if not authenticated
-- Allow `/register` and `/login` as public routes
+- Add routes for `/sales`, `/ai`, `/more` (all protected)
+- Wrap protected routes in `AppLayout` which includes the bottom nav
 
 **`src/pages/Index.tsx`**
-- Use auth context to display the logged-in user's pharmacy name instead of hardcoded "nasser madical hall"
-- Show user initials in avatar from profile data
+- Add `pb-24` bottom padding so content doesn't get hidden behind the nav bar
 
-**`src/pages/Register.tsx`**
-- Make the "Sign In" button link to `/login`
+### Bottom Nav Design
+- Floating pill shape: `fixed bottom-4 left-4 right-4` with `rounded-2xl`, white background, soft shadow
+- 4 equal items in a row, each with icon + label
+- Icons: `LayoutGrid` (Dashboard), `ShoppingCart` (Sales), `Brain` (AI), `MoreHorizontal` (More)
+- Active state: blue icon + text color, inactive: gray
+- Uses `useLocation` to determine active route
+- AI item gets a subtle highlight ring to denote it as a unique feature
 
-### Implementation Details
-
-**AuthContext (`src/contexts/AuthContext.tsx`)**
-- Uses `supabase.auth.onAuthStateChange` listener (set up BEFORE `getSession()`)
-- On session detected, fetches profile from `profiles` table to get `pharmacy_id`, `full_name`, `role`
-- If `pharmacy_id` exists, fetches pharmacy name from `pharmacies` table
-- Exposes: `user`, `profile`, `pharmacyName`, `loading`, `signOut`
-
-**Login Page (`src/pages/Login.tsx`)**
-- Email and password fields
-- Calls `supabase.auth.signInWithPassword({ email, password })`
-- On error: shows "Invalid login credentials" message
-- On success: redirects to `/`
-- Loading state: button shows "Signing in..." with disabled state
-- Link to `/register` for new users
-- Styled consistently with Register page (blue Medinist branding, white card, mobile-first)
-
-**Session Persistence**
-- Supabase client already configured with `persistSession: true` and `autoRefreshToken: true`
-- AuthContext checks session on mount; shows loading spinner until resolved
-- Protected routes redirect to `/login` when no session
+### Technical Details
+- NavLink-based routing for each item
+- Bottom nav only shown on authenticated pages (inside AppLayout)
+- No changes to Login/Register pages
 
