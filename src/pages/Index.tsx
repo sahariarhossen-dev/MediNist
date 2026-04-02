@@ -1,4 +1,5 @@
 import { Bell, TrendingUp, FileText, Users, AlertTriangle, ChevronDown } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import {
