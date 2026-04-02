@@ -41,7 +41,7 @@ const Index = () => {
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto">
+    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <span className="text-xl font-bold text-blue-600 tracking-tight">Medinist</span>
