@@ -36,6 +36,9 @@ const summaryCards = [
 ];
 
 const Index = () => {
+  const { profile, pharmacyName, signOut } = useAuth();
+  const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto">
       {/* Header */}
@@ -46,8 +49,8 @@ const Index = () => {
             <Bell size={22} className="text-gray-600" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
-          <Avatar className="h-9 w-9">
-            <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold">N</AvatarFallback>
+          <Avatar className="h-9 w-9" onClick={signOut} title="Sign out">
+            <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold cursor-pointer">{initials}</AvatarFallback>
           </Avatar>
         </div>
       </div>
@@ -57,7 +60,7 @@ const Index = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Business Insights</h1>
-            <p className="text-xs text-gray-400 mt-0.5">nasser madical hall Overview</p>
+            <p className="text-xs text-gray-400 mt-0.5">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
           <button className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm">
             15 Days <ChevronDown size={14} />
