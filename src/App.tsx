@@ -8,6 +8,10 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Register from "./pages/Register.tsx";
 import Login from "./pages/Login.tsx";
+import Sales from "./pages/Sales.tsx";
+import AI from "./pages/AI.tsx";
+import More from "./pages/More.tsx";
+import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
 
