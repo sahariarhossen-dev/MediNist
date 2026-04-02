@@ -59,20 +59,29 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string | null
+          district: string | null
+          division: string | null
           id: string
           name: string
+          upazila: string | null
         }
         Insert: {
           address?: string | null
           created_at?: string | null
+          district?: string | null
+          division?: string | null
           id?: string
           name: string
+          upazila?: string | null
         }
         Update: {
           address?: string | null
           created_at?: string | null
+          district?: string | null
+          division?: string | null
           id?: string
           name?: string
+          upazila?: string | null
         }
         Relationships: []
       }
@@ -81,6 +90,7 @@ export type Database = {
           full_name: string | null
           id: string
           pharmacy_id: string | null
+          phone: string | null
           role: string | null
           updated_at: string | null
         }
@@ -88,6 +98,7 @@ export type Database = {
           full_name?: string | null
           id: string
           pharmacy_id?: string | null
+          phone?: string | null
           role?: string | null
           updated_at?: string | null
         }
@@ -95,6 +106,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           pharmacy_id?: string | null
+          phone?: string | null
           role?: string | null
           updated_at?: string | null
         }
