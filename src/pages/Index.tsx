@@ -61,9 +61,9 @@ const Index = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Business Insights</h1>
-            <p className="text-xs text-gray-400 mt-0.5">{pharmacyName || "Your Pharmacy"} Overview</p>
+            <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
-          <button className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm">
+          <button className="flex items-center gap-1 bg-white border rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground">
             15 Days <ChevronDown size={14} />
           </button>
         </div>
