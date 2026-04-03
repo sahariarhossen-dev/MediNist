@@ -1,59 +1,37 @@
 
 
-## Company Selection Flow
+## Update Company Selection Flow
 
 ### Overview
-Create a dedicated "Add New Company" page that the user navigates to from the Company Name field on the Add Product form. Users can search, select an existing company, or add a new one. Selection returns to the Add Product form with the company name pre-filled.
+Redesign the AddCompany page to use inline company creation with real-time duplicate validation, matching the uploaded sketch.
 
-### Database Migration
-Create a `companies` table:
-```sql
-CREATE TABLE public.companies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  pharmacy_id uuid NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
+### Changes to `src/pages/AddCompany.tsx`
 
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+**Header**: Change title from "Add New Company" to "Select Your Company".
 
-CREATE POLICY "Users can access their pharmacy companies"
-  ON public.companies FOR ALL
-  USING (pharmacy_id = (SELECT profiles.pharmacy_id FROM profiles WHERE profiles.id = auth.uid()));
-```
+**Inline creation flow**:
+- The "+ Add New Company" button toggles an expandable inline form (not a separate page).
+- The inline form contains:
+  - A text input with a green checkmark icon when valid, red X when duplicate.
+  - A status label: "Already Exists" (red) if name matches an existing company for this pharmacy, or "Don't Match" (green) if unique.
+  - Two action labels/buttons: "Don't Match" / "Already Exists" on the left, "Save" on the right.
+  - "Save" button is disabled (grey, low opacity) when duplicate or empty; enabled (deep green) when unique.
 
-### New Files
+**Validation logic**:
+- As user types, filter the local `companies` array (already fetched) to check if `trimmed.toLowerCase()` matches any existing company name.
+- No extra DB query needed — the list is already loaded.
 
-| File | Purpose |
-|------|---------|
-| `src/pages/AddCompany.tsx` | Company selection/creation page |
+**Save behavior**:
+- Insert into `companies` table.
+- On success, append the new company to the local state array (no page reload).
+- Collapse the inline form.
+- The new company appears in the list immediately.
 
-### Changes to Existing Files
-
-| File | Change |
-|------|--------|
-| `src/App.tsx` | Add `/add-company` route (protected, no bottom nav) |
-| `src/pages/AddProduct.tsx` | Replace Company Name text input with a clickable field that navigates to `/add-company`, read selected company from URL search params or navigation state on return |
-
-### AddCompany Page Design
-
-**Header**: Back arrow + "Add New Company" title (same style as AddProduct header).
-
-**Search input**: Large rounded input field labeled "Company Name" at top. Filters the list below as user types.
-
-**Add button**: Below input, a rounded bordered button "+ Add New Company". Saves the typed name to the `companies` table with the user's `pharmacy_id`, then selects it and navigates back.
-
-**Company list**: Below the button, show all companies for the pharmacy in clean rounded bordered boxes (matching the sketch). Filtered by the search input. Clicking a company navigates back to `/add-product` with the company name passed via React Router state (`navigate("/add-product", { state: { companyName: "..." } })`).
-
-### AddProduct Changes
-
-- The Company Name field becomes a read-only styled div that shows the selected company name (or placeholder text).
-- On mount, check `location.state?.companyName` and pre-fill. Preserve other form fields by passing them as state when navigating to `/add-company` and restoring on return.
-- Navigation to add-company: `navigate("/add-company", { state: { formData: { name, productType, ... } } })`.
+**Selection**: Clicking a company navigates back to `/add-product` with company name in state (existing behavior, unchanged).
 
 ### Technical Details
-- Uses `useNavigate` and `useLocation` for state passing between pages
-- Supabase query: `.from("companies").select("*").eq("pharmacy_id", pharmacyId).order("name")`
-- RLS policy mirrors the medicines table pattern
-- Types file will auto-update after migration
+- New state: `showInlineAdd` (boolean), `newName` (string).
+- Duplicate check: `companies.some(c => c.name.toLowerCase() === newName.trim().toLowerCase())`.
+- The inline box uses a bordered container with the input, status text, and save button arranged per the sketch.
+- No new files or DB changes needed.
 
