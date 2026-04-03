@@ -1,54 +1,41 @@
 
 
-## Plan: Redesign Cart with Expanded/Collapsed States
+## Plan: Activate Complete Sale with Stock Deduction & Live Sales History
 
 ### Overview
-Re-introduce expand/collapse state for cart items. The most recently added or tapped item shows full controls (expanded). All others show a minimal collapsed row. Auto-collapse on search or new item add.
+The `saveSale` function in CreateSale.tsx already inserts into `sales` and `sale_items`. We need to add stock deduction and post-sale cleanup. The Sales.tsx page currently uses hardcoded data — we'll replace it with live Supabase queries.
 
-### Changes in `src/pages/CreateSale.tsx`
+### Changes
 
-**1. Add `expandedId` state**
-- New state: `const [expandedId, setExpandedId] = useState<string | null>(null)`
-- When `addToCart` is called, set `expandedId` to the new medicine's ID
-- When search starts (searchQuery changes to non-empty), set `expandedId` to null
-- Clicking a collapsed item sets `expandedId` to that item's ID
+**1. `src/pages/CreateSale.tsx` — Add stock deduction + post-sale reset (lines 86-134)**
 
-**2. Expanded item layout** (matches sketch exactly)
+After inserting sale_items, loop through cart items and update each medicine's `stock_quantity` by decrementing the sold quantity:
 
-```text
-┌──────────────────────────────────────────────────┐
-│  ⚕ sergel 20 ᶜᵃᵖˢᵘˡᵉ           healthcarear   │
-│  🗑  stk 11.5   MRP 10   10*20=200৳   [- 20 +] │
-└──────────────────────────────────────────────────┘
+```typescript
+// After sale_items insert succeeds
+for (const c of cartItems) {
+  const newStock = (c.medicine.stock_quantity || 0) - c.quantity;
+  await supabase
+    .from("medicines")
+    .update({ stock_quantity: Math.max(0, newStock) })
+    .eq("id", c.medicine.id);
+}
 ```
 
-- **Row 1**: Pill icon + medicine name (large bold) + product_type superscript + company_name right-aligned
-- **Row 2**: Single aligned row — Trash icon, STK value, MRP value, calculation (`qty × price = total ৳`), pill-shaped qty selector on far right. All vertically centered with `items-center`.
+On success: clear cart (`setCartItems([])`), reset search, show toast, then navigate to `/sales`.
 
-**3. Collapsed item layout** (minimal list row)
+**2. `src/pages/Sales.tsx` — Fetch real sales data from Supabase**
 
-```text
-┌──────────────────────────────────────────────────┐
-│  1.  progut 20 ᶜᵃᵖˢᵘˡᵉ    10*10          100 ৳ │
-│      popular                                     │
-└──────────────────────────────────────────────────┘
-```
+- Import `supabase`, `useAuth`, `useState`, `useEffect`
+- Fetch today's completed sales filtered by `pharmacy_id` and `created_at >= today`
+- Calculate today's total dynamically
+- Display real sales history (id truncated, time formatted, total amount)
+- Remove all hardcoded `salesHistory` data
 
-- **Row 1**: Serial number + medicine name (bold) + product_type superscript + `qty×price` center + total ৳ right
-- **Row 2**: Company name in subtle gray
-- Clicking the card expands it (sets `expandedId`)
+### No database changes needed
+The existing `medicines` table has an ALL RLS policy, so UPDATE is permitted. Stock deduction works with the current schema.
 
-**4. Styling**
-- Cards: `bg-white rounded-2xl shadow-sm border border-gray-100`
-- Expanded card gets a slightly thicker border: `border-gray-300`
-- Emerald green for prices, trash icon bg, qty selector border
-- Collapsed cards have `cursor-pointer hover:bg-gray-50`
-
-**5. Keep unchanged**
-- Search bar with X clear icon
-- `addToCart` prepends to top
-- All price/discount/save logic
-- Header, footer, summary section
-
-### No other files affected.
+### Files affected
+- `src/pages/CreateSale.tsx` — stock deduction + cart reset
+- `src/pages/Sales.tsx` — live data from Supabase
 
