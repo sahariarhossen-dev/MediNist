@@ -71,7 +71,7 @@ const AddProduct = () => {
     setSaving(true);
     const { error } = await supabase.from("medicines").insert({
       name: name.trim(),
-      generic_name: companyName.trim() || null,
+      company_name: companyName.trim() || null,
       product_type: productType || null,
       pharmacy_id: profile.pharmacy_id,
       strip_per_pack: isTabletOrCapsule && stripPerPack ? Number(stripPerPack) : null,
