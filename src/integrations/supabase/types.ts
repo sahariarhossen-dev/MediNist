@@ -156,6 +156,89 @@ export type Database = {
           },
         ]
       }
+      sale_items: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          id: string
+          medicine_id: string
+          medicine_name: string
+          quantity: number
+          sale_id: string
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          medicine_id: string
+          medicine_name: string
+          quantity?: number
+          sale_id: string
+          total_price?: number
+          unit_price?: number
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          medicine_id?: string
+          medicine_name?: string
+          quantity?: number
+          sale_id?: string
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          created_at: string
+          discount_amount: number
+          discount_percent: number
+          id: string
+          pharmacy_id: string
+          sale_type: string
+          status: string
+          subtotal: number
+          total: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          discount_amount?: number
+          discount_percent?: number
+          id?: string
+          pharmacy_id: string
+          sale_type?: string
+          status?: string
+          subtotal?: number
+          total?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          discount_amount?: number
+          discount_percent?: number
+          id?: string
+          pharmacy_id?: string
+          sale_type?: string
+          status?: string
+          subtotal?: number
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
