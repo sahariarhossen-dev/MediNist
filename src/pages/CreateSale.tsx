@@ -32,6 +32,7 @@ const CreateSale = () => {
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
