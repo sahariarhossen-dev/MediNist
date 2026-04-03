@@ -1,6 +1,6 @@
 import { Plus, Receipt, TrendingUp, ArrowUp } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Area, AreaChart } from "recharts";
-import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 const sparklineData = [
   { v: 320 }, { v: 480 }, { v: 390 }, { v: 520 }, { v: 610 }, { v: 580 },
