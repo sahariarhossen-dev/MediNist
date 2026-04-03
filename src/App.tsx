@@ -12,6 +12,7 @@ import Sales from "./pages/Sales.tsx";
 import AI from "./pages/AI.tsx";
 import More from "./pages/More.tsx";
 import Inventory from "./pages/Inventory.tsx";
+import AddProduct from "./pages/AddProduct.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
