@@ -32,12 +32,14 @@ const CreateSale = () => {
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
       setSearchResults([]);
       return;
     }
+    setExpandedId(null);
     const timeout = setTimeout(async () => {
       setSearching(true);
       const { data } = await supabase
@@ -58,6 +60,7 @@ const CreateSale = () => {
       if (existing) return prev;
       return [{ medicine, quantity: 1 }, ...prev];
     });
+    setExpandedId(medicine.id);
     setSearchQuery("");
     setSearchResults([]);
   }, []);
@@ -246,46 +249,40 @@ const CreateSale = () => {
             {cartItems.map((item, idx) => {
               const unitPrice = item.medicine.price || 0;
               const lineTotal = item.quantity * unitPrice;
-              return (
-                <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm p-3">
-                  <div className="flex items-start gap-2">
-                    {/* Left: serial + icon + info */}
-                    <span className="text-xs font-bold text-gray-400 w-4 text-right mt-1">{idx + 1}</span>
-                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Pill className="w-4 h-4 text-emerald-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {/* Top row: name + type */}
-                      <p className="text-sm font-bold text-gray-900 leading-tight">
+              const isExpanded = expandedId === item.medicine.id;
+
+              if (isExpanded) {
+                return (
+                  <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-3">
+                    {/* Row 1: Icon + Name + Type + Company */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                        <Pill className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 flex-1 min-w-0">
                         {item.medicine.name}
                         {item.medicine.product_type && (
                           <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      {/* Bottom row: delete icon + company + STK + MRP */}
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <button
-                          onClick={() => removeFromCart(item.medicine.id)}
-                          className="w-5 h-5 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
-                        >
-                          <Trash2 className="w-3 h-3 text-emerald-600" />
-                        </button>
-                        {item.medicine.company_name && (
-                          <>
-                            <span className="text-[10px] text-gray-400">{item.medicine.company_name}</span>
-                            <span className="text-[10px] text-gray-300">·</span>
-                          </>
-                        )}
-                        <span className="text-[10px] text-gray-400">STK: {item.medicine.stock_quantity ?? 0}</span>
-                        <span className="text-[10px] text-gray-300">·</span>
-                        <span className="text-[10px] text-gray-400">MRP: {unitPrice}</span>
-                      </div>
+                      {item.medicine.company_name && (
+                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.medicine.company_name}</span>
+                      )}
                     </div>
-
-                    {/* Right: qty selector + price */}
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {/* Qty selector */}
-                      <div className="flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden">
+                    {/* Row 2: Trash + STK + MRP + Calc + Qty selector */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => removeFromCart(item.medicine.id)}
+                        className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
+                      </button>
+                      <span className="text-[10px] text-gray-400">STK {item.medicine.stock_quantity ?? 0}</span>
+                      <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
+                      <span className="text-xs font-bold text-emerald-600 bg-yellow-100 px-1.5 py-0.5 rounded">
+                        {item.quantity}×{unitPrice}={lineTotal}৳
+                      </span>
+                      <div className="ml-auto flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
                           className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
@@ -306,12 +303,32 @@ const CreateSale = () => {
                           <Plus className="w-3 h-3 text-emerald-600" />
                         </button>
                       </div>
-                      {/* Live price */}
-                      <span className="text-xs font-bold text-emerald-600 bg-yellow-100 px-2 py-0.5 rounded">
-                        {item.quantity} × {unitPrice} = {lineTotal} ৳
-                      </span>
                     </div>
                   </div>
+                );
+              }
+
+              // Collapsed view
+              return (
+                <div
+                  key={item.medicine.id}
+                  onClick={() => setExpandedId(item.medicine.id)}
+                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-gray-50 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 w-4 text-right">{idx + 1}.</span>
+                    <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">
+                      {item.medicine.name}
+                      {item.medicine.product_type && (
+                        <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
+                      )}
+                    </p>
+                    <span className="text-[10px] text-gray-400">{item.quantity}×{unitPrice}</span>
+                    <span className="text-xs font-bold text-emerald-600">{lineTotal} ৳</span>
+                  </div>
+                  {item.medicine.company_name && (
+                    <p className="text-[10px] text-gray-400 ml-6 mt-0.5">{item.medicine.company_name}</p>
+                  )}
                 </div>
               );
             })}
