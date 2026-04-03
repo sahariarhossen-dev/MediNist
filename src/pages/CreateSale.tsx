@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Pill, X, Plus, Minus } from "lucide-react";
+import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -18,7 +18,6 @@ interface Medicine {
 interface CartItem {
   medicine: Medicine;
   quantity: number;
-  expanded: boolean;
 }
 
 const DISCOUNT_PERCENT = 10;
@@ -34,7 +33,6 @@ const CreateSale = () => {
   const [saving, setSaving] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Debounced search
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
       setSearchResults([]);
@@ -58,8 +56,7 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      const collapsed = prev.map((c) => ({ ...c, expanded: false }));
-      return [{ medicine, quantity: 1, expanded: false }, ...collapsed];
+      return [{ medicine, quantity: 1 }, ...prev];
     });
     setSearchQuery("");
     setSearchResults([]);
@@ -73,14 +70,6 @@ const CreateSale = () => {
     if (qty < 1) return;
     setCartItems((prev) =>
       prev.map((c) => (c.medicine.id === id ? { ...c, quantity: qty } : c))
-    );
-  }, []);
-
-  const toggleExpand = useCallback((id: string) => {
-    setCartItems((prev) =>
-      prev.map((c) =>
-        c.medicine.id === id ? { ...c, expanded: !c.expanded } : { ...c, expanded: false }
-      )
     );
   }, []);
 
@@ -142,16 +131,15 @@ const CreateSale = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white max-w-md mx-auto flex flex-col">
+    <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex flex-col">
       {/* Header */}
-      <div className="px-4 pt-5 pb-3 flex items-center justify-between border-b border-gray-100">
+      <div className="px-4 pt-5 pb-3 flex items-center justify-between bg-white border-b border-gray-100">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/sales")} className="p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 transition">
             <ArrowLeft className="w-5 h-5 text-gray-700" />
           </button>
           <div className="flex items-center gap-2.5">
-            {/* Profile icon — stylized running figure */}
-            <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="15" cy="4" r="2" />
                 <path d="M9 21l3-9 4 1" />
@@ -166,11 +154,10 @@ const CreateSale = () => {
           </div>
         </div>
 
-        {/* Sale Type Dropdown */}
         <div className="relative">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="px-4 py-1.5 rounded-full border border-gray-300 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition shadow-sm"
+            className="px-4 py-1.5 rounded-full border border-emerald-200 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition shadow-sm"
           >
             {saleType === "retail" ? "Retail" : "Wholesale"}
           </button>
@@ -180,7 +167,7 @@ const CreateSale = () => {
                 <button
                   key={t}
                   onClick={() => { setSaleType(t); setShowDropdown(false); }}
-                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition ${saleType === t ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition ${saleType === t ? "bg-emerald-600 text-white" : "text-gray-700 hover:bg-gray-50"}`}
                 >
                   {t === "retail" ? "Retail" : "Wholesale"}
                 </button>
@@ -191,7 +178,7 @@ const CreateSale = () => {
       </div>
 
       {/* Search */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-4 pb-2 bg-white">
         <div className="relative flex items-center border-2 border-gray-800 rounded-xl overflow-hidden">
           <input
             type="text"
@@ -213,7 +200,6 @@ const CreateSale = () => {
           </div>
         </div>
 
-        {/* Search Results */}
         {searchResults.length > 0 && (
           <div className="mt-2 border border-gray-200 rounded-xl shadow-lg bg-white overflow-hidden">
             {searchResults.map((med) => (
@@ -222,25 +208,23 @@ const CreateSale = () => {
                 onClick={() => addToCart(med)}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition border-b border-gray-100 last:border-0"
               >
-                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                  <Pill className="w-4 h-4 text-gray-500" />
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <Pill className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                   <p className="text-sm font-bold text-gray-900">
-                     {med.name}
-                     {med.product_type && (
-                       <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{med.product_type}</span>
-                     )}
-                   </p>
-                   <div className="flex items-center gap-1.5 mt-0.5">
-                     {med.company_name && (
-                       <span className="text-[10px] text-gray-400">{med.company_name}</span>
-                     )}
-                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                     <span className="text-[10px] text-gray-400">STK - {med.stock_quantity ?? 0}</span>
-                   </div>
+                  <p className="text-sm font-bold text-gray-900">
+                    {med.name}
+                    {med.product_type && (
+                      <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{med.product_type}</span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {med.company_name && <span className="text-[10px] text-gray-400">{med.company_name}</span>}
+                    {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
+                    <span className="text-[10px] text-gray-400">STK: {med.stock_quantity ?? 0}</span>
+                  </div>
                 </div>
-                <p className="text-xs font-semibold text-gray-500">MRP-{med.price ?? 0}</p>
+                <p className="text-xs font-semibold text-emerald-600">৳{med.price ?? 0}</p>
               </button>
             ))}
           </div>
@@ -251,80 +235,83 @@ const CreateSale = () => {
       </div>
 
       {/* Cart */}
-      <div className="flex-1 px-4 overflow-y-auto pb-44">
+      <div className="flex-1 px-4 overflow-y-auto pb-44 pt-3">
         {cartItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-300">
             <Pill className="w-12 h-12 mb-3" />
             <p className="text-sm font-medium">No items added yet</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200 border-t border-gray-200 mt-2">
+          <div className="space-y-2">
             {cartItems.map((item, idx) => {
-              const lineTotal = item.quantity * (item.medicine.price || 0);
-              const qtyLabel = item.medicine.pcs_per_strip
-                ? `${item.quantity}*${item.medicine.pcs_per_strip}`
-                : `${item.quantity}`;
+              const unitPrice = item.medicine.price || 0;
+              const lineTotal = item.quantity * unitPrice;
               return (
-                <div key={item.medicine.id} className="py-3">
-                  {/* Collapsed row */}
-                  <button
-                    onClick={() => toggleExpand(item.medicine.id)}
-                    className="w-full flex items-center gap-2 text-left"
-                  >
-                    <span className="text-sm font-bold text-gray-500 w-5">{idx + 1}</span>
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <Pill className="w-4 h-4 text-gray-500" />
+                <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm p-3">
+                  {/* Row 1: serial, icon, name+type, qty selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 w-4 text-right">{idx + 1}</span>
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                      <Pill className="w-4 h-4 text-emerald-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                       <p className="text-sm font-bold text-gray-900">
-                         {item.medicine.name}
-                         {item.medicine.product_type && (
-                           <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
-                         )}
-                       </p>
-                       {item.medicine.company_name && (
-                         <span className="text-[10px] text-gray-400">{item.medicine.company_name}</span>
-                       )}
+                      <p className="text-sm font-bold text-gray-900 leading-tight">
+                        {item.medicine.name}
+                        {item.medicine.product_type && (
+                          <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
+                        )}
+                      </p>
                     </div>
-                    <span className="text-xs font-medium text-gray-500 mr-1">{qtyLabel}</span>
-                    <span className="text-sm font-bold text-gray-900">{lineTotal}</span>
-                    <span className="text-sm font-bold text-gray-900 ml-0.5">৳</span>
-                  </button>
-
-                  {/* Expanded — quantity controls */}
-                  {item.expanded && (
-                    <div className="mt-2 ml-7 flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
-                      <span className="text-xs font-medium text-gray-500">Qty:</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
-                          className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition"
-                        >
-                          <Minus className="w-3.5 h-3.5 text-gray-600" />
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                          className="w-12 text-center text-sm font-bold text-gray-900 border border-gray-200 rounded-lg py-1 bg-white outline-none"
-                        />
-                        <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
-                          className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-gray-600" />
-                        </button>
-                      </div>
-                      <div className="flex-1" />
+                    {/* Pill-shaped qty selector */}
+                    <div className="flex items-center gap-0 rounded-full border border-emerald-200 bg-white overflow-hidden">
                       <button
-                        onClick={() => removeFromCart(item.medicine.id)}
-                        className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition"
+                        onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
+                        className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
                       >
-                        <X className="w-3.5 h-3.5 text-red-500" />
+                        <Minus className="w-3 h-3 text-emerald-600" />
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
+                        className="w-8 text-center text-xs font-bold text-gray-900 outline-none bg-transparent border-x border-emerald-100 py-1"
+                      />
+                      <button
+                        onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
+                        className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
+                      >
+                        <Plus className="w-3 h-3 text-emerald-600" />
                       </button>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Row 2: company name */}
+                  <div className="ml-14 mt-0.5">
+                    {item.medicine.company_name && (
+                      <p className="text-[10px] text-gray-400">{item.medicine.company_name}</p>
+                    )}
+                  </div>
+
+                  {/* Row 3: STK, MRP, live price, delete */}
+                  <div className="ml-14 mt-1 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">STK: {item.medicine.stock_quantity ?? 0}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400">MRP: {unitPrice}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-emerald-600">
+                        {item.quantity} × {unitPrice} = {lineTotal} ৳
+                      </span>
+                      <button
+                        onClick={() => removeFromCart(item.medicine.id)}
+                        className="w-6 h-6 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition"
+                      >
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -333,17 +320,18 @@ const CreateSale = () => {
 
         {/* Summary */}
         {cartItems.length > 0 && (
-          <div className="border-t-2 border-gray-800 mt-4 pt-3 space-y-1.5">
-            <div className="flex justify-end items-center gap-3">
-              <span className="text-sm font-medium text-gray-600">Total</span>
+          <div className="bg-white rounded-2xl shadow-sm p-4 mt-3 space-y-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-gray-500">Subtotal</span>
               <span className="text-sm font-bold text-gray-900">{subtotal} ৳</span>
             </div>
-            <div className="flex justify-end items-center gap-3">
-              <span className="text-sm font-medium text-gray-600">Less_Diss - {DISCOUNT_PERCENT}%</span>
-              <span className="text-sm font-bold text-gray-900">{discountAmount} ৳</span>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-gray-500">Discount ({DISCOUNT_PERCENT}%)</span>
+              <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
             </div>
-            <div className="flex justify-end items-center gap-3 pt-2 border-t border-gray-300">
-              <span className="text-xl font-extrabold text-gray-900">= {netTotal} ৳</span>
+            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+              <span className="text-base font-extrabold text-gray-900">Net Total</span>
+              <span className="text-xl font-extrabold text-emerald-700">{netTotal} ৳</span>
             </div>
           </div>
         )}
@@ -354,14 +342,14 @@ const CreateSale = () => {
         <button
           onClick={() => saveSale("draft")}
           disabled={saving || cartItems.length === 0}
-          className="flex-1 py-3.5 rounded-xl border-2 border-gray-800 text-sm font-bold text-gray-800 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 py-3.5 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-700 hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Draft
         </button>
         <button
           onClick={() => saveSale("completed")}
           disabled={saving || cartItems.length === 0}
-          className="flex-1 py-3.5 rounded-xl bg-gray-900 text-sm font-bold text-white hover:bg-gray-800 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+          className="flex-1 py-3.5 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
         >
           {saving ? "Saving..." : "Complete Sale"}
         </button>
