@@ -37,9 +37,9 @@ export type Database = {
       }
       medicines: {
         Row: {
+          company_name: string | null
           created_at: string | null
           expiry_date: string | null
-          generic_name: string | null
           id: string
           name: string
           pcs_per_strip: number | null
@@ -52,9 +52,9 @@ export type Database = {
           strip_per_pack: number | null
         }
         Insert: {
+          company_name?: string | null
           created_at?: string | null
           expiry_date?: string | null
-          generic_name?: string | null
           id?: string
           name: string
           pcs_per_strip?: number | null
@@ -67,9 +67,9 @@ export type Database = {
           strip_per_pack?: number | null
         }
         Update: {
+          company_name?: string | null
           created_at?: string | null
           expiry_date?: string | null
-          generic_name?: string | null
           id?: string
           name?: string
           pcs_per_strip?: number | null

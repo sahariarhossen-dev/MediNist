@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface Medicine {
   id: string;
   name: string;
-  generic_name: string | null;
+  company_name: string | null;
   price: number | null;
   stock_quantity: number | null;
 }
@@ -104,7 +104,7 @@ const Inventory = () => {
               {/* Name & Generic */}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-foreground truncate">{med.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{med.generic_name || "—"}</p>
+                <p className="text-xs text-muted-foreground truncate"><p className="text-xs text-muted-foreground truncate">{med.company_name || "—"}</p></p>
               </div>
               {/* Price */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
