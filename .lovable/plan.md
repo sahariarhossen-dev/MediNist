@@ -1,37 +1,40 @@
 
 
-## Update Company Selection Flow
+## Sales Page — Premium UI Build
 
 ### Overview
-Redesign the AddCompany page to use inline company creation with real-time duplicate validation, matching the uploaded sketch.
+Replace the placeholder Sales page with a premium, eye-catching design featuring glassmorphism, sparkline chart, and styled sales history list. All using the existing Recharts library and Tailwind CSS.
 
-### Changes to `src/pages/AddCompany.tsx`
+### Single File Change: `src/pages/Sales.tsx`
 
-**Header**: Change title from "Add New Company" to "Select Your Company".
+**1. Hero Section — Glassmorphism "Create New Sale" Card**
+- Full-width card with `backdrop-blur-xl`, semi-transparent white/emerald gradient background, `rounded-3xl`, soft shadow
+- Large glowing green `+` icon (Plus from lucide-react) with a pulsing ring animation
+- Bold "CREATE NEW SALE" text, emerald green accent
+- Clickable — for now just a toast placeholder
 
-**Inline creation flow**:
-- The "+ Add New Company" button toggles an expandable inline form (not a separate page).
-- The inline form contains:
-  - A text input with a green checkmark icon when valid, red X when duplicate.
-  - A status label: "Already Exists" (red) if name matches an existing company for this pharmacy, or "Don't Match" (green) if unique.
-  - Two action labels/buttons: "Don't Match" / "Already Exists" on the left, "Save" on the right.
-  - "Save" button is disabled (grey, low opacity) when duplicate or empty; enabled (deep green) when unique.
+**2. Analytics Card — "Today's Total Sale"**
+- Grey/white card with `rounded-2xl`, soft shadow
+- Title "Today's Total Sale" in cool grey
+- Large emerald green amount text (e.g., ৳12,546)
+- Right side: small Recharts `LineChart` sparkline (hardcoded sample data for today's trend) with emerald green stroke and gradient fill
+- Small `↑ 12% vs yesterday` badge in green
 
-**Validation logic**:
-- As user types, filter the local `companies` array (already fetched) to check if `trimmed.toLowerCase()` matches any existing company name.
-- No extra DB query needed — the list is already loaded.
+**3. Sales History List**
+- Section title "Sales History" with a "View All" link
+- Striped list using `even:bg-emerald-50/50`
+- Each row: receipt icon (Receipt from lucide-react), bold Invoice ID, time, and amount in emerald green
+- All items use `rounded-2xl` containers
+- Hardcoded mock data (5-6 entries) since there's no sales table yet
 
-**Save behavior**:
-- Insert into `companies` table.
-- On success, append the new company to the local state array (no page reload).
-- Collapse the inline form.
-- The new company appears in the list immediately.
+**4. Styling Details**
+- White background (`bg-white` / `bg-gray-50`)
+- Emerald green palette: `emerald-500`, `emerald-600` for accents
+- Cool grey: `gray-400`, `gray-500`, `gray-600` for secondary text
+- `rounded-2xl` / `rounded-3xl` on all cards
+- Soft shadows: `shadow-lg`, `shadow-xl`
+- Glass effect: `bg-white/60 backdrop-blur-xl border border-white/20`
+- Sparkline via Recharts `LineChart` + `Line` (no axes, no grid, tiny)
 
-**Selection**: Clicking a company navigates back to `/add-product` with company name in state (existing behavior, unchanged).
-
-### Technical Details
-- New state: `showInlineAdd` (boolean), `newName` (string).
-- Duplicate check: `companies.some(c => c.name.toLowerCase() === newName.trim().toLowerCase())`.
-- The inline box uses a bordered container with the input, status text, and save button arranged per the sketch.
-- No new files or DB changes needed.
+### No new dependencies or DB changes needed.
 
