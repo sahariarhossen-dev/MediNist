@@ -1,23 +1,63 @@
-import { Plus, Receipt, TrendingUp, ArrowUp } from "lucide-react";
-import { LineChart, Line, ResponsiveContainer, Area, AreaChart } from "recharts";
+import { useState, useEffect } from "react";
+import { Plus, Receipt, ArrowUp } from "lucide-react";
+import { ResponsiveContainer, Area, AreaChart } from "recharts";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { format, isToday, parseISO } from "date-fns";
 
 const sparklineData = [
   { v: 320 }, { v: 480 }, { v: 390 }, { v: 520 }, { v: 610 }, { v: 580 },
   { v: 750 }, { v: 690 }, { v: 820 }, { v: 900 }, { v: 870 }, { v: 950 },
 ];
 
-const salesHistory = [
-  { id: "INV-20241", time: "10:24 AM", amount: 2450 },
-  { id: "INV-20240", time: "09:51 AM", amount: 1875 },
-  { id: "INV-20239", time: "09:12 AM", amount: 3200 },
-  { id: "INV-20238", time: "08:45 AM", amount: 960 },
-  { id: "INV-20237", time: "08:10 AM", amount: 4120 },
-  { id: "INV-20236", time: "Yesterday", amount: 1540 },
-];
+interface SaleRow {
+  id: string;
+  total: number;
+  created_at: string;
+  status: string;
+}
 
 const Sales = () => {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const [sales, setSales] = useState<SaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!profile?.pharmacy_id) return;
+    const fetchSales = async () => {
+      setLoading(true);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data } = await supabase
+        .from("sales")
+        .select("id, total, created_at, status")
+        .eq("pharmacy_id", profile.pharmacy_id!)
+        .eq("status", "completed")
+        .gte("created_at", todayStart.toISOString())
+        .order("created_at", { ascending: false });
+
+      setSales(data || []);
+      setLoading(false);
+    };
+    fetchSales();
+  }, [profile?.pharmacy_id]);
+
+  const todayTotal = sales.reduce((sum, s) => sum + Number(s.total), 0);
+
+  const formatTime = (dateStr: string) => {
+    try {
+      const d = parseISO(dateStr);
+      return isToday(d) ? format(d, "hh:mm a") : format(d, "dd MMM");
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const shortId = (id: string) => `INV-${id.slice(0, 5).toUpperCase()}`;
+
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto pb-28">
       {/* Header */}
@@ -27,7 +67,7 @@ const Sales = () => {
       </div>
 
       <div className="px-5 space-y-5 mt-2">
-        {/* Hero — Glassmorphism Create New Sale */}
+        {/* Hero — Create New Sale */}
         <button
           onClick={() => navigate("/create-sale")}
           className="w-full relative overflow-hidden rounded-3xl border border-white/30 bg-gradient-to-br from-emerald-500/90 via-emerald-600/85 to-emerald-700/90 backdrop-blur-xl shadow-xl shadow-emerald-500/20 p-6 text-left transition-transform active:scale-[0.98]"
@@ -53,13 +93,13 @@ const Sales = () => {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Today's Total Sale</p>
-              <p className="text-3xl font-extrabold text-emerald-600 mt-1.5 tracking-tight">৳12,546</p>
+              <p className="text-3xl font-extrabold text-emerald-600 mt-1.5 tracking-tight">৳{todayTotal.toLocaleString()}</p>
               <div className="flex items-center gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <ArrowUp className="w-3 h-3" />
-                  12%
+                  {sales.length} sales
                 </span>
-                <span className="text-xs text-gray-400">vs yesterday</span>
+                <span className="text-xs text-gray-400">today</span>
               </div>
             </div>
             <div className="w-28 h-16 mt-1">
@@ -71,14 +111,7 @@ const Sales = () => {
                       <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="v"
-                    stroke="#10b981"
-                    strokeWidth={2.5}
-                    fill="url(#sparkGrad)"
-                    dot={false}
-                  />
+                  <Area type="monotone" dataKey="v" stroke="#10b981" strokeWidth={2.5} fill="url(#sparkGrad)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -89,24 +122,30 @@ const Sales = () => {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">Sales History</h3>
-            <button className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View All</button>
+            <span className="text-xs font-semibold text-gray-400">Today</span>
           </div>
           <div className="rounded-2xl bg-white shadow-lg shadow-gray-200/60 border border-gray-100 overflow-hidden">
-            {salesHistory.map((sale, i) => (
-              <div
-                key={sale.id}
-                className={`flex items-center gap-3.5 px-4 py-3.5 ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== salesHistory.length - 1 ? "border-b border-gray-100/80" : ""}`}
-              >
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <Receipt className="w-5 h-5 text-emerald-500" />
+            {loading ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">Loading…</div>
+            ) : sales.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">No sales today yet</div>
+            ) : (
+              sales.map((sale, i) => (
+                <div
+                  key={sale.id}
+                  className={`flex items-center gap-3.5 px-4 py-3.5 ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== sales.length - 1 ? "border-b border-gray-100/80" : ""}`}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                    <Receipt className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800">{shortId(sale.id)}</p>
+                    <p className="text-xs text-gray-400">{formatTime(sale.created_at)}</p>
+                  </div>
+                  <p className="text-sm font-bold text-emerald-600">৳{Number(sale.total).toLocaleString()}</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-800">{sale.id}</p>
-                  <p className="text-xs text-gray-400">{sale.time}</p>
-                </div>
-                <p className="text-sm font-bold text-emerald-600">৳{sale.amount.toLocaleString()}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

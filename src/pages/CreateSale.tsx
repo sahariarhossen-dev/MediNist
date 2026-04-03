@@ -124,7 +124,22 @@ const CreateSale = () => {
       const { error: itemsError } = await supabase.from("sale_items").insert(items);
       if (itemsError) throw itemsError;
 
+      // Deduct stock for each sold item
+      if (status === "completed") {
+        for (const c of cartItems) {
+          const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - c.quantity);
+          await supabase
+            .from("medicines")
+            .update({ stock_quantity: newStock })
+            .eq("id", c.medicine.id);
+        }
+      }
+
       toast.success(status === "draft" ? "Sale saved as draft" : "Sale completed!");
+      setCartItems([]);
+      setSearchQuery("");
+      setSearchResults([]);
+      setExpandedId(null);
       navigate("/sales");
     } catch (err: any) {
       toast.error(err.message || "Failed to save sale");
