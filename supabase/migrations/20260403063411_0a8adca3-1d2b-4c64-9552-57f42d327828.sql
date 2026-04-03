@@ -1,0 +1,1 @@
+ALTER TABLE public.medicines RENAME COLUMN generic_name TO company_name;
