@@ -1,21 +1,48 @@
 
 
-## Plan: Sales Page UI/UX Refinements
+## Plan: Redesign Cart Item Layout
+
+### Overview
+Redesign each cart item card to show quantity controls inline (always visible, no expand/collapse for qty), with a new info grid and emerald green accents. Remove the expand/collapse pattern entirely — each item is a self-contained card.
 
 ### Changes in `src/pages/CreateSale.tsx`
 
-**1. Search bar clear (X) icon** (lines 194-205)
-- Add an X button inside the search bar (before the search icon divider) that appears when `searchQuery` is non-empty
-- Clicking it clears `searchQuery` and `searchResults`
+**1. Remove `expanded` state from CartItem interface and `toggleExpand` function**
+- Items no longer expand/collapse — qty controls are always visible on each card
+- Remove the `expanded` property and `toggleExpand` callback
 
-**2. Auto-collapse logic** (lines 78-84)
-- Update `toggleExpand` to collapse all other items when expanding one (only one expanded at a time)
-- Also collapse all items when `addToCart` is called and when search starts (in the search `useEffect`)
+**2. New cart item card layout (replaces lines 261-331)**
 
-**3. Prepend new items** (line 61)
-- Change `[...prev, { medicine, quantity: 1, expanded: false }]` to `[{ medicine, quantity: 1, expanded: false }, ...prev]` so new items appear at the top
+Each item rendered as a card with `bg-gray-50 rounded-2xl shadow-sm p-3 mb-2`:
 
-**4. Item layout** — already done in previous iteration (product_type as superscript next to name, company_name below). No changes needed here.
+```text
+┌─────────────────────────────────────────────────┐
+│ 1. [icon]  Medicine Name  ᵀᵃᵇˡᵉᵗ    [- 5 +]  │
+│            Company Name                         │
+│            STK: 50 · MRP: 10    5*10 = 50 ৳    │
+│                                        [🗑]     │
+└─────────────────────────────────────────────────┘
+```
 
-### No other files affected. All price calculation logic stays unchanged.
+- **Row 1**: Serial number, pill icon, medicine name (bold), product_type superscript, and a pill-shaped qty selector (`rounded-full bg-white border border-emerald-200`) on the far right
+- **Row 2**: Company name in subtle gray
+- **Row 3**: STK and MRP in `text-[10px] text-gray-400`, then live price calculation (`qty * pcs_per_strip = total ৳`) in emerald-600 on the right, with a small delete button
+
+**3. Emerald green theme accents**
+- Price display: `text-emerald-600 font-bold`
+- Qty selector border: `border-emerald-200`, buttons `hover:bg-emerald-50`
+- Footer "Complete Sale" button: `bg-emerald-600 hover:bg-emerald-700`
+- Summary net total: `text-emerald-700`
+
+**4. Keep existing logic unchanged**
+- Search bar with X clear icon stays as-is
+- `addToCart` still prepends and collapses (collapse no longer needed but harmless)
+- All price calculation logic unchanged
+- Draft/Complete Sale database logic unchanged
+
+**5. Background**
+- Page background: `bg-gray-50` instead of `bg-white`
+- Cards: `bg-white rounded-2xl shadow-sm`
+
+### No other files affected.
 
