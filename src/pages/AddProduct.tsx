@@ -227,7 +227,7 @@ const AddProduct = () => {
         {/* Stock Alert */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-            <AlertTriangle size={14} className="text-yellow-500" />
+            <AlertTriangle size={14} className="text-destructive" />
             Stock Alert Level
           </Label>
           <Input
