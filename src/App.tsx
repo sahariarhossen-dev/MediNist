@@ -48,6 +48,7 @@ const App = () => (
             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
             <Route path="/add-product" element={<ProtectedRoute><AddProduct /></ProtectedRoute>} />
             <Route path="/add-company" element={<ProtectedRoute><AddCompany /></ProtectedRoute>} />
+            <Route path="/create-sale" element={<ProtectedRoute><CreateSale /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="*" element={<NotFound />} />

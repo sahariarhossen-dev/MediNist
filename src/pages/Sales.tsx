@@ -29,7 +29,7 @@ const Sales = () => {
       <div className="px-5 space-y-5 mt-2">
         {/* Hero — Glassmorphism Create New Sale */}
         <button
-          onClick={() => toast.info("Create Sale feature coming soon!")}
+          onClick={() => navigate("/create-sale")}
           className="w-full relative overflow-hidden rounded-3xl border border-white/30 bg-gradient-to-br from-emerald-500/90 via-emerald-600/85 to-emerald-700/90 backdrop-blur-xl shadow-xl shadow-emerald-500/20 p-6 text-left transition-transform active:scale-[0.98]"
         >
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
