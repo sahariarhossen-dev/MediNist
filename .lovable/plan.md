@@ -1,40 +1,49 @@
 
 
-## Sales Page — Premium UI Build
+## Plan: Build POS "Create New Sale" Interface
 
 ### Overview
-Replace the placeholder Sales page with a premium, eye-catching design featuring glassmorphism, sparkline chart, and styled sales history list. All using the existing Recharts library and Tailwind CSS.
+Create a new page `/create-sale` with a full POS interface matching the uploaded sketches. The "Create New Sale" button on the Sales page will navigate to this new page. No database migration needed — we'll use the existing `medicines` table for search and a future `sales`/`sale_items` table for persistence (Draft/Complete Sale will show toast for now until sales tables are created).
 
-### Single File Change: `src/pages/Sales.tsx`
+### Database Migration
+Create `sales` and `sale_items` tables to support drafts and completed sales:
 
-**1. Hero Section — Glassmorphism "Create New Sale" Card**
-- Full-width card with `backdrop-blur-xl`, semi-transparent white/emerald gradient background, `rounded-3xl`, soft shadow
-- Large glowing green `+` icon (Plus from lucide-react) with a pulsing ring animation
-- Bold "CREATE NEW SALE" text, emerald green accent
-- Clickable — for now just a toast placeholder
+- **`sales`** — `id`, `pharmacy_id`, `user_id`, `sale_type` (retail/wholesale), `subtotal`, `discount_percent`, `discount_amount`, `total`, `status` (draft/completed), `created_at`
+- **`sale_items`** — `id`, `sale_id` (FK), `medicine_id` (FK), `medicine_name`, `company_name`, `quantity`, `unit_price`, `total_price`
+- RLS: scoped to user's pharmacy via `profiles.pharmacy_id`
 
-**2. Analytics Card — "Today's Total Sale"**
-- Grey/white card with `rounded-2xl`, soft shadow
-- Title "Today's Total Sale" in cool grey
-- Large emerald green amount text (e.g., ৳12,546)
-- Right side: small Recharts `LineChart` sparkline (hardcoded sample data for today's trend) with emerald green stroke and gradient fill
-- Small `↑ 12% vs yesterday` badge in green
+### File Changes
 
-**3. Sales History List**
-- Section title "Sales History" with a "View All" link
-- Striped list using `even:bg-emerald-50/50`
-- Each row: receipt icon (Receipt from lucide-react), bold Invoice ID, time, and amount in emerald green
-- All items use `rounded-2xl` containers
-- Hardcoded mock data (5-6 entries) since there's no sales table yet
+**1. New page: `src/pages/CreateSale.tsx`**
+The main POS page with:
 
-**4. Styling Details**
-- White background (`bg-white` / `bg-gray-50`)
-- Emerald green palette: `emerald-500`, `emerald-600` for accents
-- Cool grey: `gray-400`, `gray-500`, `gray-600` for secondary text
-- `rounded-2xl` / `rounded-3xl` on all cards
-- Soft shadows: `shadow-lg`, `shadow-xl`
-- Glass effect: `bg-white/60 backdrop-blur-xl border border-white/20`
-- Sparkline via Recharts `LineChart` + `Line` (no axes, no grid, tiny)
+- **Header**: Left — profile icon + staff name (from `profile.full_name`) + pharmacy name (from `pharmacyName`). Right — Retail/Wholesale dropdown styled as a pill/badge selector.
+- **Search bar**: Queries `medicines` table by name, debounced. Results show medicine name, company_name, and MRP (price).
+- **Expandable cart items**: Clicking a search result adds it to cart in collapsed state showing: serial number, name, company, quantity x price, total, ৳ symbol. Clicking expands to show quantity input. Quantity changes recalculate line total.
+- **Summary section**: Shows subtotal, discount line (`Less_Diss - 10%`), and bold net total with `= ৳X` format.
+- **Footer**: Fixed bottom bar with "Draft" button (left, outline style) and "Complete Sale" button (right, solid emerald/dark).
 
-### No new dependencies or DB changes needed.
+**2. Update `src/pages/Sales.tsx`**
+Change the "Create New Sale" button from `toast.info()` to `useNavigate()` → `/create-sale`.
+
+**3. Update `src/App.tsx`**
+Add route: `/create-sale` → `<ProtectedRoute><CreateSale /></ProtectedRoute>` (no AppLayout/BottomNav — full-screen POS).
+
+### UI/UX Details
+- Dark/white theme matching sketches — clean white background, black text, minimal borders
+- Search bar with rounded-xl, search icon, border
+- Cart items separated by thin dividers, numbered list
+- Quantity shown as `5*10` format (quantity × pcs_per_strip)
+- "popular" badge under medicine name (using product_type or a tag)
+- STK (stock) indicator next to items
+- Fixed bottom action bar with two large buttons
+- No bottom navigation on this page (dedicated POS screen)
+- Back/close button in header to return to `/sales`
+
+### Technical Approach
+- Fetch medicines from Supabase with `.ilike('name', '%query%')` search
+- Local state for cart items with quantity management
+- Real-time calculation: subtotal, 10% discount, net total
+- Draft saves to `sales` table with status='draft', Complete saves with status='completed'
+- Use `useAuth()` for profile/pharmacy context
 
