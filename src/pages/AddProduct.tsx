@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ type ProductType = (typeof productTypes)[number];
 
 const AddProduct = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useAuth();
   const [saving, setSaving] = useState(false);
 
@@ -32,6 +33,22 @@ const AddProduct = () => {
   const [totalQuantity, setTotalQuantity] = useState("");
   const [stockAlert, setStockAlert] = useState("");
   const [mrp, setMrp] = useState("");
+
+  // Restore form state from navigation
+  useEffect(() => {
+    const s = location.state;
+    if (!s) return;
+    if (s.companyName) setCompanyName(s.companyName);
+    if (s.name) setName(s.name);
+    if (s.productType) setProductType(s.productType);
+    if (s.stripPerPack) setStripPerPack(s.stripPerPack);
+    if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
+    if (s.totalStrips) setTotalStrips(s.totalStrips);
+    if (s.productSize) setProductSize(s.productSize);
+    if (s.totalQuantity) setTotalQuantity(s.totalQuantity);
+    if (s.stockAlert) setStockAlert(s.stockAlert);
+    if (s.mrp) setMrp(s.mrp);
+  }, []);
 
   const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
   const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
@@ -119,15 +136,26 @@ const AddProduct = () => {
           />
         </div>
 
-        {/* Company / Generic Name */}
+        {/* Company Name - clickable */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Company Name</Label>
-          <Input
-            placeholder="e.g. Beximco Pharma"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            className="rounded-xl bg-muted border-0 h-12"
-          />
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/add-company", {
+                state: {
+                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, totalStrips, productSize, totalQuantity, stockAlert, mrp },
+                },
+              })
+            }
+            className="w-full text-left rounded-xl bg-muted h-12 px-3 text-sm flex items-center"
+          >
+            {companyName ? (
+              <span className="text-foreground">{companyName}</span>
+            ) : (
+              <span className="text-muted-foreground">Select or add company</span>
+            )}
+          </button>
         </div>
 
         {/* Product Type */}

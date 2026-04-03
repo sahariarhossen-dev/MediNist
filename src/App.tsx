@@ -13,6 +13,7 @@ import AI from "./pages/AI.tsx";
 import More from "./pages/More.tsx";
 import Inventory from "./pages/Inventory.tsx";
 import AddProduct from "./pages/AddProduct.tsx";
+import AddCompany from "./pages/AddCompany.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
             <Route path="/add-product" element={<ProtectedRoute><AddProduct /></ProtectedRoute>} />
+            <Route path="/add-company" element={<ProtectedRoute><AddCompany /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="*" element={<NotFound />} />
