@@ -21,9 +21,14 @@ export type Database = {
           generic_name: string | null
           id: string
           name: string
+          pcs_per_strip: number | null
           pharmacy_id: string
           price: number | null
+          product_size: string | null
+          product_type: string | null
+          stock_alert: number | null
           stock_quantity: number | null
+          strip_per_pack: number | null
         }
         Insert: {
           created_at?: string | null
@@ -31,9 +36,14 @@ export type Database = {
           generic_name?: string | null
           id?: string
           name: string
+          pcs_per_strip?: number | null
           pharmacy_id: string
           price?: number | null
+          product_size?: string | null
+          product_type?: string | null
+          stock_alert?: number | null
           stock_quantity?: number | null
+          strip_per_pack?: number | null
         }
         Update: {
           created_at?: string | null
@@ -41,9 +51,14 @@ export type Database = {
           generic_name?: string | null
           id?: string
           name?: string
+          pcs_per_strip?: number | null
           pharmacy_id?: string
           price?: number | null
+          product_size?: string | null
+          product_type?: string | null
+          stock_alert?: number | null
           stock_quantity?: number | null
+          strip_per_pack?: number | null
         }
         Relationships: [
           {

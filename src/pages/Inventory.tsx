@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Search, Bell, Pill, Plus } from "lucide-react";
@@ -14,6 +15,7 @@ interface Medicine {
 }
 
 const Inventory = () => {
+  const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,10 @@ const Inventory = () => {
 
       {/* Add New Product Button */}
       <div className="px-5 pb-4">
-        <button className="w-full flex items-center justify-center gap-2 bg-muted rounded-xl py-3.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors">
+        <button
+          onClick={() => navigate("/add-product")}
+          className="w-full flex items-center justify-center gap-2 bg-muted rounded-xl py-3.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+        >
           <Plus size={18} />
           Add New Product
         </button>
