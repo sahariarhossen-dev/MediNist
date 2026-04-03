@@ -135,15 +135,26 @@ const AddProduct = () => {
           />
         </div>
 
-        {/* Company / Generic Name */}
+        {/* Company Name - clickable */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Company Name</Label>
-          <Input
-            placeholder="e.g. Beximco Pharma"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            className="rounded-xl bg-muted border-0 h-12"
-          />
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/add-company", {
+                state: {
+                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, totalStrips, productSize, totalQuantity, stockAlert, mrp },
+                },
+              })
+            }
+            className="w-full text-left rounded-xl bg-muted h-12 px-3 text-sm flex items-center"
+          >
+            {companyName ? (
+              <span className="text-foreground">{companyName}</span>
+            ) : (
+              <span className="text-muted-foreground">Select or add company</span>
+            )}
+          </button>
         </div>
 
         {/* Product Type */}
