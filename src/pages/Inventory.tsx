@@ -15,6 +15,7 @@ interface Medicine {
 }
 
 const Inventory = () => {
+  const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
