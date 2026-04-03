@@ -217,13 +217,19 @@ const CreateSale = () => {
                   <Pill className="w-4 h-4 text-gray-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900">{med.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {med.product_type && (
-                      <span className="text-[10px] font-semibold text-orange-600">{med.product_type}</span>
-                    )}
-                    <span className="text-[10px] text-gray-400">STK - {med.stock_quantity ?? 0}</span>
-                  </div>
+                   <p className="text-sm font-bold text-gray-900">
+                     {med.name}
+                     {med.product_type && (
+                       <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{med.product_type}</span>
+                     )}
+                   </p>
+                   <div className="flex items-center gap-1.5 mt-0.5">
+                     {med.company_name && (
+                       <span className="text-[10px] text-gray-400">{med.company_name}</span>
+                     )}
+                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
+                     <span className="text-[10px] text-gray-400">STK - {med.stock_quantity ?? 0}</span>
+                   </div>
                 </div>
                 <p className="text-xs font-semibold text-gray-500">MRP-{med.price ?? 0}</p>
               </button>
@@ -261,10 +267,15 @@ const CreateSale = () => {
                       <Pill className="w-4 h-4 text-gray-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900">{item.medicine.name}</p>
-                      {item.medicine.product_type && (
-                        <span className="text-[10px] font-semibold text-orange-600">{item.medicine.product_type}</span>
-                      )}
+                       <p className="text-sm font-bold text-gray-900">
+                         {item.medicine.name}
+                         {item.medicine.product_type && (
+                           <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
+                         )}
+                       </p>
+                       {item.medicine.company_name && (
+                         <span className="text-[10px] text-gray-400">{item.medicine.company_name}</span>
+                       )}
                     </div>
                     <span className="text-xs font-medium text-gray-500 mr-1">{qtyLabel}</span>
                     <span className="text-sm font-bold text-gray-900">{lineTotal}</span>
