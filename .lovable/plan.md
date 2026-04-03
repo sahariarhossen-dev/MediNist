@@ -1,64 +1,59 @@
 
 
-## Add New Product Page
+## Company Selection Flow
 
-### Problem
-The `medicines` table lacks columns needed for the product type logic (tablet/capsule vs syrup/injection/cream). A migration is required before building the form.
+### Overview
+Create a dedicated "Add New Company" page that the user navigates to from the Company Name field on the Add Product form. Users can search, select an existing company, or add a new one. Selection returns to the Add Product form with the company name pre-filled.
 
 ### Database Migration
-Add columns to `medicines`:
-- `product_type` (text, nullable) — e.g. "Tablet", "Capsule", "Syrup", "Injection", "Cream"
-- `product_size` (text, nullable) — e.g. "100ml", "50gm" (for syrup/injection/cream)
-- `strip_per_pack` (integer, nullable) — for tablet/capsule
-- `pcs_per_strip` (integer, nullable) — for tablet/capsule
-- `stock_alert` (integer, nullable, default 0) — minimum warning level
+Create a `companies` table:
+```sql
+CREATE TABLE public.companies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  pharmacy_id uuid NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
 
-The existing `stock_quantity` column will store: total strips (tablet/capsule) or total units (syrup/injection/cream).
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can access their pharmacy companies"
+  ON public.companies FOR ALL
+  USING (pharmacy_id = (SELECT profiles.pharmacy_id FROM profiles WHERE profiles.id = auth.uid()));
+```
 
 ### New Files
 
 | File | Purpose |
 |------|---------|
-| `src/pages/AddProduct.tsx` | Full add-product form page |
+| `src/pages/AddCompany.tsx` | Company selection/creation page |
 
 ### Changes to Existing Files
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Add `/add-product` route (protected, no bottom nav — standalone page) |
-| `src/pages/Inventory.tsx` | Wire "Add New Product" button to navigate to `/add-product` |
+| `src/App.tsx` | Add `/add-company` route (protected, no bottom nav) |
+| `src/pages/AddProduct.tsx` | Replace Company Name text input with a clickable field that navigates to `/add-company`, read selected company from URL search params or navigation state on return |
 
-### AddProduct Page Design
+### AddCompany Page Design
 
-**Header**: Back arrow + "Add New Product" title. Clicking back returns to `/inventory`.
+**Header**: Back arrow + "Add New Company" title (same style as AddProduct header).
 
-**Form fields** (clean single-page scroll):
-1. **Medicine Name** — text input (required)
-2. **Company Name** — text input with placeholder for generic/company name (maps to `generic_name`)
-3. **Product Type** — select dropdown: Tablet, Capsule, Syrup, Injection, Cream
+**Search input**: Large rounded input field labeled "Company Name" at top. Filters the list below as user types.
 
-**Conditional fields based on Product Type:**
+**Add button**: Below input, a rounded bordered button "+ Add New Company". Saves the typed name to the `companies` table with the user's `pharmacy_id`, then selects it and navigates back.
 
-If Tablet or Capsule:
-- Strip per Pack (number)
-- Pcs per Strip (number)
-- Total Strips in Stock (number) → saved as `stock_quantity`
-- Auto-calculated "Total Pcs" shown as read-only info
+**Company list**: Below the button, show all companies for the pharmacy in clean rounded bordered boxes (matching the sketch). Filtered by the search input. Clicking a company navigates back to `/add-product` with the company name passed via React Router state (`navigate("/add-product", { state: { companyName: "..." } })`).
 
-If Syrup, Injection, or Cream:
-- Product Size (text, e.g. "100ml")
-- Total Quantity in Stock (number) → saved as `stock_quantity`
+### AddProduct Changes
 
-**Always visible:**
-- Stock Alert (number)
-- MRP (number) → saved as `price`
-
-**Save button**: Inserts into `medicines` with `pharmacy_id` from auth context. Shows success toast via sonner, navigates back to `/inventory`.
+- The Company Name field becomes a read-only styled div that shows the selected company name (or placeholder text).
+- On mount, check `location.state?.companyName` and pre-fill. Preserve other form fields by passing them as state when navigating to `/add-company` and restoring on return.
+- Navigation to add-company: `navigate("/add-company", { state: { formData: { name, productType, ... } } })`.
 
 ### Technical Details
-- Uses `useNavigate` for routing, `useAuth` for pharmacy_id
-- Form state managed with `useState` (simple enough, no need for react-hook-form)
-- Input validation: name required, at least MRP or stock fields filled
-- The route is NOT wrapped in `AppLayout` (no bottom nav on form pages — back button suffices)
-- Company Name stored in `generic_name` column (existing column, repurposed)
+- Uses `useNavigate` and `useLocation` for state passing between pages
+- Supabase query: `.from("companies").select("*").eq("pharmacy_id", pharmacyId).order("name")`
+- RLS policy mirrors the medicines table pattern
+- Types file will auto-update after migration
 
