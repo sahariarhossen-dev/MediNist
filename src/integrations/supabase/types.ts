@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          pharmacy_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          pharmacy_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          pharmacy_id?: string
+        }
+        Relationships: []
+      }
       medicines: {
         Row: {
           created_at: string | null
