@@ -39,6 +39,7 @@ const CreateSale = () => {
       setSearchResults([]);
       return;
     }
+    setExpandedId(null);
     const timeout = setTimeout(async () => {
       setSearching(true);
       const { data } = await supabase
