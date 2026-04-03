@@ -58,7 +58,8 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      return [...prev, { medicine, quantity: 1, expanded: false }];
+      const collapsed = prev.map((c) => ({ ...c, expanded: false }));
+      return [{ medicine, quantity: 1, expanded: false }, ...collapsed];
     });
     setSearchQuery("");
     setSearchResults([]);
