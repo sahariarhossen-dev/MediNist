@@ -17,6 +17,7 @@ const salesHistory = [
 ];
 
 const Sales = () => {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto pb-28">
       {/* Header */}
