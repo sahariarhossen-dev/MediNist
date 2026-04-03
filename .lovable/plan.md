@@ -1,49 +1,64 @@
 
 
-## Inventory Page at `/inventory`
+## Add New Product Page
 
-### Overview
-Create an inventory page matching the reference image: header with search icon, "Add New Product" button, and a list of medicines fetched from Supabase, sorted A-Z.
+### Problem
+The `medicines` table lacks columns needed for the product type logic (tablet/capsule vs syrup/injection/cream). A migration is required before building the form.
+
+### Database Migration
+Add columns to `medicines`:
+- `product_type` (text, nullable) — e.g. "Tablet", "Capsule", "Syrup", "Injection", "Cream"
+- `product_size` (text, nullable) — e.g. "100ml", "50gm" (for syrup/injection/cream)
+- `strip_per_pack` (integer, nullable) — for tablet/capsule
+- `pcs_per_strip` (integer, nullable) — for tablet/capsule
+- `stock_alert` (integer, nullable, default 0) — minimum warning level
+
+The existing `stock_quantity` column will store: total strips (tablet/capsule) or total units (syrup/injection/cream).
 
 ### New Files
 
 | File | Purpose |
 |------|---------|
-| `src/pages/Inventory.tsx` | Inventory page component |
+| `src/pages/AddProduct.tsx` | Full add-product form page |
 
 ### Changes to Existing Files
 
-**`src/App.tsx`**
-- Import `Inventory` page
-- Add protected route: `/inventory` wrapped in `AppLayout`
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add `/add-product` route (protected, no bottom nav — standalone page) |
+| `src/pages/Inventory.tsx` | Wire "Add New Product" button to navigate to `/add-product` |
 
-### Inventory Page Design
+### AddProduct Page Design
 
-**Header area** (reuses the existing app header from Index pattern):
-- "Medinist" brand + bell + avatar at top (same as dashboard)
-- Below: "Add Inventory" title on left, `Search` icon on right
+**Header**: Back arrow + "Add New Product" title. Clicking back returns to `/inventory`.
 
-**Add Product button:**
-- Full-width, light gray (`bg-gray-100`) rounded pill button: "+ Add New Product"
-- No action wired yet (placeholder for future)
+**Form fields** (clean single-page scroll):
+1. **Medicine Name** — text input (required)
+2. **Company Name** — text input with placeholder for generic/company name (maps to `generic_name`)
+3. **Product Type** — select dropdown: Tablet, Capsule, Syrup, Injection, Cream
 
-**Medicine list:**
-- Each item in a `rounded-2xl bg-gray-100` container with generous padding
-- Left: `Pill` icon (lucide) in a small circle
-- Middle: medicine `name` (bold) + `generic_name` below (smaller, gray)
-- Right: taka bag icon + `price` in bold
-- Sorted alphabetically by `name`
+**Conditional fields based on Product Type:**
 
-**Data fetching:**
-- Use `useAuth()` to get `profile.pharmacy_id`
-- Query `supabase.from("medicines").select("*").eq("pharmacy_id", pharmacyId).order("name")`
-- Loading state: skeleton placeholders
-- Empty state: centered message "No medicines added yet. Tap + to start."
+If Tablet or Capsule:
+- Strip per Pack (number)
+- Pcs per Strip (number)
+- Total Strips in Stock (number) → saved as `stock_quantity`
+- Auto-calculated "Total Pcs" shown as read-only info
 
-**Bottom padding:** `pb-24` to clear bottom nav
+If Syrup, Injection, or Cream:
+- Product Size (text, e.g. "100ml")
+- Total Quantity in Stock (number) → saved as `stock_quantity`
+
+**Always visible:**
+- Stock Alert (number)
+- MRP (number) → saved as `price`
+
+**Save button**: Inserts into `medicines` with `pharmacy_id` from auth context. Shows success toast via sonner, navigates back to `/inventory`.
 
 ### Technical Details
-- Uses existing `supabase` client and `AuthContext`
-- RLS policy already filters by pharmacy_id, but we also filter explicitly
-- No database changes needed — `medicines` table already has all required columns
+- Uses `useNavigate` for routing, `useAuth` for pharmacy_id
+- Form state managed with `useState` (simple enough, no need for react-hook-form)
+- Input validation: name required, at least MRP or stock fields filled
+- The route is NOT wrapped in `AppLayout` (no bottom nav on form pages — back button suffices)
+- Company Name stored in `generic_name` column (existing column, repurposed)
 
