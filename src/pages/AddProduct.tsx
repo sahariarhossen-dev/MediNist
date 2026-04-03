@@ -33,6 +33,22 @@ const AddProduct = () => {
   const [stockAlert, setStockAlert] = useState("");
   const [mrp, setMrp] = useState("");
 
+  // Restore form state from navigation
+  useEffect(() => {
+    const s = location.state;
+    if (!s) return;
+    if (s.companyName) setCompanyName(s.companyName);
+    if (s.name) setName(s.name);
+    if (s.productType) setProductType(s.productType);
+    if (s.stripPerPack) setStripPerPack(s.stripPerPack);
+    if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
+    if (s.totalStrips) setTotalStrips(s.totalStrips);
+    if (s.productSize) setProductSize(s.productSize);
+    if (s.totalQuantity) setTotalQuantity(s.totalQuantity);
+    if (s.stockAlert) setStockAlert(s.stockAlert);
+    if (s.mrp) setMrp(s.mrp);
+  }, []);
+
   const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
   const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
 
