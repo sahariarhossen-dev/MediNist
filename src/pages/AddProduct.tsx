@@ -19,6 +19,7 @@ type ProductType = (typeof productTypes)[number];
 
 const AddProduct = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile } = useAuth();
   const [saving, setSaving] = useState(false);
 
