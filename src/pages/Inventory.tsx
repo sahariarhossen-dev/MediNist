@@ -70,7 +70,10 @@ const Inventory = () => {
 
       {/* Add New Product Button */}
       <div className="px-5 pb-4">
-        <button className="w-full flex items-center justify-center gap-2 bg-muted rounded-xl py-3.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors">
+        <button
+          onClick={() => navigate("/add-product")}
+          className="w-full flex items-center justify-center gap-2 bg-muted rounded-xl py-3.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+        >
           <Plus size={18} />
           Add New Product
         </button>
