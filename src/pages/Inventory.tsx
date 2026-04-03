@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface Medicine {
   id: string;
   name: string;
-  generic_name: string | null;
+  company_name: string | null;
   price: number | null;
   stock_quantity: number | null;
 }
