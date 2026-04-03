@@ -79,7 +79,7 @@ const CreateSale = () => {
   const toggleExpand = useCallback((id: string) => {
     setCartItems((prev) =>
       prev.map((c) =>
-        c.medicine.id === id ? { ...c, expanded: !c.expanded } : c
+        c.medicine.id === id ? { ...c, expanded: !c.expanded } : { ...c, expanded: false }
       )
     );
   }, []);
