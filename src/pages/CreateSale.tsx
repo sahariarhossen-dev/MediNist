@@ -60,6 +60,7 @@ const CreateSale = () => {
       if (existing) return prev;
       return [{ medicine, quantity: 1 }, ...prev];
     });
+    setExpandedId(medicine.id);
     setSearchQuery("");
     setSearchResults([]);
   }, []);
