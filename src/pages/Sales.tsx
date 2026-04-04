@@ -23,16 +23,11 @@ interface SaleRow {
   sale_type: string;
 }
 
-interface SaleItemRow {
-  id: string;
-  medicine_name: string;
-  company_name: string | null;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
-}
-
 const Sales = () => {
+  const navigate = useNavigate();
+  const { profile } = useAuth();
+  const [sales, setSales] = useState<SaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [sales, setSales] = useState<SaleRow[]>([]);
