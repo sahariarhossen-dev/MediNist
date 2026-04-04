@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Receipt, Printer, X } from "lucide-react";
+import { Linkedin, Printer, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 interface SaleData {
