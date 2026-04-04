@@ -97,8 +97,10 @@ export type Database = {
           created_at: string | null
           district: string | null
           division: string | null
+          email: string | null
           id: string
           name: string
+          proprietor_name: string | null
           upazila: string | null
         }
         Insert: {
@@ -106,8 +108,10 @@ export type Database = {
           created_at?: string | null
           district?: string | null
           division?: string | null
+          email?: string | null
           id?: string
           name: string
+          proprietor_name?: string | null
           upazila?: string | null
         }
         Update: {
@@ -115,8 +119,10 @@ export type Database = {
           created_at?: string | null
           district?: string | null
           division?: string | null
+          email?: string | null
           id?: string
           name?: string
+          proprietor_name?: string | null
           upazila?: string | null
         }
         Relationships: []
