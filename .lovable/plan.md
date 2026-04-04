@@ -1,56 +1,98 @@
 
 
-## Plan: Professional Invoice/Receipt Component
+## Plan: Redesign Invoice Page + PDF Download
 
-### Overview
-Replace the current simple invoice dialog in Sales.tsx with a full-page invoice route (`/invoice/:saleId`) featuring a professional, print-optimized layout with dynamic pharmacy data, emerald-themed itemized table, and print/export functionality.
+### Problem
+Current invoice has generic styling, a Print button instead of Download PDF, includes unnecessary rows (Tax Rate, Total Tax, Shipping/Handling), and doesn't match the uploaded sketch layout. Also missing proprietor name and email fields.
 
-### Changes
+### Database Changes
 
-**1. New file: `src/pages/Invoice.tsx`**
+**Migration: Add `email` and `proprietor_name` columns to `pharmacies` table**
 
-A dedicated full-page invoice component that:
-- Takes `saleId` from URL params
-- Fetches sale data, sale_items, pharmacy details, and seller profile from Supabase
-- Layout (two-column header):
-  - **Left**: Pharmacy name (large bold), address, proprietor name, phone, email — all from `pharmacies` and `profiles` tables
-  - **Right**: "INVOICE" title with Receipt icon, confirmed-by (current user's `full_name`), sale type (Retail/Wholesale), invoice ID (`INV-{id.slice(0,11)}`), date/time formatted as `HH:mm / DD-MM-YY`
-- **Itemized table**: Emerald green header row (`bg-emerald-600 text-white`), columns: DESCRIPTION, QTY, UNIT PRICE, TOTAL. Alternating row shading.
-- **Payment summary** (right-aligned): Subtotal, Discount (%), Subtotal Less Discount, Tax Rate (0.00%), Total Tax, Shipping/Handling, **Balance Due** (bold, larger)
-- **Remarks section** at bottom-left
-- **Print button** and **Close button** in a top bar, hidden via `@media print`
-- Print styles: `@media print { .no-print { display: none; } }` to hide nav, buttons
-
-**2. Update `src/App.tsx`**
-
-Add route: `/invoice/:saleId` → `<Invoice />`
-
-**3. Update `src/pages/Sales.tsx`**
-
-Change the completed sale click handler: instead of opening the dialog, navigate to `/invoice/${sale.id}`. Remove the invoice dialog code entirely.
-
-**4. Data fetching in Invoice.tsx**
-
-```typescript
-// Fetch sale
-const { data: sale } = await supabase.from("sales").select("*").eq("id", saleId).single();
-// Fetch items
-const { data: items } = await supabase.from("sale_items").select("*").eq("sale_id", saleId);
-// Fetch pharmacy
-const { data: pharmacy } = await supabase.from("pharmacies").select("*").eq("id", sale.pharmacy_id).single();
-// Fetch seller profile
-const { data: seller } = await supabase.from("profiles").select("full_name, phone").eq("id", sale.user_id).single();
+```sql
+ALTER TABLE public.pharmacies ADD COLUMN email text;
+ALTER TABLE public.pharmacies ADD COLUMN proprietor_name text;
 ```
 
-**5. Print optimization**
+These fields will be populated by pharmacy owners and displayed dynamically on the invoice.
 
-- Container: `max-w-2xl mx-auto bg-white rounded-lg shadow-lg` on screen
-- `@media print` CSS in index.css: hide `.no-print`, remove shadows/margins, full-width layout
-- Works for both A4 and 80mm thermal (content reflows naturally)
+### Code Changes
+
+**1. Install `jspdf` and `html2canvas`**
+
+```bash
+npm install jspdf html2canvas
+```
+
+**2. Rewrite `src/pages/Invoice.tsx`**
+
+Complete redesign:
+
+- **Top bar**: Remove Print button. Add "Download PDF" button (uses `html2canvas` + `jspdf` to capture the invoice container and save as PDF). Keep Close (X) button on left.
+
+- **Header section** (two columns, no emerald border):
+  - **Left column** — 5 lines from pharmacy/profile data:
+    1. Shop name (bold, ~text-xl, strong font weight)
+    2. Address + upazila/district (e.g., "Notun Hat More, Ishwordi - Pabna")
+    3. Proprietor name: `pro- {pharmacy.proprietor_name}`
+    4. Mobile: `Mob-{profile.phone}`
+    5. Email: `Email- {pharmacy.email}`
+  - **Right column** — 6 lines:
+    1. Red/dark icon + "INVOICE" (large, bold, uppercase)
+    2. "Transaction Confirm By"
+    3. Sale type (Retail/Wholesale)
+    4. Seller name (from profiles)
+    5. Invoice ID: `INV-{sale.id.slice(0,11)}`
+    6. Timestamp: `Dkh-{HH:mm}/{dd-MM-yy}`
+
+- **Red divider line** between header and table (matching sketch's red accent)
+
+- **Items table**: Keep existing structure — DESCRIPTION, QTY, UNIT PRICE, TOTAL with red header row (`bg-red-700 text-white`) per the sketch. Alternating row shading.
+
+- **Summary section** (right-aligned): Only keep:
+  - Subtotal
+  - Discount (%)
+  - Subtotal Less Discount
+  - **Balance Due** — prominent, bold, large text with ৳ currency, separated by a bold line
+
+- **Remove**: Tax Rate, Total Tax, Shipping/Handling rows entirely.
+
+- **Remarks section**: Keep at bottom-left as "Remarks / Payment Instructions"
+
+- **PDF generation function**:
+  ```typescript
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById("invoice-content");
+    if (!element) return;
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+    const pdf = new jsPDF("p", "mm", "a4");
+    const imgData = canvas.toDataURL("image/png");
+    const imgWidth = 190;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+    pdf.save(`${invoiceId}.pdf`);
+  };
+  ```
+
+- **Data fetching**: Also fetch `user.email` from Supabase auth session, and pharmacy `email`/`proprietor_name` from the updated pharmacies table. Fetch seller's phone from profiles.
+
+**3. Update `src/pages/Invoice.tsx` — fetch expanded pharmacy fields**
+
+Update the pharmacy select query to include `email, proprietor_name`:
+```typescript
+supabase.from("pharmacies").select("name, address, division, district, upazila, email, proprietor_name")
+```
+
+Update seller profile query to include phone:
+```typescript
+supabase.from("profiles").select("full_name, phone")
+```
+
+### Color scheme change
+Per the sketch (image_8.png), the accent color shifts from emerald/green to **red** (`bg-red-700`) for the table header and divider lines, matching the professional pharmacy invoice look.
 
 ### Files affected
-- `src/pages/Invoice.tsx` — new file (invoice component)
-- `src/App.tsx` — add invoice route
-- `src/pages/Sales.tsx` — navigate to invoice page instead of dialog
-- `src/index.css` — add print media styles
+- **Migration** — add `email` and `proprietor_name` to `pharmacies`
+- `src/pages/Invoice.tsx` — full rewrite with new layout, PDF download, red theme
+- `package.json` — add `jspdf` and `html2canvas` dependencies
 
