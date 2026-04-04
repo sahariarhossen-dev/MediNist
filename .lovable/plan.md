@@ -1,42 +1,51 @@
 
 
-## Plan: Draft/Complete Status in Sales History + Click Interactions
+## Plan: Optimize Search with "Starts With" Priority
 
-### Overview
-Show both draft and completed sales in the Sales History list with status badges. Clicking a completed sale opens a view-only invoice dialog. Clicking a draft sale navigates to CreateSale with that draft's items pre-loaded for editing.
+### Problem
+The CreateSale search uses `ilike('%query%')` which returns "contains" matches without prioritization. "osertil" ranks equally with "sergel" when searching "ser".
 
 ### Changes
 
-**1. `src/pages/Sales.tsx` — Show all statuses + badges + click handlers**
+**1. `src/pages/CreateSale.tsx` — Two-tier search with starts-with priority**
 
-- Remove the `.eq("status", "completed")` filter so both draft and completed sales appear
-- Add `subtotal`, `discount_amount`, `discount_percent` to the select query
-- Add a status badge in top-right of each row: green `Complete` or gray `Draft`
-- Add an invoice dialog state (`viewingSale`) for completed sales — a `Dialog` with sale details (non-editable)
-- Clicking a completed sale opens the dialog; clicking a draft navigates to `/create-sale?draft=SALE_ID`
-- Today's total calculation only counts completed sales
+Replace the single `ilike('%query%')` query with two queries run in parallel:
+- Query 1: `ilike('query%')` — medicines starting with the search term
+- Query 2: `ilike('%query%')` — medicines containing the search term anywhere
 
-**2. `src/pages/CreateSale.tsx` — Load draft sale on mount**
+Merge results: starts-with matches first, then contains matches (deduplicated). Limit total to 10.
 
-- Read `draft` query param from URL on mount
-- If present, fetch the sale + sale_items from Supabase, then fetch each medicine's current data
-- Populate `cartItems` with the fetched items and set `saleType` from the draft
-- Store `draftId` in state
-- When saving (draft or complete): if `draftId` exists, UPDATE the existing sale row instead of INSERT, delete old sale_items and re-insert
-- Stock deduction only happens on "completed" (already implemented)
+Also reduce debounce from 300ms to 150ms for snappier results.
 
-**3. Invoice View Dialog (in Sales.tsx)**
+```typescript
+// Pseudocode for the new search
+const q = searchQuery.trim().toLowerCase();
+const [startsRes, containsRes] = await Promise.all([
+  supabase.from("medicines")...ilike("name", `${q}%`).limit(10),
+  supabase.from("medicines")...ilike("name", `%${q}%`).limit(10),
+]);
+const startsWith = startsRes.data || [];
+const startIds = new Set(startsWith.map(m => m.id));
+const contains = (containsRes.data || []).filter(m => !startIds.has(m.id));
+setSearchResults([...startsWith, ...contains].slice(0, 10));
+```
 
-A simple `Dialog` component showing:
-- Invoice ID, date/time, status
-- Fetch `sale_items` for the selected sale and display: medicine name, qty, unit price, total
-- Subtotal, discount, net total at bottom
-- Close button only — no editing
+**2. `src/pages/AddCompany.tsx` — Client-side starts-with priority sort**
+
+Update the `filtered` variable to sort starts-with matches before contains matches:
+
+```typescript
+const filtered = companies
+  .filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+  .sort((a, b) => {
+    const q = search.toLowerCase();
+    const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+    const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+    return aStarts - bStarts || a.name.localeCompare(b.name);
+  });
+```
 
 ### Files affected
-- `src/pages/Sales.tsx` — status badges, click handlers, invoice dialog
-- `src/pages/CreateSale.tsx` — draft loading + update logic
-
-### No database migrations needed
-The `sales` table already has a `status` column with default `'draft'`. The `sale_items` table has all needed fields.
+- `src/pages/CreateSale.tsx` — two-tier Supabase search + faster debounce
+- `src/pages/AddCompany.tsx` — client-side sort prioritization
 
