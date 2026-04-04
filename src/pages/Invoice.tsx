@@ -99,7 +99,7 @@ const Invoice = () => {
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white">
       {/* Top bar — hidden on print */}
-      <div className="no-print sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between max-w-3xl mx-auto">
+      <div className="no-print sticky top-0 z-10 bg-white border-b border-gray-200 py-3 flex items-center justify-between max-w-3xl mx-auto px-[16px]">
         <button onClick={() => navigate("/sales")} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
           <X className="w-5 h-5" /> Close
         </button>
@@ -121,7 +121,7 @@ const Invoice = () => {
           {/* Right — Invoice meta */}
           <div className="text-right space-y-1">
             <div className="flex items-center justify-end gap-2">
-              <Linkedin className="w-7 h-7 text-emerald-600" />
+              <Linkedin className="text-emerald-600 w-[20px] h-[20px]" />
               <h2 className="font-extrabold text-emerald-700 tracking-tight uppercase text-base">Invoice</h2>
             </div>
             <p className="text-xs text-gray-500">Confirmed By: <span className="font-semibold text-gray-700">{sellerName}</span></p>
