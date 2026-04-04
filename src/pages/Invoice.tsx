@@ -121,8 +121,8 @@ const Invoice = () => {
           {/* Right — Invoice meta */}
           <div className="text-right space-y-1">
             <div className="flex items-center justify-end gap-2">
-              <Receipt className="w-7 h-7 text-emerald-600" />
-              <h2 className="text-2xl font-extrabold text-emerald-700 tracking-tight uppercase">Invoice</h2>
+              <Linkedin className="w-7 h-7 text-emerald-600" />
+              <h2 className="font-extrabold text-emerald-700 tracking-tight uppercase text-base">Invoice</h2>
             </div>
             <p className="text-xs text-gray-500">Confirmed By: <span className="font-semibold text-gray-700">{sellerName}</span></p>
             <p className="text-xs text-gray-500">Type: <span className="font-semibold text-gray-700 capitalize">{sale.sale_type}</span></p>
