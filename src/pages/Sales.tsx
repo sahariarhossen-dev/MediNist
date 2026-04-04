@@ -85,18 +85,11 @@ const Sales = () => {
 
   const shortId = (id: string) => `INV-${id.slice(0, 5).toUpperCase()}`;
 
-  const handleSaleClick = async (sale: SaleRow) => {
+  const handleSaleClick = (sale: SaleRow) => {
     if (sale.status === "draft") {
       navigate(`/create-sale?draft=${sale.id}`);
     } else {
-      setViewingSale(sale);
-      setLoadingItems(true);
-      const { data } = await supabase
-        .from("sale_items")
-        .select("id, medicine_name, company_name, quantity, unit_price, total_price")
-        .eq("sale_id", sale.id);
-      setInvoiceItems((data as SaleItemRow[]) || []);
-      setLoadingItems(false);
+      navigate(`/invoice/${sale.id}`);
     }
   };
 
