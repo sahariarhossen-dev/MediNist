@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +24,7 @@ const DISCOUNT_PERCENT = 10;
 
 const CreateSale = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { profile, pharmacyName } = useAuth();
   const [saleType, setSaleType] = useState<"retail" | "wholesale">("retail");
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,6 +34,79 @@ const CreateSale = () => {
   const [saving, setSaving] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+
+  // Load draft sale if URL has ?draft=SALE_ID
+  useEffect(() => {
+    const draftParam = searchParams.get("draft");
+    if (!draftParam || !profile?.pharmacy_id) return;
+
+    const loadDraft = async () => {
+      setLoadingDraft(true);
+      try {
+        // Fetch sale
+        const { data: sale } = await supabase
+          .from("sales")
+          .select("id, sale_type, status")
+          .eq("id", draftParam)
+          .single();
+
+        if (!sale || sale.status !== "draft") {
+          toast.error("Draft not found or already completed");
+          setLoadingDraft(false);
+          return;
+        }
+
+        setDraftId(sale.id);
+        setSaleType(sale.sale_type as "retail" | "wholesale");
+
+        // Fetch sale items
+        const { data: items } = await supabase
+          .from("sale_items")
+          .select("medicine_id, medicine_name, company_name, quantity, unit_price")
+          .eq("sale_id", sale.id);
+
+        if (!items || items.length === 0) {
+          setLoadingDraft(false);
+          return;
+        }
+
+        // Fetch current medicine data for each item
+        const medIds = items.map((it) => it.medicine_id);
+        const { data: medicines } = await supabase
+          .from("medicines")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .in("id", medIds);
+
+        const medMap = new Map((medicines || []).map((m) => [m.id, m]));
+
+        const loaded: CartItem[] = items.map((it) => {
+          const med = medMap.get(it.medicine_id);
+          return {
+            medicine: med || {
+              id: it.medicine_id,
+              name: it.medicine_name,
+              company_name: it.company_name,
+              price: it.unit_price,
+              stock_quantity: null,
+              pcs_per_strip: null,
+              product_type: null,
+            },
+            quantity: it.quantity,
+          };
+        });
+
+        setCartItems(loaded);
+        if (loaded.length > 0) setExpandedId(loaded[0].medicine.id);
+      } catch {
+        toast.error("Failed to load draft");
+      } finally {
+        setLoadingDraft(false);
+      }
+    };
+    loadDraft();
+  }, [searchParams, profile?.pharmacy_id]);
 
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
@@ -94,25 +168,50 @@ const CreateSale = () => {
     }
     setSaving(true);
     try {
-      const { data: sale, error: saleError } = await supabase
-        .from("sales")
-        .insert({
-          pharmacy_id: profile.pharmacy_id,
-          user_id: profile.id,
-          sale_type: saleType,
-          subtotal,
-          discount_percent: DISCOUNT_PERCENT,
-          discount_amount: discountAmount,
-          total: netTotal,
-          status,
-        })
-        .select("id")
-        .single();
+      let saleId: string;
 
-      if (saleError) throw saleError;
+      if (draftId) {
+        // Update existing draft
+        const { error: updateError } = await supabase
+          .from("sales")
+          .update({
+            sale_type: saleType,
+            subtotal,
+            discount_percent: DISCOUNT_PERCENT,
+            discount_amount: discountAmount,
+            total: netTotal,
+            status,
+          })
+          .eq("id", draftId);
+
+        if (updateError) throw updateError;
+        saleId = draftId;
+
+        // Delete old sale_items and re-insert
+        await supabase.from("sale_items").delete().eq("sale_id", draftId);
+      } else {
+        // Insert new sale
+        const { data: sale, error: saleError } = await supabase
+          .from("sales")
+          .insert({
+            pharmacy_id: profile.pharmacy_id,
+            user_id: profile.id,
+            sale_type: saleType,
+            subtotal,
+            discount_percent: DISCOUNT_PERCENT,
+            discount_amount: discountAmount,
+            total: netTotal,
+            status,
+          })
+          .select("id")
+          .single();
+
+        if (saleError) throw saleError;
+        saleId = sale.id;
+      }
 
       const items = cartItems.map((c) => ({
-        sale_id: sale.id,
+        sale_id: saleId,
         medicine_id: c.medicine.id,
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
@@ -124,7 +223,7 @@ const CreateSale = () => {
       const { error: itemsError } = await supabase.from("sale_items").insert(items);
       if (itemsError) throw itemsError;
 
-      // Deduct stock for each sold item
+      // Deduct stock for each sold item only on complete
       if (status === "completed") {
         for (const c of cartItems) {
           const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - c.quantity);
@@ -140,6 +239,7 @@ const CreateSale = () => {
       setSearchQuery("");
       setSearchResults([]);
       setExpandedId(null);
+      setDraftId(null);
       navigate("/sales");
     } catch (err: any) {
       toast.error(err.message || "Failed to save sale");
@@ -147,6 +247,14 @@ const CreateSale = () => {
       setSaving(false);
     }
   };
+
+  if (loadingDraft) {
+    return (
+      <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex items-center justify-center">
+        <p className="text-sm text-gray-400">Loading draft…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex flex-col">
@@ -269,7 +377,6 @@ const CreateSale = () => {
               if (isExpanded) {
                 return (
                   <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-3">
-                    {/* Row 1: Icon + Name + Type + Company */}
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
                         <Pill className="w-4 h-4 text-emerald-500" />
@@ -284,7 +391,6 @@ const CreateSale = () => {
                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
-                    {/* Row 2: Trash + STK + MRP + Calc + Qty selector */}
                     <div className="flex items-center gap-2 mt-2">
                       <button
                         onClick={() => removeFromCart(item.medicine.id)}
@@ -323,7 +429,6 @@ const CreateSale = () => {
                 );
               }
 
-              // Collapsed view
               return (
                 <div
                   key={item.medicine.id}

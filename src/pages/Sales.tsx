@@ -5,6 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, isToday, parseISO } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const sparklineData = [
   { v: 320 }, { v: 480 }, { v: 390 }, { v: 520 }, { v: 610 }, { v: 580 },
@@ -14,8 +22,21 @@ const sparklineData = [
 interface SaleRow {
   id: string;
   total: number;
+  subtotal: number;
+  discount_amount: number;
+  discount_percent: number;
   created_at: string;
   status: string;
+  sale_type: string;
+}
+
+interface SaleItemRow {
+  id: string;
+  medicine_name: string;
+  company_name: string | null;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
 }
 
 const Sales = () => {
@@ -23,6 +44,9 @@ const Sales = () => {
   const { profile } = useAuth();
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewingSale, setViewingSale] = useState<SaleRow | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<SaleItemRow[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
 
   useEffect(() => {
     if (!profile?.pharmacy_id) return;
@@ -33,19 +57,22 @@ const Sales = () => {
 
       const { data } = await supabase
         .from("sales")
-        .select("id, total, created_at, status")
+        .select("id, total, subtotal, discount_amount, discount_percent, created_at, status, sale_type")
         .eq("pharmacy_id", profile.pharmacy_id!)
-        .eq("status", "completed")
         .gte("created_at", todayStart.toISOString())
         .order("created_at", { ascending: false });
 
-      setSales(data || []);
+      setSales((data as SaleRow[]) || []);
       setLoading(false);
     };
     fetchSales();
   }, [profile?.pharmacy_id]);
 
-  const todayTotal = sales.reduce((sum, s) => sum + Number(s.total), 0);
+  const todayTotal = sales
+    .filter((s) => s.status === "completed")
+    .reduce((sum, s) => sum + Number(s.total), 0);
+
+  const completedCount = sales.filter((s) => s.status === "completed").length;
 
   const formatTime = (dateStr: string) => {
     try {
@@ -57,6 +84,21 @@ const Sales = () => {
   };
 
   const shortId = (id: string) => `INV-${id.slice(0, 5).toUpperCase()}`;
+
+  const handleSaleClick = async (sale: SaleRow) => {
+    if (sale.status === "draft") {
+      navigate(`/create-sale?draft=${sale.id}`);
+    } else {
+      setViewingSale(sale);
+      setLoadingItems(true);
+      const { data } = await supabase
+        .from("sale_items")
+        .select("id, medicine_name, company_name, quantity, unit_price, total_price")
+        .eq("sale_id", sale.id);
+      setInvoiceItems((data as SaleItemRow[]) || []);
+      setLoadingItems(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto pb-28">
@@ -97,7 +139,7 @@ const Sales = () => {
               <div className="flex items-center gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <ArrowUp className="w-3 h-3" />
-                  {sales.length} sales
+                  {completedCount} sales
                 </span>
                 <span className="text-xs text-gray-400">today</span>
               </div>
@@ -133,14 +175,26 @@ const Sales = () => {
               sales.map((sale, i) => (
                 <div
                   key={sale.id}
-                  className={`flex items-center gap-3.5 px-4 py-3.5 ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== sales.length - 1 ? "border-b border-gray-100/80" : ""}`}
+                  onClick={() => handleSaleClick(sale)}
+                  className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-gray-50 transition ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== sales.length - 1 ? "border-b border-gray-100/80" : ""}`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
                     <Receipt className="w-5 h-5 text-emerald-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-800">{shortId(sale.id)}</p>
-                    <p className="text-xs text-gray-400">{formatTime(sale.created_at)}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-gray-800">{shortId(sale.id)}</p>
+                      <Badge
+                        className={`text-[10px] px-2 py-0.5 font-semibold ${
+                          sale.status === "completed"
+                            ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                            : "bg-gray-100 text-gray-500 border-gray-200"
+                        }`}
+                      >
+                        {sale.status === "completed" ? "Complete" : "Draft"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatTime(sale.created_at)}</p>
                   </div>
                   <p className="text-sm font-bold text-emerald-600">৳{Number(sale.total).toLocaleString()}</p>
                 </div>
@@ -149,6 +203,58 @@ const Sales = () => {
           </div>
         </div>
       </div>
+
+      {/* Invoice View Dialog */}
+      <Dialog open={!!viewingSale} onOpenChange={(open) => !open && setViewingSale(null)}>
+        <DialogContent className="max-w-sm mx-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-gray-900">
+              {viewingSale && shortId(viewingSale.id)}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-400">
+              {viewingSale && formatTime(viewingSale.created_at)} · {viewingSale?.sale_type === "wholesale" ? "Wholesale" : "Retail"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingItems ? (
+            <p className="text-sm text-gray-400 text-center py-4">Loading items…</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {invoiceItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{item.medicine_name}</p>
+                    {item.company_name && (
+                      <p className="text-[10px] text-gray-400">{item.company_name}</p>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <p className="text-xs text-gray-500">{item.quantity} × ৳{item.unit_price}</p>
+                    <p className="text-sm font-bold text-emerald-600">৳{Number(item.total_price).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {viewingSale && !loadingItems && (
+            <div className="border-t border-gray-200 pt-3 space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Subtotal</span>
+                <span className="font-semibold text-gray-800">৳{Number(viewingSale.subtotal).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Discount ({viewingSale.discount_percent}%)</span>
+                <span className="font-semibold text-gray-800">-৳{Number(viewingSale.discount_amount).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-base pt-2 border-t border-gray-200">
+                <span className="font-extrabold text-gray-900">Net Total</span>
+                <span className="font-extrabold text-emerald-700">৳{Number(viewingSale.total).toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
