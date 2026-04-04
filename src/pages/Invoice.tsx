@@ -113,7 +113,7 @@ const Invoice = () => {
         <div className="flex justify-between items-start border-b-2 border-emerald-600 pb-5 mb-6">
           {/* Left — Pharmacy info */}
           <div className="space-y-1">
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">{pharmacy?.name || "Pharmacy"}</h1>
+            <h1 className="font-extrabold text-gray-900 tracking-tight text-base">{pharmacy?.name || "Pharmacy"}</h1>
             {pharmacyAddress && <p className="text-sm text-gray-500">{pharmacyAddress}</p>}
             {profile?.phone && <p className="text-sm text-gray-500">Mob: {profile.phone}</p>}
           </div>
