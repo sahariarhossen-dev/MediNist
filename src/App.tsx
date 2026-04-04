@@ -15,6 +15,7 @@ import Inventory from "./pages/Inventory.tsx";
 import AddProduct from "./pages/AddProduct.tsx";
 import AddCompany from "./pages/AddCompany.tsx";
 import CreateSale from "./pages/CreateSale.tsx";
+import Invoice from "./pages/Invoice.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
