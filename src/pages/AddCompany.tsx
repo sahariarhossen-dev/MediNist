@@ -33,9 +33,15 @@ const AddCompany = () => {
     fetchCompanies();
   }, [profile?.pharmacy_id]);
 
-  const filtered = companies.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = companies
+    .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const q = search.toLowerCase();
+      if (!q) return a.name.localeCompare(b.name);
+      const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+      return aStarts - bStarts || a.name.localeCompare(b.name);
+    });
 
   const trimmedNew = newName.trim();
   const isDuplicate = trimmedNew.length > 0 && companies.some(

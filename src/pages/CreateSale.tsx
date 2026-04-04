@@ -116,15 +116,28 @@ const CreateSale = () => {
     setExpandedId(null);
     const timeout = setTimeout(async () => {
       setSearching(true);
-      const { data } = await supabase
+      const q = searchQuery.trim();
+      const baseQuery = supabase
         .from("medicines")
         .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
-        .eq("pharmacy_id", profile.pharmacy_id!)
-        .ilike("name", `%${searchQuery}%`)
-        .limit(10);
-      setSearchResults(data || []);
+        .eq("pharmacy_id", profile.pharmacy_id!);
+
+      const [startsRes, containsRes] = await Promise.all([
+        baseQuery.ilike("name", `${q}%`).limit(10),
+        supabase
+          .from("medicines")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .eq("pharmacy_id", profile.pharmacy_id!)
+          .ilike("name", `%${q}%`)
+          .limit(10),
+      ]);
+
+      const startsWith = startsRes.data || [];
+      const startIds = new Set(startsWith.map((m) => m.id));
+      const contains = (containsRes.data || []).filter((m) => !startIds.has(m.id));
+      setSearchResults([...startsWith, ...contains].slice(0, 10));
       setSearching(false);
-    }, 300);
+    }, 150);
     return () => clearTimeout(timeout);
   }, [searchQuery, profile?.pharmacy_id]);
 
