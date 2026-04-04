@@ -1,41 +1,42 @@
 
 
-## Plan: Activate Complete Sale with Stock Deduction & Live Sales History
+## Plan: Draft/Complete Status in Sales History + Click Interactions
 
 ### Overview
-The `saveSale` function in CreateSale.tsx already inserts into `sales` and `sale_items`. We need to add stock deduction and post-sale cleanup. The Sales.tsx page currently uses hardcoded data — we'll replace it with live Supabase queries.
+Show both draft and completed sales in the Sales History list with status badges. Clicking a completed sale opens a view-only invoice dialog. Clicking a draft sale navigates to CreateSale with that draft's items pre-loaded for editing.
 
 ### Changes
 
-**1. `src/pages/CreateSale.tsx` — Add stock deduction + post-sale reset (lines 86-134)**
+**1. `src/pages/Sales.tsx` — Show all statuses + badges + click handlers**
 
-After inserting sale_items, loop through cart items and update each medicine's `stock_quantity` by decrementing the sold quantity:
+- Remove the `.eq("status", "completed")` filter so both draft and completed sales appear
+- Add `subtotal`, `discount_amount`, `discount_percent` to the select query
+- Add a status badge in top-right of each row: green `Complete` or gray `Draft`
+- Add an invoice dialog state (`viewingSale`) for completed sales — a `Dialog` with sale details (non-editable)
+- Clicking a completed sale opens the dialog; clicking a draft navigates to `/create-sale?draft=SALE_ID`
+- Today's total calculation only counts completed sales
 
-```typescript
-// After sale_items insert succeeds
-for (const c of cartItems) {
-  const newStock = (c.medicine.stock_quantity || 0) - c.quantity;
-  await supabase
-    .from("medicines")
-    .update({ stock_quantity: Math.max(0, newStock) })
-    .eq("id", c.medicine.id);
-}
-```
+**2. `src/pages/CreateSale.tsx` — Load draft sale on mount**
 
-On success: clear cart (`setCartItems([])`), reset search, show toast, then navigate to `/sales`.
+- Read `draft` query param from URL on mount
+- If present, fetch the sale + sale_items from Supabase, then fetch each medicine's current data
+- Populate `cartItems` with the fetched items and set `saleType` from the draft
+- Store `draftId` in state
+- When saving (draft or complete): if `draftId` exists, UPDATE the existing sale row instead of INSERT, delete old sale_items and re-insert
+- Stock deduction only happens on "completed" (already implemented)
 
-**2. `src/pages/Sales.tsx` — Fetch real sales data from Supabase**
+**3. Invoice View Dialog (in Sales.tsx)**
 
-- Import `supabase`, `useAuth`, `useState`, `useEffect`
-- Fetch today's completed sales filtered by `pharmacy_id` and `created_at >= today`
-- Calculate today's total dynamically
-- Display real sales history (id truncated, time formatted, total amount)
-- Remove all hardcoded `salesHistory` data
-
-### No database changes needed
-The existing `medicines` table has an ALL RLS policy, so UPDATE is permitted. Stock deduction works with the current schema.
+A simple `Dialog` component showing:
+- Invoice ID, date/time, status
+- Fetch `sale_items` for the selected sale and display: medicine name, qty, unit price, total
+- Subtotal, discount, net total at bottom
+- Close button only — no editing
 
 ### Files affected
-- `src/pages/CreateSale.tsx` — stock deduction + cart reset
-- `src/pages/Sales.tsx` — live data from Supabase
+- `src/pages/Sales.tsx` — status badges, click handlers, invoice dialog
+- `src/pages/CreateSale.tsx` — draft loading + update logic
+
+### No database migrations needed
+The `sales` table already has a `status` column with default `'draft'`. The `sale_items` table has all needed fields.
 
