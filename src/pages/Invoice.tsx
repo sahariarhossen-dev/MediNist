@@ -94,7 +94,7 @@ const Invoice = () => {
   const timeStr = format(dateObj, "HH:mm");
   const dateStr = format(dateObj, "dd-MM-yy");
   const subtotalLessDiscount = Number(sale.subtotal) - Number(sale.discount_amount);
-  const pharmacyAddress = [pharmacy?.address, pharmacy?.upazila, pharmacy?.district, pharmacy?.division].filter(Boolean).join(", ");
+  const pharmacyAddress = pharmacy?.address || "";
 
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white">
