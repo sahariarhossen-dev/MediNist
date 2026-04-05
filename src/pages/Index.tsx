@@ -65,6 +65,7 @@ const rangeLabels: Record<string, string> = {
 };
 
 const Index = () => {
+  const navigate = useNavigate();
   const { profile, pharmacyName, signOut } = useAuth();
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
