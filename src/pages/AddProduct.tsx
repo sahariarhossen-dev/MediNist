@@ -136,7 +136,7 @@ const AddProduct = () => {
             onClick={() =>
               navigate("/add-company", {
                 state: {
-                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, totalStrips, productSize, totalQuantity, stockAlert, mrp },
+                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity, stockAlert, mrp },
                 },
               })
             }
