@@ -43,7 +43,7 @@ const AddProduct = () => {
     if (s.productType) setProductType(s.productType);
     if (s.stripPerPack) setStripPerPack(s.stripPerPack);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
-    if (s.totalStrips) setTotalStrips(s.totalStrips);
+    
     if (s.productSize) setProductSize(s.productSize);
     if (s.totalQuantity) setTotalQuantity(s.totalQuantity);
     if (s.stockAlert) setStockAlert(s.stockAlert);
