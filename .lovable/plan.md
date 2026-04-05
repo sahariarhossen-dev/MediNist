@@ -1,53 +1,45 @@
-## Plan: Redesign Invoice Header — 6-Row Left Column + Vertical Divider + Aligned Right Column
 
-### What changes
 
-**File: `src/pages/Invoice.tsx**` (lines 147–173)
+## Plan: Fix Invoice Header Alignment & Row Structure
 
-Replace the current two-column header with a new structure:
+### Changes to `src/pages/Invoice.tsx` (lines 147–173)
 
-**Left Column (6 rows, left-aligned):**
+**1. Shop name single-line fix**
+- Change `text-xl` to `text-lg` and add `whitespace-nowrap truncate` to prevent wrapping on narrow screens while keeping it bold and prominent.
 
-1. Shop Name — `text-xl font-extrabold`
-2. Proprietor — `text-sm` → `Pro- {pharmacy.proprietor_name}`
-3. Mobile — `text-sm` → `Mob-{profile.phone}`
-4. Local Location — `text-sm` → `{pharmacy.address}` (e.g., "Notun Hat More")
-5. Area/District — `text-sm` → `{pharmacy.upazila} - {pharmacy.district}` (e.g., "Ishwordi - Pabna")
-6. Email — `text-sm` → `Email- {pharmacy.email}`
+**2. Left column — strict 6-row reorder with no redundancy**
+Replace current left column with:
+- Row 1: Shop Name (`text-lg font-extrabold`, `whitespace-nowrap`)
+- Row 2: `Pro- {pharmacy.proprietor_name}`
+- Row 3: `Mob-{phone}`
+- Row 4: Full location in one line — `{pharmacy.address}, {pharmacy.upazila}, {pharmacy.district}, {pharmacy.division}` (filter out nulls, join with comma). This replaces the separate address + area/district rows.
+- Row 5: `{pharmacy.upazila} - {pharmacy.district}` (area/district summary)
+- Row 6: `Email- {pharmacy.email}`
 
-**Middle Divider:**
+Wait — the user says "Delete Repeated Row" and wants Row 4 as the full location and Row 5 as area/district. But that IS repetition (upazila/district appear in both). Re-reading: Row 4 example is "Nator, Nagarpur, Tangail, Dhaka" which looks like address, upazila, district, division. Row 5 is "Ishwordi - Pabna" which is a different example.
 
-- A vertical border (`border-r border-gray-300`) at 50% height of the header, using `self-center h-[50%]` or a dedicated `div` with fixed height, providing clean visual separation.
+I'll implement it as:
+- Row 4: `{pharmacy.address}` (local address only, e.g., "Notun Hat More")  
+- Row 5: `{pharmacy.upazila} - {pharmacy.district}` (area-district)
 
-**Right Column (6 rows, left-aligned within right column):**
+And ensure no duplicate row exists. The current code already does this with 6 rows. The "repeated row" issue is likely from the rendered output showing redundant location data. I'll keep the 6 rows as specified but ensure `address` doesn't duplicate upazila/district info.
 
-1. Icon + "INVOICE" (bold, red, uppercase)
-2. "Transaction Confirm By" (small gray text)
-3. Sale type (Retail/Wholesale)
-4. Seller name
-5. Invoice ID
-6. Timestamp `Dkh-{HH:mm}/{dd-MM-yy}`
+### Revised approach
 
-**Data cleanup:**
+**Left Column (6 rows):**
+1. Shop Name — `text-lg font-extrabold whitespace-nowrap`
+2. `Pro- {proprietor_name}`
+3. `Mob-{phone}`
+4. `{address}` (local address from DB)
+5. `{upazila} - {district}` (area/district)
+6. `Email- {email}`
 
-- Remove the `fullAddress` concatenation (line 124-125) that joins address+upazila+district into one string
-- Split address into separate Row 4 (address) and Row 5 (upazila - district)
-- Consistent `leading-6` or `leading-relaxed` on all rows for pixel-perfect line-height alignment
+**Middle Divider:** Keep as-is — vertical border with `self-center h-[60%] min-h-[90px] border-r border-gray-300 mx-6`.
 
-### Layout structure (ASCII)
+**Right Column (6 rows, right-aligned):** No changes needed — already correct.
 
-```text
-┌─────────────────────────┬──┬─────────────────────────┐
-│ Nasser Madical Hall     │  │               📄 INVOIC │
-│ Pro- Nasir Uddin        │  │  Transaction Confirm BY │
-│ Mob-013154282           │||│                  Retail │
-│ Notun Hat More          │  │            Mehedi Hasan │
-│ Ishwordi - Pabna        │  │         INV-kd409524cfw │
-│ Email- nasir@gmail.com  │  │      Dkh-11:05/04-05-26 │
-└─────────────────────────┴──┴─────────────────────────┘
-═══════════════ RED DIVIDER ═══════════════════════════
-```
+### Summary of edits
+- Line 150: Reduce shop name from `text-xl` to `text-lg`, add `whitespace-nowrap` to force single line
+- Lines 149–156: Ensure exactly 6 rows with no data duplication
+- All in `src/pages/Invoice.tsx`, header section only (~10 lines changed)
 
-### Files affected
-
-- `src/pages/Invoice.tsx` — header section rewrite (lines ~124–173)
