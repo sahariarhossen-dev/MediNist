@@ -1,45 +1,35 @@
 
 
-## Plan: Fix Invoice Header Alignment & Row Structure
+## Plan: Dynamic Dashboard with Time Range Filter
 
-### Changes to `src/pages/Invoice.tsx` (lines 147–173)
+### Overview
+Replace the static summary cards with a fully functional, database-driven dashboard. Add a dropdown filter (Today / Last 7 Days / Last 15 Days / Last 30 Days) that dynamically queries Supabase and updates all 4 stat cards.
 
-**1. Shop name single-line fix**
-- Change `text-xl` to `text-lg` and add `whitespace-nowrap truncate` to prevent wrapping on narrow screens while keeping it bold and prominent.
+### Changes — `src/pages/Index.tsx`
 
-**2. Left column — strict 6-row reorder with no redundancy**
-Replace current left column with:
-- Row 1: Shop Name (`text-lg font-extrabold`, `whitespace-nowrap`)
-- Row 2: `Pro- {pharmacy.proprietor_name}`
-- Row 3: `Mob-{phone}`
-- Row 4: Full location in one line — `{pharmacy.address}, {pharmacy.upazila}, {pharmacy.district}, {pharmacy.division}` (filter out nulls, join with comma). This replaces the separate address + area/district rows.
-- Row 5: `{pharmacy.upazila} - {pharmacy.district}` (area/district summary)
-- Row 6: `Email- {pharmacy.email}`
+**1. Add state and data fetching**
+- Add `useState` for `timeRange` (default: `"today"`) and card values (`totalSales`, `totalBills`, `activeStaff`, `stockAlerts`)
+- Add `useEffect` that runs when `timeRange` or `profile.pharmacy_id` changes
+- Compute the start date from the selected range, then run 3 parallel Supabase queries:
+  - **Total Sales**: `SELECT SUM(total) FROM sales WHERE pharmacy_id = ? AND status = 'completed' AND created_at >= startDate`
+  - **Total Bills**: `SELECT COUNT(*) FROM sales WHERE pharmacy_id = ? AND status = 'completed' AND created_at >= startDate`
+  - **Active Staff**: `SELECT COUNT(DISTINCT user_id) FROM sales WHERE pharmacy_id = ? AND created_at >= startDate`
+- **Stock Alerts**: Separate query (not time-dependent): `SELECT COUNT(*) FROM medicines WHERE pharmacy_id = ? AND stock_quantity < stock_alert` — uses each product's own `stock_alert` threshold; falls back to `stock_quantity < 5` when `stock_alert` is 0 or null
 
-Wait — the user says "Delete Repeated Row" and wants Row 4 as the full location and Row 5 as area/district. But that IS repetition (upazila/district appear in both). Re-reading: Row 4 example is "Nator, Nagarpur, Tangail, Dhaka" which looks like address, upazila, district, division. Row 5 is "Ishwordi - Pabna" which is a different example.
+**2. Replace static dropdown with functional Select**
+- Use the existing `Select` / `SelectTrigger` / `SelectContent` / `SelectItem` components from `src/components/ui/select.tsx`
+- Options: Today, Last 7 Days, Last 15 Days, Last 30 Days
+- On change, update `timeRange` state which triggers the data refetch
 
-I'll implement it as:
-- Row 4: `{pharmacy.address}` (local address only, e.g., "Notun Hat More")  
-- Row 5: `{pharmacy.upazila} - {pharmacy.district}` (area-district)
+**3. Render dynamic values**
+- Replace the hardcoded `summaryCards` array with computed values from state
+- Total Sales displays with `৳` symbol and `.toLocaleString()`
+- Stock Alerts card label changed to "Short Items" per the request
 
-And ensure no duplicate row exists. The current code already does this with 6 rows. The "repeated row" issue is likely from the rendered output showing redundant location data. I'll keep the 6 rows as specified but ensure `address` doesn't duplicate upazila/district info.
+**4. Keep existing styling intact**
+- Same card grid, icons, colors, chart, header, and avatar
+- No changes to the Hourly Sales Trend chart section
 
-### Revised approach
-
-**Left Column (6 rows):**
-1. Shop Name — `text-lg font-extrabold whitespace-nowrap`
-2. `Pro- {proprietor_name}`
-3. `Mob-{phone}`
-4. `{address}` (local address from DB)
-5. `{upazila} - {district}` (area/district)
-6. `Email- {email}`
-
-**Middle Divider:** Keep as-is — vertical border with `self-center h-[60%] min-h-[90px] border-r border-gray-300 mx-6`.
-
-**Right Column (6 rows, right-aligned):** No changes needed — already correct.
-
-### Summary of edits
-- Line 150: Reduce shop name from `text-xl` to `text-lg`, add `whitespace-nowrap` to force single line
-- Lines 149–156: Ensure exactly 6 rows with no data duplication
-- All in `src/pages/Invoice.tsx`, header section only (~10 lines changed)
+### No database changes needed
+All required columns (`status`, `created_at`, `pharmacy_id`, `user_id`, `stock_quantity`, `stock_alert`) already exist in the `sales` and `medicines` tables.
 
