@@ -222,8 +222,8 @@ const Inventory = () => {
               <div
                 key={med.id}
                 onClick={() => handleCardClick(med.id)}
-                className={`bg-muted rounded-2xl transition-all duration-200 overflow-hidden ${
-                  searchQuery ? "cursor-pointer active:scale-[0.99]" : ""
+                className={`bg-muted rounded-2xl transition-all duration-300 overflow-hidden ${
+                  searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
                 }`}
               >
                 {/* Row 1: Basic info */}
