@@ -119,7 +119,7 @@ const Index = () => {
     { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
     { title: "Total Bills", value: String(stats.totalBills), icon: FileText, color: "bg-blue-100 text-blue-600" },
     { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
-    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500" },
+    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
   ];
 
   return (
