@@ -72,11 +72,7 @@ const AddProduct = () => {
       pharmacy_id: profile.pharmacy_id,
       strip_per_pack: isTabletOrCapsule && stripPerPack ? Number(stripPerPack) : null,
       pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
-      stock_quantity: isTabletOrCapsule
-        ? totalStrips ? Number(totalStrips) : null
-        : isLiquidOrCream
-        ? totalQuantity ? Number(totalQuantity) : null
-        : null,
+      stock_quantity: isLiquidOrCream && totalQuantity ? Number(totalQuantity) : 0,
       product_size: isLiquidOrCream ? productSize.trim() || null : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
