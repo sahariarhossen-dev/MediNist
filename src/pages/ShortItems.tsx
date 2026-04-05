@@ -1,13 +1,21 @@
-import { useState, useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface LowStockItem {
   id: string;
   name: string;
   product_type: string | null;
+  company_name: string | null;
   stock_quantity: number;
   price: number | null;
 }
@@ -17,13 +25,14 @@ const ShortItems = () => {
   const { profile } = useAuth();
   const [items, setItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCompany, setSelectedCompany] = useState("all");
 
   useEffect(() => {
     const fetchLowStock = async () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, stock_quantity, price, stock_alert")
+        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -35,6 +44,7 @@ const ShortItems = () => {
           id: m.id,
           name: m.name,
           product_type: m.product_type,
+          company_name: m.company_name,
           stock_quantity: m.stock_quantity ?? 0,
           price: m.price,
         }));
@@ -44,6 +54,20 @@ const ShortItems = () => {
     };
     fetchLowStock();
   }, [profile?.pharmacy_id]);
+
+  const companies = useMemo(
+    () =>
+      [...new Set(items.map((i) => i.company_name).filter(Boolean) as string[])].sort(),
+    [items]
+  );
+
+  const displayedItems = useMemo(
+    () =>
+      selectedCompany === "all"
+        ? items
+        : items.filter((i) => i.company_name === selectedCompany),
+    [items, selectedCompany]
+  );
 
   const stockColor = (qty: number) =>
     qty === 0 ? "text-red-600 font-bold" : "text-orange-500 font-semibold";
@@ -59,6 +83,21 @@ const ShortItems = () => {
           <ArrowLeft size={22} className="text-gray-700" />
         </button>
         <h1 className="text-lg font-bold text-gray-900">Short Items</h1>
+        <div className="ml-auto">
+          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+            <SelectTrigger className="w-[140px] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
+              <SelectValue placeholder="All Companies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Companies</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Table */}
@@ -78,12 +117,19 @@ const ShortItems = () => {
                 <tr>
                   <td colSpan={4} className="text-center py-8 text-gray-400">Loading...</td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : displayedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-8 text-gray-400">No short items found</td>
+                  <td colSpan={4} className="text-center py-12">
+                    <PackageX size={36} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-gray-400 text-sm">
+                      {selectedCompany === "all"
+                        ? "No short items found"
+                        : "No short items for this company"}
+                    </p>
+                  </td>
                 </tr>
               ) : (
-                items.map((item) => (
+                displayedItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
                     <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
                     <td className="px-2 py-3 text-gray-500">{item.product_type ?? "—"}</td>
