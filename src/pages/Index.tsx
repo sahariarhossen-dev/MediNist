@@ -1,7 +1,16 @@
+import { useState, useEffect, useCallback } from "react";
 import { Bell, TrendingUp, FileText, Users, AlertTriangle, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AreaChart,
   Area,
@@ -29,16 +38,87 @@ const salesData = [
   { time: "12AM", value: 100 },
 ];
 
-const summaryCards = [
-  { title: "Total Sales", value: "৳3,252.3", icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
-  { title: "Total Bills", value: "11", icon: FileText, color: "bg-blue-100 text-blue-600" },
-  { title: "Active Staff", value: "0", icon: Users, color: "bg-blue-100 text-blue-600" },
-  { title: "Stock Alerts", value: "0", icon: AlertTriangle, color: "bg-orange-100 text-orange-500" },
-];
+function getStartDate(range: string): string {
+  const now = new Date();
+  switch (range) {
+    case "7days":
+      now.setDate(now.getDate() - 7);
+      break;
+    case "15days":
+      now.setDate(now.getDate() - 15);
+      break;
+    case "30days":
+      now.setDate(now.getDate() - 30);
+      break;
+    default: // today
+      now.setHours(0, 0, 0, 0);
+  }
+  return now.toISOString();
+}
+
+const rangeLabels: Record<string, string> = {
+  today: "Today",
+  "7days": "Last 7 Days",
+  "15days": "Last 15 Days",
+  "30days": "Last 30 Days",
+};
 
 const Index = () => {
   const { profile, pharmacyName, signOut } = useAuth();
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
+
+  const [timeRange, setTimeRange] = useState("today");
+  const [stats, setStats] = useState({ totalSales: 0, totalBills: 0, activeStaff: 0, stockAlerts: 0 });
+
+  const fetchStats = useCallback(async () => {
+    const pharmacyId = profile?.pharmacy_id;
+    if (!pharmacyId) return;
+
+    const startDate = getStartDate(timeRange);
+
+    const [salesRes, staffRes, alertsRes] = await Promise.all([
+      supabase
+        .from("sales")
+        .select("total, id, user_id")
+        .eq("pharmacy_id", pharmacyId)
+        .eq("status", "completed")
+        .gte("created_at", startDate),
+      supabase
+        .from("sales")
+        .select("user_id")
+        .eq("pharmacy_id", pharmacyId)
+        .gte("created_at", startDate),
+      supabase
+        .from("medicines")
+        .select("id, stock_quantity, stock_alert")
+        .eq("pharmacy_id", pharmacyId),
+    ]);
+
+    const sales = salesRes.data ?? [];
+    const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
+    const totalBills = sales.length;
+
+    const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
+    const activeStaff = staffIds.size;
+
+    const stockAlerts = (alertsRes.data ?? []).filter(m => {
+      const threshold = m.stock_alert && m.stock_alert > 0 ? m.stock_alert : 5;
+      return (m.stock_quantity ?? 0) < threshold;
+    }).length;
+
+    setStats({ totalSales, totalBills, activeStaff, stockAlerts });
+  }, [profile?.pharmacy_id, timeRange]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const summaryCards = [
+    { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
+    { title: "Total Bills", value: String(stats.totalBills), icon: FileText, color: "bg-blue-100 text-blue-600" },
+    { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
+    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500" },
+  ];
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
@@ -63,9 +143,16 @@ const Index = () => {
             <h1 className="text-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
-          <button className="flex items-center gap-1 bg-white border rounded-lg px-3 py-1.5 text-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground">
-            15 Days <ChevronDown size={14} />
-          </button>
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(rangeLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
