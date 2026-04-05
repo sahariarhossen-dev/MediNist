@@ -226,11 +226,6 @@ const Invoice = () => {
           </div>
         </div>
 
-        {/* Remarks */}
-        <div className="mt-8 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Remarks / Payment Instructions</p>
-          <p className="text-sm text-gray-500 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
-        </div>
       </div>
     </div>
   );
