@@ -1,98 +1,53 @@
+## Plan: Redesign Invoice Header — 6-Row Left Column + Vertical Divider + Aligned Right Column
 
+### What changes
 
-## Plan: Redesign Invoice Page + PDF Download
+**File: `src/pages/Invoice.tsx**` (lines 147–173)
 
-### Problem
-Current invoice has generic styling, a Print button instead of Download PDF, includes unnecessary rows (Tax Rate, Total Tax, Shipping/Handling), and doesn't match the uploaded sketch layout. Also missing proprietor name and email fields.
+Replace the current two-column header with a new structure:
 
-### Database Changes
+**Left Column (6 rows, left-aligned):**
 
-**Migration: Add `email` and `proprietor_name` columns to `pharmacies` table**
+1. Shop Name — `text-xl font-extrabold`
+2. Proprietor — `text-sm` → `Pro- {pharmacy.proprietor_name}`
+3. Mobile — `text-sm` → `Mob-{profile.phone}`
+4. Local Location — `text-sm` → `{pharmacy.address}` (e.g., "Notun Hat More")
+5. Area/District — `text-sm` → `{pharmacy.upazila} - {pharmacy.district}` (e.g., "Ishwordi - Pabna")
+6. Email — `text-sm` → `Email- {pharmacy.email}`
 
-```sql
-ALTER TABLE public.pharmacies ADD COLUMN email text;
-ALTER TABLE public.pharmacies ADD COLUMN proprietor_name text;
+**Middle Divider:**
+
+- A vertical border (`border-r border-gray-300`) at 50% height of the header, using `self-center h-[50%]` or a dedicated `div` with fixed height, providing clean visual separation.
+
+**Right Column (6 rows, left-aligned within right column):**
+
+1. Icon + "INVOICE" (bold, red, uppercase)
+2. "Transaction Confirm By" (small gray text)
+3. Sale type (Retail/Wholesale)
+4. Seller name
+5. Invoice ID
+6. Timestamp `Dkh-{HH:mm}/{dd-MM-yy}`
+
+**Data cleanup:**
+
+- Remove the `fullAddress` concatenation (line 124-125) that joins address+upazila+district into one string
+- Split address into separate Row 4 (address) and Row 5 (upazila - district)
+- Consistent `leading-6` or `leading-relaxed` on all rows for pixel-perfect line-height alignment
+
+### Layout structure (ASCII)
+
+```text
+┌─────────────────────────┬──┬─────────────────────────┐
+│ Nasser Madical Hall     │  │               📄 INVOIC │
+│ Pro- Nasir Uddin        │  │  Transaction Confirm BY │
+│ Mob-013154282           │||│                  Retail │
+│ Notun Hat More          │  │            Mehedi Hasan │
+│ Ishwordi - Pabna        │  │         INV-kd409524cfw │
+│ Email- nasir@gmail.com  │  │      Dkh-11:05/04-05-26 │
+└─────────────────────────┴──┴─────────────────────────┘
+═══════════════ RED DIVIDER ═══════════════════════════
 ```
-
-These fields will be populated by pharmacy owners and displayed dynamically on the invoice.
-
-### Code Changes
-
-**1. Install `jspdf` and `html2canvas`**
-
-```bash
-npm install jspdf html2canvas
-```
-
-**2. Rewrite `src/pages/Invoice.tsx`**
-
-Complete redesign:
-
-- **Top bar**: Remove Print button. Add "Download PDF" button (uses `html2canvas` + `jspdf` to capture the invoice container and save as PDF). Keep Close (X) button on left.
-
-- **Header section** (two columns, no emerald border):
-  - **Left column** — 5 lines from pharmacy/profile data:
-    1. Shop name (bold, ~text-xl, strong font weight)
-    2. Address + upazila/district (e.g., "Notun Hat More, Ishwordi - Pabna")
-    3. Proprietor name: `pro- {pharmacy.proprietor_name}`
-    4. Mobile: `Mob-{profile.phone}`
-    5. Email: `Email- {pharmacy.email}`
-  - **Right column** — 6 lines:
-    1. Red/dark icon + "INVOICE" (large, bold, uppercase)
-    2. "Transaction Confirm By"
-    3. Sale type (Retail/Wholesale)
-    4. Seller name (from profiles)
-    5. Invoice ID: `INV-{sale.id.slice(0,11)}`
-    6. Timestamp: `Dkh-{HH:mm}/{dd-MM-yy}`
-
-- **Red divider line** between header and table (matching sketch's red accent)
-
-- **Items table**: Keep existing structure — DESCRIPTION, QTY, UNIT PRICE, TOTAL with red header row (`bg-red-700 text-white`) per the sketch. Alternating row shading.
-
-- **Summary section** (right-aligned): Only keep:
-  - Subtotal
-  - Discount (%)
-  - Subtotal Less Discount
-  - **Balance Due** — prominent, bold, large text with ৳ currency, separated by a bold line
-
-- **Remove**: Tax Rate, Total Tax, Shipping/Handling rows entirely.
-
-- **Remarks section**: Keep at bottom-left as "Remarks / Payment Instructions"
-
-- **PDF generation function**:
-  ```typescript
-  const handleDownloadPDF = async () => {
-    const element = document.getElementById("invoice-content");
-    if (!element) return;
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-    const pdf = new jsPDF("p", "mm", "a4");
-    const imgData = canvas.toDataURL("image/png");
-    const imgWidth = 190;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
-    pdf.save(`${invoiceId}.pdf`);
-  };
-  ```
-
-- **Data fetching**: Also fetch `user.email` from Supabase auth session, and pharmacy `email`/`proprietor_name` from the updated pharmacies table. Fetch seller's phone from profiles.
-
-**3. Update `src/pages/Invoice.tsx` — fetch expanded pharmacy fields**
-
-Update the pharmacy select query to include `email, proprietor_name`:
-```typescript
-supabase.from("pharmacies").select("name, address, division, district, upazila, email, proprietor_name")
-```
-
-Update seller profile query to include phone:
-```typescript
-supabase.from("profiles").select("full_name, phone")
-```
-
-### Color scheme change
-Per the sketch (image_8.png), the accent color shifts from emerald/green to **red** (`bg-red-700`) for the table header and divider lines, matching the professional pharmacy invoice look.
 
 ### Files affected
-- **Migration** — add `email` and `proprietor_name` to `pharmacies`
-- `src/pages/Invoice.tsx` — full rewrite with new layout, PDF download, red theme
-- `package.json` — add `jspdf` and `html2canvas` dependencies
 
+- `src/pages/Invoice.tsx` — header section rewrite (lines ~124–173)
