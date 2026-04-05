@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,7 +80,7 @@ const Inventory = () => {
   };
 
   const handleCardClick = (id: string) => {
-    if (!searchQuery) return;
+    if (!searchOpen) return;
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
@@ -222,8 +222,8 @@ const Inventory = () => {
               <div
                 key={med.id}
                 onClick={() => handleCardClick(med.id)}
-                className={`bg-muted rounded-2xl transition-all duration-200 overflow-hidden ${
-                  searchQuery ? "cursor-pointer active:scale-[0.99]" : ""
+                className={`bg-muted rounded-2xl transition-all duration-300 overflow-hidden ${
+                  searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
                 }`}
               >
                 {/* Row 1: Basic info */}
@@ -241,6 +241,11 @@ const Inventory = () => {
                   {isExpanded ? (
                     <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                       <Input
+                        ref={(el) => {
+                          if (el && isExpanded) {
+                            setTimeout(() => el.focus(), 50);
+                          }
+                        }}
                         type="number"
                         min={0}
                         placeholder="0"
@@ -268,7 +273,7 @@ const Inventory = () => {
 
                 {/* Row 2: Expanded details */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
                       <span className="text-foreground">
                         ৳ {med.price ?? "—"}
