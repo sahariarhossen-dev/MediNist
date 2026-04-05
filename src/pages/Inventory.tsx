@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Search, Bell, Pill, Plus, X } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, Search, Bell, Pill, Plus, X, Check } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,9 @@ interface Medicine {
   company_name: string | null;
   price: number | null;
   stock_quantity: number | null;
+  strip_per_pack: number | null;
+  pcs_per_strip: number | null;
+  product_type: string | null;
 }
 
 const Inventory = () => {
@@ -23,6 +27,9 @@ const Inventory = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [unitInputs, setUnitInputs] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMedicines = async () => {
@@ -63,6 +70,48 @@ const Inventory = () => {
   const handleCloseSearch = () => {
     setSearchOpen(false);
     setSearchQuery("");
+    setExpandedId(null);
+    setUnitInputs({});
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    searchRef.current?.focus();
+  };
+
+  const handleCardClick = (id: string) => {
+    if (!searchQuery) return;
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const getCalculatedStock = (med: Medicine) => {
+    const units = Number(unitInputs[med.id] || 0);
+    const multiplier = med.strip_per_pack || 1;
+    return (med.stock_quantity || 0) + units * multiplier;
+  };
+
+  const handleConfirmStock = async (med: Medicine) => {
+    const units = Number(unitInputs[med.id] || 0);
+    if (units <= 0) return;
+
+    setSavingId(med.id);
+    const newStock = getCalculatedStock(med);
+    const { error } = await supabase
+      .from("medicines")
+      .update({ stock_quantity: newStock })
+      .eq("id", med.id);
+
+    if (error) {
+      toast.error("Failed to update stock");
+    } else {
+      toast.success(`${med.name} stock updated to ${newStock}`);
+      setMedicines((prev) =>
+        prev.map((m) => (m.id === med.id ? { ...m, stock_quantity: newStock } : m))
+      );
+      setUnitInputs((prev) => ({ ...prev, [med.id]: "" }));
+      setExpandedId(null);
+    }
+    setSavingId(null);
   };
 
   return (
@@ -99,16 +148,26 @@ const Inventory = () => {
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3">
         {searchOpen ? (
           <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
-            <Input
-              ref={searchRef}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search medicines..."
-              className="flex-1 h-10 rounded-xl border-muted bg-muted focus-visible:ring-primary"
-            />
+            <div className="relative flex-1">
+              <Input
+                ref={searchRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search medicines..."
+                className="flex-1 h-10 rounded-xl border-muted bg-muted pr-9 focus-visible:ring-primary"
+              />
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
             <button
               onClick={handleCloseSearch}
-              className="p-2 rounded-full bg-muted text-foreground"
+              className="p-2 rounded-full bg-muted text-foreground flex-shrink-0"
             >
               <X size={18} />
             </button>
@@ -154,26 +213,78 @@ const Inventory = () => {
             </p>
           </div>
         ) : (
-          filteredMedicines.map((med) => (
-            <div
-              key={med.id}
-              className="flex items-center gap-4 bg-muted rounded-2xl p-4"
-            >
-              <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
-                <Pill size={20} className="text-primary" />
+          filteredMedicines.map((med) => {
+            const isExpanded = expandedId === med.id;
+            const units = Number(unitInputs[med.id] || 0);
+            const calculatedStock = getCalculatedStock(med);
+
+            return (
+              <div
+                key={med.id}
+                onClick={() => handleCardClick(med.id)}
+                className={`bg-muted rounded-2xl transition-all duration-200 overflow-hidden ${
+                  searchQuery ? "cursor-pointer active:scale-[0.99]" : ""
+                }`}
+              >
+                {/* Row 1: Basic info */}
+                <div className="flex items-center gap-4 p-4">
+                  <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Pill size={20} className="text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground truncate">{med.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {med.company_name || "—"}
+                    </p>
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        value={unitInputs[med.id] || ""}
+                        onChange={(e) =>
+                          setUnitInputs((prev) => ({ ...prev, [med.id]: e.target.value }))
+                        }
+                        className="w-16 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
+                      />
+                      <button
+                        onClick={() => handleConfirmStock(med)}
+                        disabled={units <= 0 || savingId === med.id}
+                        className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
+                      >
+                        <Check size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-lg">💰</span>
+                      <span className="font-bold text-foreground">{med.price ?? "—"}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 2: Expanded details */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
+                      <span className="text-foreground">
+                        ৳ {med.price ?? "—"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        pre-stock : <span className="text-foreground">{med.stock_quantity ?? 0}</span>
+                      </span>
+                      <span className="text-primary font-semibold">
+                        Current stock : {calculatedStock}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-foreground truncate">{med.name}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {med.company_name || "—"}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-lg">💰</span>
-                <span className="font-bold text-foreground">{med.price ?? "—"}</span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

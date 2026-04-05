@@ -28,7 +28,7 @@ const AddProduct = () => {
   const [productType, setProductType] = useState<ProductType | "">("");
   const [stripPerPack, setStripPerPack] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
-  const [totalStrips, setTotalStrips] = useState("");
+  
   const [productSize, setProductSize] = useState("");
   const [totalQuantity, setTotalQuantity] = useState("");
   const [stockAlert, setStockAlert] = useState("");
@@ -43,7 +43,7 @@ const AddProduct = () => {
     if (s.productType) setProductType(s.productType);
     if (s.stripPerPack) setStripPerPack(s.stripPerPack);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
-    if (s.totalStrips) setTotalStrips(s.totalStrips);
+    
     if (s.productSize) setProductSize(s.productSize);
     if (s.totalQuantity) setTotalQuantity(s.totalQuantity);
     if (s.stockAlert) setStockAlert(s.stockAlert);
@@ -53,10 +53,6 @@ const AddProduct = () => {
   const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
   const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
 
-  const totalPcs =
-    isTabletOrCapsule && totalStrips && pcsPerStrip
-      ? Number(totalStrips) * Number(pcsPerStrip)
-      : null;
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -76,11 +72,7 @@ const AddProduct = () => {
       pharmacy_id: profile.pharmacy_id,
       strip_per_pack: isTabletOrCapsule && stripPerPack ? Number(stripPerPack) : null,
       pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
-      stock_quantity: isTabletOrCapsule
-        ? totalStrips ? Number(totalStrips) : null
-        : isLiquidOrCream
-        ? totalQuantity ? Number(totalQuantity) : null
-        : null,
+      stock_quantity: isLiquidOrCream && totalQuantity ? Number(totalQuantity) : 0,
       product_size: isLiquidOrCream ? productSize.trim() || null : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
@@ -144,7 +136,7 @@ const AddProduct = () => {
             onClick={() =>
               navigate("/add-company", {
                 state: {
-                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, totalStrips, productSize, totalQuantity, stockAlert, mrp },
+                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity, stockAlert, mrp },
                 },
               })
             }
@@ -205,22 +197,6 @@ const AddProduct = () => {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Total Strips in Stock</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 50"
-                value={totalStrips}
-                onChange={(e) => setTotalStrips(e.target.value)}
-                className="rounded-xl bg-background border-0 h-11"
-              />
-            </div>
-            {totalPcs !== null && (
-              <div className="flex items-center gap-2 text-sm text-primary font-medium bg-primary/10 rounded-xl px-4 py-2.5">
-                <Package size={16} />
-                Total Pcs: {totalPcs}
-              </div>
-            )}
           </div>
         )}
 
