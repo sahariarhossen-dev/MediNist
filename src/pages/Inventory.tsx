@@ -80,7 +80,7 @@ const Inventory = () => {
   };
 
   const handleCardClick = (id: string) => {
-    if (!searchQuery) return;
+    if (!searchOpen) return;
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
