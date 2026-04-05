@@ -28,7 +28,7 @@ const AddProduct = () => {
   const [productType, setProductType] = useState<ProductType | "">("");
   const [stripPerPack, setStripPerPack] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
-  const [totalStrips, setTotalStrips] = useState("");
+  
   const [productSize, setProductSize] = useState("");
   const [totalQuantity, setTotalQuantity] = useState("");
   const [stockAlert, setStockAlert] = useState("");
