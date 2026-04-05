@@ -220,11 +220,14 @@ const Invoice = () => {
               <span className="font-semibold text-gray-800 font-mono">৳{subtotalLessDiscount.toLocaleString()}</span>
             </div>
             <div className="border-t-[3px] border-red-700 pt-3 mt-3 flex justify-between items-center">
-              <span className="font-extrabold text-gray-900 text-base"><span className="font-extrabold text-gray-900 text-base">Total Payable</span></span>
+              <span className="font-extrabold text-gray-900 text-base">Total Payable</span>
               <span className="text-red-700 font-mono text-xl font-extrabold">৳{Number(sale.total).toLocaleString()}</span>
             </div>
           </div>
         </div>
+
+        {/* Closing message */}
+        <p className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
 
       </div>
     </div>
