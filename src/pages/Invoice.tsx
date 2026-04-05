@@ -221,7 +221,7 @@ const Invoice = () => {
             </div>
             <div className="border-t-[3px] border-red-700 pt-3 mt-3 flex justify-between items-center">
               <span className="font-extrabold text-gray-900 text-base"><span className="font-extrabold text-gray-900 text-base">Total Payable</span></span>
-              <span className="font-extrabold text-red-700 text-2xl font-mono">৳{Number(sale.total).toLocaleString()}</span>
+              <span className="text-red-700 font-mono text-xl font-extrabold">৳{Number(sale.total).toLocaleString()}</span>
             </div>
           </div>
         </div>
