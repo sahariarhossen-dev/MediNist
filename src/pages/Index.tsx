@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell, TrendingUp, FileText, Users, AlertTriangle, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +65,7 @@ const rangeLabels: Record<string, string> = {
 };
 
 const Index = () => {
+  const navigate = useNavigate();
   const { profile, pharmacyName, signOut } = useAuth();
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
@@ -117,7 +119,7 @@ const Index = () => {
     { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
     { title: "Total Bills", value: String(stats.totalBills), icon: FileText, color: "bg-blue-100 text-blue-600" },
     { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
-    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500" },
+    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
   ];
 
   return (
@@ -159,7 +161,7 @@ const Index = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 px-5 py-3">
         {summaryCards.map((card) => (
-          <Card key={card.title} className="p-4 border-0 shadow-sm rounded-xl bg-white">
+          <Card key={card.title} className={`p-4 border-0 shadow-sm rounded-xl bg-white ${card.onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`} onClick={card.onClick}>
             <div className={`w-9 h-9 rounded-full flex items-center justify-center mb-3 ${card.color}`}>
               <card.icon size={18} />
             </div>
