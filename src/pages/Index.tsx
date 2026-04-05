@@ -161,7 +161,7 @@ const Index = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 px-5 py-3">
         {summaryCards.map((card) => (
-          <Card key={card.title} className="p-4 border-0 shadow-sm rounded-xl bg-white">
+          <Card key={card.title} className={`p-4 border-0 shadow-sm rounded-xl bg-white ${card.onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`} onClick={card.onClick}>
             <div className={`w-9 h-9 rounded-full flex items-center justify-center mb-3 ${card.color}`}>
               <card.icon size={18} />
             </div>
