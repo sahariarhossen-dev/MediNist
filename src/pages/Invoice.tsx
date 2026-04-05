@@ -148,11 +148,11 @@ const Invoice = () => {
           {/* Left — Shop Profile (6 rows) */}
           <div className="flex-1 flex flex-col leading-7">
             <h1 className="text-lg font-extrabold text-gray-900 tracking-tight whitespace-nowrap truncate">{pharmacy?.name || "Pharmacy"}</h1>
-            <p className="text-sm text-gray-600">Pro- {pharmacy?.proprietor_name || "N/A"}</p>
-            <p className="text-sm text-gray-600">Mob-{sellerPhone || profile?.phone || "N/A"}</p>
-            <p className="text-sm text-gray-600">{pharmacy?.address || "N/A"}</p>
-            <p className="text-sm text-gray-600">{areaDistrict || "N/A"}</p>
-            <p className="text-sm text-gray-600">Email- {pharmacy?.email || "N/A"}</p>
+            <p className="text-gray-600 text-xs">Pro- {pharmacy?.proprietor_name || "N/A"}</p>
+            <p className="text-gray-600 text-xs">Mob-{sellerPhone || profile?.phone || "N/A"}</p>
+            <p className="text-gray-600 text-xs">{pharmacy?.address || "N/A"}</p>
+            <p className="text-gray-600 text-xs">{areaDistrict || "N/A"}</p>
+            <p className="text-gray-600 text-xs">Email- {pharmacy?.email || "N/A"}</p>
           </div>
 
           {/* Middle Vertical Divider */}
