@@ -165,10 +165,10 @@ const Invoice = () => {
               <h2 className="text-xl font-extrabold text-red-700 tracking-tight uppercase">Invoice</h2>
             </div>
             <p className="text-xs text-gray-500">Transaction Confirm By</p>
-            <p className="text-sm font-semibold text-gray-700 capitalize">{sale.sale_type}</p>
-            <p className="text-sm font-semibold text-gray-700">{sellerName}</p>
-            <p className="text-sm font-semibold text-gray-700">{invoiceId}</p>
-            <p className="text-sm text-gray-600">Dkh-{timeStr}/{dateStr}</p>
+            <p className="font-semibold text-gray-700 text-xs capitalize">{sale.sale_type}</p>
+            <p className="font-semibold text-gray-700 text-xs">{sellerName}</p>
+            <p className="font-semibold text-gray-700 text-xs">{invoiceId}</p>
+            <p className="text-gray-600 text-xs">Dkh-{timeStr}/{dateStr}</p>
           </div>
         </div>
 
