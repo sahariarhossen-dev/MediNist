@@ -173,7 +173,7 @@ const Invoice = () => {
         </div>
 
         {/* Red divider */}
-        <div className="h-[3px] bg-red-700 mb-6" />
+        <div className="h-[3px] bg-red-700 mb-6 py-0 my-[15px]" />
 
         {/* Items table */}
         <div className="overflow-x-auto mb-6">
