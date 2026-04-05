@@ -273,7 +273,7 @@ const Inventory = () => {
 
                 {/* Row 2: Expanded details */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
                       <span className="text-foreground">
                         ৳ {med.price ?? "—"}
