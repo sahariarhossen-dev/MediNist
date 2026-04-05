@@ -53,10 +53,6 @@ const AddProduct = () => {
   const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
   const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
 
-  const totalPcs =
-    isTabletOrCapsule && totalStrips && pcsPerStrip
-      ? Number(totalStrips) * Number(pcsPerStrip)
-      : null;
 
   const handleSave = async () => {
     if (!name.trim()) {
