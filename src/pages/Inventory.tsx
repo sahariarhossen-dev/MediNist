@@ -241,6 +241,11 @@ const Inventory = () => {
                   {isExpanded ? (
                     <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                       <Input
+                        ref={(el) => {
+                          if (el && isExpanded) {
+                            setTimeout(() => el.focus(), 50);
+                          }
+                        }}
                         type="number"
                         min={0}
                         placeholder="0"
