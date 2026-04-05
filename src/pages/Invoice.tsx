@@ -121,8 +121,7 @@ const Invoice = () => {
   const dateStr = format(dateObj, "dd-MM-yy");
   const subtotalLessDiscount = Number(sale.subtotal) - Number(sale.discount_amount);
 
-  const addressParts = [pharmacy?.address, pharmacy?.upazila, pharmacy?.district].filter(Boolean);
-  const fullAddress = addressParts.join(", ");
+  const areaDistrict = [pharmacy?.upazila, pharmacy?.district].filter(Boolean).join(" - ");
 
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white">
@@ -144,19 +143,23 @@ const Invoice = () => {
       {/* Invoice content */}
       <div id="invoice-content" className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none my-4 print:my-0 p-8 print:p-6">
         
-        {/* Two-column header */}
-        <div className="flex justify-between items-start mb-1">
-          {/* Left — Shop Profile */}
-          <div className="space-y-0.5">
+        {/* Two-column header with vertical divider */}
+        <div className="flex items-center mb-1">
+          {/* Left — Shop Profile (6 rows) */}
+          <div className="flex-1 flex flex-col leading-7">
             <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">{pharmacy?.name || "Pharmacy"}</h1>
-            {fullAddress && <p className="text-sm text-gray-600">{fullAddress}</p>}
-            {pharmacy?.proprietor_name && <p className="text-sm text-gray-600">Pro- {pharmacy.proprietor_name}</p>}
-            {profile?.phone && <p className="text-sm text-gray-600">Mob-{profile.phone}</p>}
-            {pharmacy?.email && <p className="text-sm text-gray-600">Email- {pharmacy.email}</p>}
+            <p className="text-sm text-gray-600">Pro- {pharmacy?.proprietor_name || "N/A"}</p>
+            <p className="text-sm text-gray-600">Mob-{sellerPhone || profile?.phone || "N/A"}</p>
+            <p className="text-sm text-gray-600">{pharmacy?.address || "N/A"}</p>
+            <p className="text-sm text-gray-600">{areaDistrict || "N/A"}</p>
+            <p className="text-sm text-gray-600">Email- {pharmacy?.email || "N/A"}</p>
           </div>
 
-          {/* Right — Invoice Details */}
-          <div className="text-right space-y-0.5">
+          {/* Middle Vertical Divider */}
+          <div className="self-center h-[60%] min-h-[90px] border-r border-gray-300 mx-6" />
+
+          {/* Right — Invoice Details (6 rows, right-aligned) */}
+          <div className="flex-1 flex flex-col leading-7 text-right">
             <div className="flex items-center justify-end gap-2">
               <FileText className="text-red-700 w-5 h-5" />
               <h2 className="text-xl font-extrabold text-red-700 tracking-tight uppercase">Invoice</h2>
