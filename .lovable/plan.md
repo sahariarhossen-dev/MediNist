@@ -1,30 +1,30 @@
 
 
-## Plan: Add Company Filter to Short Items Page
+## Plan: Refine Inventory Page — Back Button, Search Toggle, Remove Nav
 
-### Overview
-Add a searchable company dropdown filter to the top-right of the Short Items header, allowing users to filter low-stock items by manufacturer.
+### Changes
 
-### Changes — `src/pages/ShortItems.tsx`
+**1. Remove bottom nav — `src/App.tsx`**
+- Remove `AppLayout` wrapper from the `/inventory` route so BottomNav is not rendered
+- Change: `<AppLayout><Inventory /></AppLayout>` → just `<Inventory />`
 
-**1. Extract unique companies from fetched data**
-- After fetching low-stock items, derive a unique sorted list of `company_name` values from the medicines query (add `company_name` to the select)
-- Store in state: `companies` array and `selectedCompany` (default: `"all"`)
+**2. Rewrite `src/pages/Inventory.tsx`**
 
-**2. Add Select filter in header row**
-- Place a `Select` component (from `src/components/ui/select.tsx`) to the right of the "Short Items" title using `ml-auto`
-- Options: "All Companies" + each unique company name
-- Styled with `w-[160px]` white bg, `shadow-sm`, `rounded-lg`, emerald focus ring (`focus:ring-emerald-500`)
+**Back button in header:**
+- Add `ArrowLeft` icon button to the left of "Medinist" logo
+- `onClick={() => navigate(-1)}` to go back
+- Styled: `p-2 rounded-full bg-primary text-primary-foreground`
 
-**3. Filter displayed items**
-- Compute `displayedItems` from `items` filtered by `selectedCompany`
-- Table renders `displayedItems` instead of `items`
+**Search toggle with animation:**
+- Add `searchOpen` and `searchQuery` state
+- In the "Add Inventory" row: when `searchOpen` is false, show title + search icon button; when true, hide title and show a full-width `Input` with auto-focus and an X close button
+- Use `transition-all` for smooth slide-in effect
+- Filter `medicines` list in real-time: `medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))`
 
-**4. Update LowStockItem interface**
-- Add `company_name: string | null` to the interface and mapping
+**Layout cleanup:**
+- Change `pb-24` to `pb-6` since bottom nav is removed — medicine list gets full vertical space
+- Fix the nested `<p>` tag bug on line 107 (nested `<p>` inside `<p>`)
 
-**5. Empty state**
-- When filter is active and no results: show "No short items for this company" with a package/alert icon
-
-No database or routing changes needed.
+**Stock display:**
+- Keep existing card layout showing pill icon, name, company, and stock quantity with the coin emoji
 
