@@ -78,7 +78,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -93,6 +93,7 @@ const CreateSale = () => {
               price: it.unit_price,
               stock_quantity: null,
               pcs_per_strip: null,
+              strip_per_pack: null,
               product_type: null,
             },
             quantity: it.quantity,
