@@ -1,21 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, LogOut, ShieldCheck, X, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { format, subDays, parseISO, startOfDay } from "date-fns";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  CartesianGrid,
-  Tooltip,
-} from "recharts";
 
 const CircularProgress = ({ percent }: { percent: number }) => {
   const r = 54;
@@ -45,23 +37,17 @@ const CircularProgress = ({ percent }: { percent: number }) => {
   );
 };
 
-const MiniTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-background border border-border rounded-lg px-2 py-1 shadow text-xs">
-      <p className="font-semibold">{label}</p>
-      <p className="text-primary font-bold">৳{payload[0].value.toLocaleString()}</p>
-    </div>
-  );
-};
-
 const Profile = () => {
   const navigate = useNavigate();
-  const { user, profile, pharmacyName, refreshProfile } = useAuth();
+  const { user, profile, pharmacyName, signOut, refreshProfile } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [chartData, setChartData] = useState<{ label: string; amount: number }[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(false);
 
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -69,35 +55,34 @@ const Profile = () => {
 
   const memberId = user?.id ? user.id.slice(0, 8).toUpperCase() : "—";
 
-  // Fetch 7-day personal sales
-  const fetchMySales = useCallback(async () => {
-    if (!user?.id || !profile?.pharmacy_id) return;
-    const now = new Date();
-    const start = subDays(startOfDay(now), 6);
+  const startEditing = () => {
+    setEditName(profile?.full_name || "");
+    setEditPhone(profile?.phone || "");
+    setEditing(true);
+  };
 
-    const { data: sales } = await supabase
-      .from("sales")
-      .select("total, created_at")
-      .eq("pharmacy_id", profile.pharmacy_id)
-      .eq("user_id", user.id)
-      .eq("status", "completed")
-      .gte("created_at", start.toISOString());
+  const cancelEditing = () => {
+    setEditing(false);
+  };
 
-    const grouped: Record<string, number> = {};
-    for (let i = 6; i >= 0; i--) {
-      grouped[format(subDays(now, i), "EEE")] = 0;
+  const saveProfile = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: editName.trim() || null, phone: editPhone.trim() || null })
+        .eq("id", user.id);
+      if (error) throw error;
+      await refreshProfile();
+      setEditing(false);
+      toast({ title: "Profile updated!" });
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
-    (sales ?? []).forEach((s) => {
-      const key = format(parseISO(s.created_at), "EEE");
-      if (key in grouped) grouped[key] += Number(s.total);
-    });
-
-    setChartData(Object.entries(grouped).map(([label, amount]) => ({ label, amount })));
-  }, [user?.id, profile?.pharmacy_id]);
-
-  useEffect(() => {
-    fetchMySales();
-  }, [fetchMySales]);
+  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,7 +127,11 @@ const Profile = () => {
     }
   };
 
-  // Monthly target (static demo)
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login");
+  };
+
   const monthlyTarget = 500000;
   const achievement = 400000;
   const percent = Math.round((achievement / monthlyTarget) * 100);
@@ -185,23 +174,47 @@ const Profile = () => {
       {/* Identity Card */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">User Identity</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground">User Identity</h2>
+            {!editing ? (
+              <button onClick={startEditing} className="p-1.5 rounded-full hover:bg-muted transition">
+                <Pencil size={14} className="text-muted-foreground" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button onClick={cancelEditing} className="p-1.5 rounded-full hover:bg-muted transition">
+                  <X size={14} className="text-muted-foreground" />
+                </button>
+                <button onClick={saveProfile} disabled={saving} className="p-1.5 rounded-full hover:bg-primary/10 transition">
+                  <Check size={14} className="text-primary" />
+                </button>
+              </div>
+            )}
+          </div>
           <div className="space-y-2.5">
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Full Name</span>
-              <span className="text-xs font-medium text-foreground">{profile?.full_name || "—"}</span>
+              {editing ? (
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-7 w-40 text-xs text-right" />
+              ) : (
+                <span className="text-xs font-medium text-foreground">{profile?.full_name || "—"}</span>
+              )}
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Member ID</span>
               <span className="text-xs font-mono font-medium text-foreground">{memberId}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Designation</span>
               <span className="text-xs font-medium text-foreground capitalize">{profile?.role || "Staff"}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Phone</span>
-              <span className="text-xs font-medium text-foreground">{profile?.phone || "—"}</span>
+              {editing ? (
+                <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-7 w-40 text-xs text-right" />
+              ) : (
+                <span className="text-xs font-medium text-foreground">{profile?.phone || "—"}</span>
+              )}
             </div>
           </div>
         </Card>
@@ -227,33 +240,34 @@ const Profile = () => {
         </Card>
       </div>
 
-      {/* 7-Day Personal Sales */}
+      {/* Security */}
       <div className="px-5 pb-4">
-        <Card className="border-0 shadow-sm rounded-2xl bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground mb-3">My Sales — Last 7 Days</h2>
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="myGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-              <YAxis hide />
-              <Tooltip content={<MiniTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="amount"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                fill="url(#myGrad)"
-                dot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 0 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Security</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <ShieldCheck size={20} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">2-Step Verification</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">Protect your account with an extra layer of security.</p>
+              </div>
+            </div>
+            <Switch checked={twoFactor} onCheckedChange={setTwoFactor} />
+          </div>
         </Card>
+      </div>
+
+      {/* Logout */}
+      <div className="px-5 pb-6">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-3 bg-destructive/10 rounded-2xl p-4 hover:bg-destructive/20 transition-colors"
+        >
+          <LogOut size={20} className="text-destructive" />
+          <span className="font-semibold text-destructive">Log Out</span>
+        </button>
       </div>
     </div>
   );

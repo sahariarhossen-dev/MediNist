@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Package, User, Settings, LogOut, ChevronRight, Bell } from "lucide-react";
+import { Package, User, Settings, ChevronRight, Bell } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const menuItems = [
@@ -11,15 +11,10 @@ const menuItems = [
 
 const More = () => {
   const navigate = useNavigate();
-  const { profile, pharmacyName, signOut } = useAuth();
+  const { profile, pharmacyName } = useAuth();
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate("/login");
-  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -74,17 +69,6 @@ const More = () => {
             <ChevronRight size={18} className="text-muted-foreground" />
           </button>
         ))}
-
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-4 bg-destructive/10 rounded-2xl p-4 hover:bg-destructive/20 transition-colors text-left"
-        >
-          <div className="h-10 w-10 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0">
-            <LogOut size={20} className="text-destructive" />
-          </div>
-          <span className="flex-1 font-medium text-destructive">Logout</span>
-        </button>
       </div>
     </div>
   );
