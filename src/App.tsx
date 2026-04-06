@@ -18,6 +18,8 @@ import CreateSale from "./pages/CreateSale.tsx";
 import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
 import Profile from "./pages/Profile.tsx";
+import ForgotPassword from "./pages/ForgotPassword.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
