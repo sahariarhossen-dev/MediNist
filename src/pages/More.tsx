@@ -33,7 +33,8 @@ const More = () => {
           <button className="relative p-2 rounded-full bg-muted">
             <Bell size={18} className="text-foreground" />
           </button>
-          <Avatar className="h-9 w-9 border-2 border-primary">
+          <Avatar className="h-9 w-9 border-2 border-primary cursor-pointer" onClick={() => navigate("/profile")}>
+            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
             <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
               {getInitials(profile?.full_name ?? null)}
             </AvatarFallback>
