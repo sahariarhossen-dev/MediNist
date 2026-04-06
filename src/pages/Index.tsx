@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Bell, TrendingUp, FileText, Users, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -108,8 +108,9 @@ const Index = () => {
             <Bell size={22} className="text-gray-600" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
-          <Avatar className="h-9 w-9" onClick={signOut} title="Sign out">
-            <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold cursor-pointer">{initials}</AvatarFallback>
+          <Avatar className="h-9 w-9 cursor-pointer" onClick={() => navigate("/profile")}>
+            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
+            <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold">{initials}</AvatarFallback>
           </Avatar>
         </div>
       </div>

@@ -17,6 +17,7 @@ import AddCompany from "./pages/AddCompany.tsx";
 import CreateSale from "./pages/CreateSale.tsx";
 import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
+import Profile from "./pages/Profile.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/create-sale" element={<ProtectedRoute><CreateSale /></ProtectedRoute>} />
             <Route path="/invoice/:saleId" element={<ProtectedRoute><Invoice /></ProtectedRoute>} />
             <Route path="/short-items" element={<ProtectedRoute><ShortItems /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="*" element={<NotFound />} />

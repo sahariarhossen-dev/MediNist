@@ -1,11 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Package, User, Settings, LogOut, ChevronRight, Bell } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const menuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory" },
-  { label: "Profile", icon: User, path: null },
+  { label: "Profile", icon: User, path: "/profile" },
   { label: "Settings", icon: Settings, path: null },
 ];
 
@@ -33,7 +33,8 @@ const More = () => {
           <button className="relative p-2 rounded-full bg-muted">
             <Bell size={18} className="text-foreground" />
           </button>
-          <Avatar className="h-9 w-9 border-2 border-primary">
+          <Avatar className="h-9 w-9 border-2 border-primary cursor-pointer" onClick={() => navigate("/profile")}>
+            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
             <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
               {getInitials(profile?.full_name ?? null)}
             </AvatarFallback>
@@ -45,6 +46,7 @@ const More = () => {
       <div className="px-5 pt-4 pb-2">
         <div className="bg-muted rounded-2xl p-4 flex items-center gap-4">
           <Avatar className="h-14 w-14 border-2 border-primary">
+            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
             <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">
               {getInitials(profile?.full_name ?? null)}
             </AvatarFallback>

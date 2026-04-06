@@ -129,6 +129,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           full_name: string | null
           id: string
           pharmacy_id: string | null
@@ -137,6 +138,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          avatar_url?: string | null
           full_name?: string | null
           id: string
           pharmacy_id?: string | null
@@ -145,6 +147,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          avatar_url?: string | null
           full_name?: string | null
           id?: string
           pharmacy_id?: string | null
