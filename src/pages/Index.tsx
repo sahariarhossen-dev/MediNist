@@ -14,23 +14,6 @@ import {
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
 
-const salesData = [
-  { time: "10AM", value: 800 },
-  { time: "11AM", value: 1800 },
-  { time: "12PM", value: 3200 },
-  { time: "1PM", value: 2600 },
-  { time: "2PM", value: 1900 },
-  { time: "3PM", value: 1400 },
-  { time: "4PM", value: 1100 },
-  { time: "5PM", value: 900 },
-  { time: "6PM", value: 700 },
-  { time: "7PM", value: 500 },
-  { time: "8PM", value: 400 },
-  { time: "9PM", value: 300 },
-  { time: "10PM", value: 200 },
-  { time: "11PM", value: 150 },
-  { time: "12AM", value: 100 },
-];
 
 function getStartDate(range: string): string {
   const now = new Date();
