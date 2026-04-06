@@ -280,7 +280,7 @@ const CreateSale = () => {
           <button onClick={() => navigate("/sales")} className="p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 transition">
             <ArrowLeft className="w-5 h-5 text-gray-700" />
           </button>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 text-secondary">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="15" cy="4" r="2" />
@@ -291,7 +291,7 @@ const CreateSale = () => {
             </div>
             <div>
               <p className="text-base font-bold text-gray-900 leading-tight">{profile?.full_name || "Staff"}</p>
-              <p className="text-[11px] text-gray-400 leading-tight">By {pharmacyName || "Pharmacy"}</p>
+              <p className="text-[11px] leading-tight text-muted">By {pharmacyName || "Pharmacy"}</p>
             </div>
           </div>
         </div>
@@ -361,12 +361,12 @@ const CreateSale = () => {
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    {med.company_name && <span className="text-[10px] text-gray-400">{med.company_name}</span>}
+                    {med.company_name && <span className="text-[10px] text-secondary">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] text-gray-400 font-mono">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+                    <span className="text-[10px] font-mono font-bold text-primary">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
-                <p className="text-xs font-semibold text-emerald-600">৳{med.price ?? 0}</p>
+                <p className="text-xs font-semibold text-lime-900">৳{med.price ?? 0}</p>
               </button>
             ))}
           </div>
@@ -404,7 +404,7 @@ const CreateSale = () => {
                         )}
                       </p>
                       {item.medicine.company_name && (
-                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.medicine.company_name}</span>
+                        <span className="text-[10px] text-secondary flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
                     <div className="gap-2 mt-2 flex items-center justify-start">
@@ -414,8 +414,8 @@ const CreateSale = () => {
                       >
                         <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
                       </button>
-                      <span className="text-[10px] text-gray-400 font-mono">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
-                      <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
+                      <span className="text-[10px] font-mono font-bold text-primary">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                      <span className="text-[10px] text-secondary">MRP {unitPrice}</span>
                       <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold my-0 mx-[10px] px-[6px] py-[2px]">
                         {item.quantity}×{unitPrice}={lineTotal}৳
                       </span>
@@ -459,11 +459,11 @@ const CreateSale = () => {
                         <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
                       )}
                     </p>
-                    <span className="text-[10px] text-gray-400">{item.quantity}×{unitPrice}</span>
+                    <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
                     <span className="text-xs font-bold text-emerald-600">{lineTotal} ৳</span>
                   </div>
                   {item.medicine.company_name && (
-                    <p className="text-[10px] text-gray-400 ml-6 mt-0.5">{item.medicine.company_name}</p>
+                    <p className="text-[10px] text-secondary ml-6 mt-0.5">{item.medicine.company_name}</p>
                   )}
                 </div>
               );
