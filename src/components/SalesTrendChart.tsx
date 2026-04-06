@@ -243,7 +243,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
           </div>
         </div>
 
-        <div className="h-1.5 bg-amber-400 rounded-full mt-2" />
+        
       </Card>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
