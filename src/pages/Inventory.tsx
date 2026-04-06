@@ -207,7 +207,7 @@ const Inventory = () => {
       <div className="px-5 pt-6 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate("/")}
             className="p-2 rounded-full bg-primary text-primary-foreground"
           >
             <ArrowLeft size={18} />
