@@ -147,42 +147,8 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Hourly Sales Trend */}
-      <div className="px-5 pt-3 pb-6">
-        <Card className="border-0 shadow-sm rounded-xl bg-white p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1">Hourly Sales Trend</h2>
-          <p className="text-[11px] text-gray-400 mb-4">(8AM-12AM)</p>
-          <div className="h-48 -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData}>
-                <defs>
-                  <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
-                <XAxis
-                  dataKey="time"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: "#9CA3AF" }}
-                  interval={2}
-                />
-                <YAxis hide />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#3B82F6"
-                  strokeWidth={2.5}
-                  fill="url(#blueGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="h-1.5 bg-amber-400 rounded-full mt-2" />
-        </Card>
-      </div>
+      {/* Sales Trend Chart */}
+      <SalesTrendChart pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />
     </div>
   );
 };
