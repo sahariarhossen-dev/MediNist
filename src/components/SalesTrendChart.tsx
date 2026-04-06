@@ -190,32 +190,10 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       .gte("created_at", startDate.toISOString())
       .lt("created_at", endDate.toISOString());
 
-    const saleIds = (periodSales ?? []).map((s) => s.id);
-    let topItems: { name: string; total: number }[] = [];
-
-    if (saleIds.length > 0) {
-      const { data: items } = await supabase
-        .from("sale_items")
-        .select("medicine_name, total_price")
-        .in("sale_id", saleIds);
-
-      if (items) {
-        const itemMap: Record<string, number> = {};
-        items.forEach((i) => {
-          itemMap[i.medicine_name] = (itemMap[i.medicine_name] || 0) + Number(i.total_price);
-        });
-        topItems = Object.entries(itemMap)
-          .map(([name, total]) => ({ name, total }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 5);
-      }
-    }
-
     setModalData({
       label: point.label,
       amount: point.amount,
       invoices: point.invoices,
-      topItems,
     });
     setLoadingModal(false);
   };
