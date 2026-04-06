@@ -361,7 +361,7 @@ const CreateSale = () => {
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    {med.company_name && <span className="text-[10px] text-secondary">{med.company_name}</span>}
+                    {med.company_name && <span className="text-[10px] text-secondary-foreground">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
                     <span className="text-[10px] font-mono font-bold text-primary">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
