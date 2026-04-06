@@ -1,43 +1,44 @@
 
 
-## Plan: Replace 2-Step Verification with Security & Password Card
+## Plan: Add Forgot Password Flow
 
 ### Overview
-Replace the existing Security card (lines 243-260) with a password update form featuring show/hide toggles, a real-time strength meter, and Supabase Auth password update integration.
+Add a "Forgot Password?" link to the login page, create a `/forgot-password` page to send reset emails, and create a `/reset-password` page that handles the recovery redirect and lets users set a new password.
 
-### Changes — `src/pages/Profile.tsx`
+### Changes
 
-**1. New state variables**
-- `currentPassword`, `newPassword` (strings)
-- `showCurrentPassword`, `showNewPassword` (booleans for eye toggle)
-- `updatingPassword` (loading state)
+**1. `src/pages/Login.tsx` — Add "Forgot Password?" link**
+- Between the password field and the Sign In button, add:
+  ```
+  <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-blue-600 hover:underline">
+    Forgot Password?
+  </Link>
+  ```
+- Right-align it with `text-right` on its wrapper div.
 
-**2. Password strength helper function**
-- Returns `{ label, color, percent }` based on `newPassword`:
-  - **Weak** (red, 33%): < 6 chars or only letters/numbers
-  - **Normal** (yellow, 66%): 8+ chars with mix of letters and numbers
-  - **Strong** (green, 100%): 10+ chars with uppercase, lowercase, numbers, and special chars
+**2. Create `src/pages/ForgotPassword.tsx`**
+- Same visual style as Login (centered card, `bg-[#F4F6FB]`, rounded-xl white card).
+- Email input + "Send Reset Link" button.
+- Calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`.
+- On success, shows a green success message: "A password reset link has been sent to your email. Please check your inbox."
+- Back link to `/login`.
 
-**3. Replace Security card (lines 243-260)**
-- Title: "Security"
-- Two input fields with `Eye`/`EyeOff` toggle buttons:
-  - "Current Password" — type toggles between `password`/`text`
-  - "New Password" — same toggle
-- Below New Password: strength label text (colored) + a small `Progress`-style bar that changes color (red → yellow → green)
-- "Update Password" button — disabled unless strength is Normal or Strong
-- On click: call `supabase.auth.updateUser({ password: newPassword })`, show success toast, clear fields
+**3. Create `src/pages/ResetPassword.tsx`**
+- Public route that handles the `type=recovery` hash from Supabase's email link.
+- On mount, listens for `PASSWORD_RECOVERY` event via `supabase.auth.onAuthStateChange`.
+- Shows New Password input with Eye toggle and the same password strength meter from Profile.
+- "Update Password" button calls `supabase.auth.updateUser({ password })`.
+- On success, shows toast and redirects to `/` (dashboard).
 
-**4. Import updates**
-- Add `Eye`, `EyeOff` from lucide-react
-- Remove `Switch` import (no longer used)
-- Remove `ShieldCheck` import
-- Remove `twoFactor` state
-- Import `Progress` from `@/components/ui/progress`
-
-**5. Styling**
-- Same `rounded-2xl bg-card border-0 shadow-sm p-5` card style
-- Strength bar uses a thin progress bar with dynamic className for color
+**4. `src/App.tsx` — Add routes**
+- Import `ForgotPassword` and `ResetPassword`.
+- Add two public routes:
+  - `/forgot-password` → `<PublicRoute><ForgotPassword /></PublicRoute>`
+  - `/reset-password` → `<ResetPassword />` (NOT wrapped in PublicRoute since user gets auto-logged in by recovery token)
 
 ### Files Modified
-- `src/pages/Profile.tsx` — replace security section, add password logic
+- `src/pages/Login.tsx`
+- `src/pages/ForgotPassword.tsx` (new)
+- `src/pages/ResetPassword.tsx` (new)
+- `src/App.tsx`
 
