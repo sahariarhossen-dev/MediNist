@@ -256,35 +256,15 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
           {loadingModal ? (
             <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
           ) : modalData ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Total Sales</p>
-                  <p className="text-lg font-bold text-foreground">৳{modalData.amount.toLocaleString()}</p>
-                </div>
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Invoices</p>
-                  <p className="text-lg font-bold text-foreground">{modalData.invoices}</p>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-muted rounded-xl p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Total Sales</p>
+                <p className="text-lg font-bold text-foreground">৳{modalData.amount.toLocaleString()}</p>
               </div>
-
-              {modalData.topItems.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-foreground mb-2">Top Selling Items</p>
-                  <div className="space-y-1.5">
-                    {modalData.topItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground truncate mr-2">{item.name}</span>
-                        <span className="font-semibold text-foreground whitespace-nowrap">৳{item.total.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {modalData.topItems.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center">No item data for this period.</p>
-              )}
+              <div className="bg-muted rounded-xl p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Invoices</p>
+                <p className="text-lg font-bold text-foreground">{modalData.invoices}</p>
+              </div>
             </div>
           ) : null}
         </DialogContent>
