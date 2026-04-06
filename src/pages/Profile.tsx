@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Pencil, LogOut, ShieldCheck, X, Check } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,7 +47,43 @@ const Profile = () => {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [saving, setSaving] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
+  const getPasswordStrength = (pw: string) => {
+    if (!pw) return { label: "", color: "", percent: 0 };
+    const hasUpper = /[A-Z]/.test(pw);
+    const hasLower = /[a-z]/.test(pw);
+    const hasNumber = /[0-9]/.test(pw);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pw);
+    if (pw.length >= 10 && hasUpper && hasLower && hasNumber && hasSpecial)
+      return { label: "Strong", color: "text-green-500", barColor: "bg-green-500", percent: 100 };
+    if (pw.length >= 8 && ((hasLower || hasUpper) && hasNumber))
+      return { label: "Normal", color: "text-yellow-500", barColor: "bg-yellow-500", percent: 66 };
+    return { label: "Weak", color: "text-red-500", barColor: "bg-red-500", percent: 33 };
+  };
+
+  const strength = getPasswordStrength(newPassword);
+  const canUpdatePassword = strength.label === "Normal" || strength.label === "Strong";
+
+  const handleUpdatePassword = async () => {
+    if (!canUpdatePassword) return;
+    setUpdatingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast({ title: "Password updated successfully!" });
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -240,21 +276,70 @@ const Profile = () => {
         </Card>
       </div>
 
-      {/* Security */}
+      {/* Security & Password */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Security</h2>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <ShieldCheck size={20} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">2-Step Verification</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">Protect your account with an extra layer of security.</p>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Security</h2>
+          <div className="space-y-3">
+            {/* Current Password */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
+              <div className="relative">
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="h-9 text-sm pr-9"
+                  placeholder="Enter current password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
-            <Switch checked={twoFactor} onCheckedChange={setTwoFactor} />
+            {/* New Password */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="h-9 text-sm pr-9"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {newPassword && (
+                <div className="mt-2 space-y-1">
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${strength.barColor}`}
+                      style={{ width: `${strength.percent}%` }}
+                    />
+                  </div>
+                  <p className={`text-[11px] font-medium ${strength.color}`}>{strength.label}</p>
+                </div>
+              )}
+            </div>
+            {/* Update Button */}
+            <button
+              onClick={handleUpdatePassword}
+              disabled={!canUpdatePassword || updatingPassword}
+              className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 transition-opacity"
+            >
+              {updatingPassword ? "Updating..." : "Update Password"}
+            </button>
           </div>
         </Card>
       </div>
