@@ -104,6 +104,18 @@ All colors MUST be HSL.
   }
 }
 
+/* Custom scrollbar for chart */
+.chart-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+.chart-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chart-scroll-container::-webkit-scrollbar-thumb {
+  background: #F59E0B;
+  border-radius: 9999px;
+}
+
 @media print {
   .no-print {
     display: none !important;
