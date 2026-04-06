@@ -252,14 +252,22 @@ const AddProduct = () => {
             <AlertTriangle size={14} className="text-destructive" />
             Stock Alert Level
           </Label>
+          {isTabletOrCapsule && (
+            <p className="text-xs text-gray-500">Enter the minimum number of Pieces (e.g., 30) to get a low stock alert.</p>
+          )}
+          {isLiquidOrCream && (
+            <p className="text-xs text-gray-500">Enter the minimum number of Files/Units (e.g., 5) to get a low stock alert.</p>
+          )}
+          {!isTabletOrCapsule && !isLiquidOrCream && (
+            <p className="text-xs text-gray-500">Select a product type first, then set the alert level.</p>
+          )}
           <Input
             type="number"
-            placeholder="e.g. 10"
+            placeholder={isTabletOrCapsule ? "Enter minimum pieces" : isLiquidOrCream ? "Enter minimum files" : "e.g. 10"}
             value={stockAlert}
             onChange={(e) => setStockAlert(e.target.value)}
             className="rounded-xl bg-muted border-0 h-12"
           />
-          <p className="text-xs text-muted-foreground">Get warned when stock falls below this number</p>
         </div>
 
         {/* MRP */}
