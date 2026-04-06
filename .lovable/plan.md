@@ -1,44 +1,32 @@
 
 
-## Plan: Redesign Sales Trend Chart on Dashboard
+## Plan: Clean Up Sales Summary Modal and Chart Scrollbar
 
 ### Overview
-Replace the static hardcoded chart in `src/pages/Index.tsx` with a fully interactive, data-driven sales trend chart. The chart dynamically switches between hourly (Today) and daily (7/15/30 days) views, fetches real sales data from Supabase, supports horizontal scrolling, custom tooltips, and a click-to-detail modal.
+Two UI cleanups: (1) Strip the modal down to just header + two stat cards, (2) remove the yellow bar and hide the scrollbar while keeping touch/drag scroll.
 
 ### Changes
 
-**1. Create `src/components/SalesTrendChart.tsx` — New Component**
+**1. `src/components/SalesTrendChart.tsx`**
 
-- **Props**: `pharmacyId`, `timeRange` (from existing state)
-- **Data fetching**: Query `sales` table filtered by pharmacy and date range. For "today", group by 2-hour slots (8AM, 10AM, 12PM, 2PM, 4PM, 6PM, 8PM, 10PM, 12AM). For multi-day ranges, group by date.
-- **Dynamic title**: "Today's Hourly Sales Trend" vs "Last 7 Days Sales Trend" etc.
-- **Chart**: Recharts `AreaChart` with blue gradient fill, smooth monotone curve, `CartesianGrid` (horizontal only), hidden Y-axis.
-- **Scroll container**: Wrap chart in a `div` with `overflow-x-auto` and a fixed inner width (wider than container) so it scrolls horizontally. Style the scrollbar with a custom CSS class — amber/yellow track using Tailwind + inline styles for webkit scrollbar.
-- **Tooltip (hover)**: Custom Recharts `<Tooltip content={...} />` component showing time/date + exact sales amount in a styled card.
-- **Click interaction**: `onClick` handler on chart data points. When clicked, set state to open a modal/dialog showing:
-  - The specific hour or date
-  - Total sales amount
-  - Number of invoices
-  - Data fetched on-demand from `sales` + `sale_items` tables
-- **Modal**: Use existing `Dialog` component from `src/components/ui/dialog.tsx`. Styled with rounded corners and clean layout.
-- **Container styling**: `rounded-3xl shadow-sm bg-white p-4`
+**Modal simplification (lines 282-311)**:
+- Remove the entire Top Selling Items section (lines 294-310) — the `topItems` list, the "No item data" fallback, and the outer `space-y-4` wrapper
+- Modal body becomes just the two-card grid (Total Sales + Invoices)
+- Remove `topItems` from `ModalData` interface and the fetching logic (lines 194-212) since it's no longer needed
 
-**2. Update `src/pages/Index.tsx`**
+**Remove yellow scroll bar (line 269)**:
+- Delete `<div className="h-1.5 bg-amber-400 rounded-full mt-2" />`
 
-- Remove the static `salesData` array and inline chart JSX (lines 24-40, 174-209)
-- Import and render `<SalesTrendChart pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />`
-- The existing `timeRange` state and `Select` dropdown already exist and will drive the chart
+**Hide scrollbar on chart container (line 235)**:
+- Add `scrollbar-hide` class (or inline style) to the scroll container to visually hide the scrollbar while keeping `overflow-x: auto` functional
 
-### Technical Details
-
-- **Hourly grouping (Today)**: Fetch all completed sales for today, group client-side into 2-hour buckets by `created_at` hour
-- **Daily grouping (7/15/30 days)**: Group by date string `format(date, "MMM d")`
-- **Scroll width calculation**: For "today" mode, 9 data points at ~60px each = ~540px min-width. For 30 days, 30 points at ~50px = ~1500px min-width.
-- **Custom scrollbar CSS**: Add a utility class in `src/index.css` for styled webkit scrollbar (amber/yellow thumb, transparent track)
-- **Click modal data**: On point click, query `sales` filtered to that specific hour/date to get invoice count and total
+**2. `src/index.css`** — Add scrollbar-hide utility if not already present:
+```css
+.chart-scroll-container::-webkit-scrollbar { display: none; }
+.chart-scroll-container { -ms-overflow-style: none; scrollbar-width: none; }
+```
 
 ### Files Changed
-1. `src/components/SalesTrendChart.tsx` — NEW
-2. `src/pages/Index.tsx` — replace inline chart with component
-3. `src/index.css` — add custom scrollbar utility class
+1. `src/components/SalesTrendChart.tsx` — remove top items section from modal, remove yellow bar, hide scrollbar
+2. `src/index.css` — add scrollbar-hide styles for chart container
 
