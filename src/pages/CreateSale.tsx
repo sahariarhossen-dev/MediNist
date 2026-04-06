@@ -363,7 +363,7 @@ const CreateSale = () => {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {med.company_name && <span className="text-[10px] text-gray-400">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] text-gray-400">STK: {med.stock_quantity ?? 0}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-xs font-semibold text-emerald-600">৳{med.price ?? 0}</p>
