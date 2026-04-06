@@ -70,6 +70,12 @@ const Login = () => {
               </div>
             </div>
 
+            <div className="text-right">
+              <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-blue-600 hover:underline">
+                Forgot Password?
+              </Link>
+            </div>
+
             {error && (
               <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{error}</p>
             )}
