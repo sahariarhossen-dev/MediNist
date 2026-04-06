@@ -34,7 +34,6 @@ interface ModalData {
   label: string;
   amount: number;
   invoices: number;
-  topItems: { name: string; total: number }[];
 }
 
 const HOURLY_SLOTS = [
