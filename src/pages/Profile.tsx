@@ -47,7 +47,43 @@ const Profile = () => {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [saving, setSaving] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
+  const getPasswordStrength = (pw: string) => {
+    if (!pw) return { label: "", color: "", percent: 0 };
+    const hasUpper = /[A-Z]/.test(pw);
+    const hasLower = /[a-z]/.test(pw);
+    const hasNumber = /[0-9]/.test(pw);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pw);
+    if (pw.length >= 10 && hasUpper && hasLower && hasNumber && hasSpecial)
+      return { label: "Strong", color: "text-green-500", barColor: "bg-green-500", percent: 100 };
+    if (pw.length >= 8 && ((hasLower || hasUpper) && hasNumber))
+      return { label: "Normal", color: "text-yellow-500", barColor: "bg-yellow-500", percent: 66 };
+    return { label: "Weak", color: "text-red-500", barColor: "bg-red-500", percent: 33 };
+  };
+
+  const strength = getPasswordStrength(newPassword);
+  const canUpdatePassword = strength.label === "Normal" || strength.label === "Strong";
+
+  const handleUpdatePassword = async () => {
+    if (!canUpdatePassword) return;
+    setUpdatingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast({ title: "Password updated successfully!" });
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
