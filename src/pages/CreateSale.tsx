@@ -416,7 +416,7 @@ const CreateSale = () => {
                       </button>
                       <span className="text-[10px] text-gray-400 font-mono">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
-                      <span className="text-xs font-bold text-emerald-600 bg-yellow-100 px-1.5 py-0.5 rounded">
+                      <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold px-0 my-0 py-0 mx-[10px]">
                         {item.quantity}×{unitPrice}={lineTotal}৳
                       </span>
                       <div className="ml-auto flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
