@@ -35,7 +35,7 @@ const ShortItems = () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert")
+        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -49,6 +49,8 @@ const ShortItems = () => {
           product_type: m.product_type,
           company_name: m.company_name,
           stock_quantity: m.stock_quantity ?? 0,
+          strip_per_pack: m.strip_per_pack,
+          pcs_per_strip: m.pcs_per_strip,
           price: m.price,
         }));
 
