@@ -281,10 +281,78 @@ const CreateSale = () => {
             <ArrowLeft className="w-5 h-5 text-gray-700" />
           </button>
           <div className="flex items-center gap-2.5 text-secondary">
-...
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="15" cy="4" r="2" />
+                <path d="M9 21l3-9 4 1" />
+                <path d="M12 12l-4-3-3 9" />
+                <path d="M6 6l6 3" />
+              </svg>
+            </div>
+            <div>
               <p className="text-base font-bold text-gray-900 leading-tight">{profile?.full_name || "Staff"}</p>
               <p className="text-[11px] leading-tight text-muted">By {pharmacyName || "Pharmacy"}</p>
-...
+            </div>
+          </div>
+        </div>
+
+        <div className="relative">
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="px-4 py-1.5 rounded-full border border-emerald-200 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition shadow-sm"
+          >
+            {saleType === "retail" ? "Retail" : "Wholesale"}
+          </button>
+          {showDropdown && (
+            <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              {(["retail", "wholesale"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { setSaleType(t); setShowDropdown(false); }}
+                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition ${saleType === t ? "bg-emerald-600 text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                >
+                  {t === "retail" ? "Retail" : "Wholesale"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-4 pt-4 pb-2 bg-white">
+        <div className="relative flex items-center border-2 border-gray-800 rounded-xl overflow-hidden">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search medicine..."
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+              className="px-2 py-1"
+            >
+              <X className="w-4 h-4 text-gray-400 hover:text-gray-700 transition" />
+            </button>
+          )}
+          <div className="px-3 border-l-2 border-gray-800 py-2.5">
+            <Search className="w-5 h-5 text-gray-700" />
+          </div>
+        </div>
+
+        {searchResults.length > 0 && (
+          <div className="mt-2 border border-gray-200 rounded-xl shadow-lg bg-white overflow-hidden">
+            {searchResults.map((med) => (
+              <button
+                key={med.id}
+                onClick={() => addToCart(med)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition border-b border-gray-100 last:border-0"
+              >
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <Pill className="w-4 h-4 text-emerald-500" />
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900">
                     {med.name}
