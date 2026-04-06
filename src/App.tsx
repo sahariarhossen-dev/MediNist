@@ -18,6 +18,8 @@ import CreateSale from "./pages/CreateSale.tsx";
 import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
 import Profile from "./pages/Profile.tsx";
+import ForgotPassword from "./pages/ForgotPassword.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -57,6 +59,8 @@ const App = () => (
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+            <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
