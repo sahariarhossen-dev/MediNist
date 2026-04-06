@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,6 +52,7 @@ const Profile = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   const getPasswordStrength = (pw: string) => {
     if (!pw) return { label: "", color: "", percent: 0 };
@@ -278,68 +279,84 @@ const Profile = () => {
 
       {/* Security & Password */}
       <div className="px-5 pb-4">
-        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Security</h2>
-          <div className="space-y-3">
-            {/* Current Password */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
-              <div className="relative">
-                <Input
-                  type={showCurrentPassword ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="h-9 text-sm pr-9"
-                  placeholder="Enter current password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                >
-                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+        <Card className="border-0 shadow-sm rounded-2xl bg-card overflow-hidden">
+          <button
+            onClick={() => setSecurityOpen(!securityOpen)}
+            className="w-full flex items-center justify-between p-5 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Lock size={16} className="text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Change Your Password</span>
             </div>
-            {/* New Password */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
-              <div className="relative">
-                <Input
-                  type={showNewPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="h-9 text-sm pr-9"
-                  placeholder="Enter new password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                >
-                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {newPassword && (
-                <div className="mt-2 space-y-1">
-                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${strength.barColor}`}
-                      style={{ width: `${strength.percent}%` }}
-                    />
-                  </div>
-                  <p className={`text-[11px] font-medium ${strength.color}`}>{strength.label}</p>
+            <ChevronDown
+              size={16}
+              className={`text-muted-foreground transition-transform duration-300 ${securityOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${securityOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"}`}
+          >
+            <div className="px-5 pb-5 space-y-3">
+              {/* Current Password */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
+                <div className="relative">
+                  <Input
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="h-9 text-sm pr-9"
+                    placeholder="Enter current password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
-              )}
+              </div>
+              {/* New Password */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-9 text-sm pr-9"
+                    placeholder="Enter new password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {newPassword && (
+                  <div className="mt-2 space-y-1">
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${strength.barColor}`}
+                        style={{ width: `${strength.percent}%` }}
+                      />
+                    </div>
+                    <p className={`text-[11px] font-medium ${strength.color}`}>{strength.label}</p>
+                  </div>
+                )}
+              </div>
+              {/* Update Button */}
+              <button
+                onClick={handleUpdatePassword}
+                disabled={!canUpdatePassword || updatingPassword}
+                className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 transition-opacity"
+              >
+                {updatingPassword ? "Updating..." : "Update Password"}
+              </button>
             </div>
-            {/* Update Button */}
-            <button
-              onClick={handleUpdatePassword}
-              disabled={!canUpdatePassword || updatingPassword}
-              className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 transition-opacity"
-            >
-              {updatingPassword ? "Updating..." : "Update Password"}
-            </button>
           </div>
         </Card>
       </div>
