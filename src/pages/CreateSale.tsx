@@ -4,6 +4,7 @@ import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { totalPiecesToTriUnit } from "@/lib/stockUtils";
 
 interface Medicine {
   id: string;
@@ -12,6 +13,7 @@ interface Medicine {
   price: number | null;
   stock_quantity: number | null;
   pcs_per_strip: number | null;
+  strip_per_pack: number | null;
   product_type: string | null;
 }
 

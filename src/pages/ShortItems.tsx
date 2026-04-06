@@ -3,6 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { totalPiecesToTriUnit } from "@/lib/stockUtils";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,8 @@ interface LowStockItem {
   product_type: string | null;
   company_name: string | null;
   stock_quantity: number;
+  strip_per_pack: number | null;
+  pcs_per_strip: number | null;
   price: number | null;
 }
 
