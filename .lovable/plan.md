@@ -1,58 +1,46 @@
 
 
-## Plan: Tri-Unit Inventory Logic (Box : Strip : Pcs)
+## Plan: Long Press Context Menu for Inventory Cards
 
 ### Overview
-Implement a universal `Box : Strip : Pcs` display format across the app. Store stock as total pieces internally. Create a shared conversion utility and update Inventory, CreateSale, ShortItems, and Index pages.
+Add a long-press (1.5s) interaction on medicine cards that triggers a centered action popup with Edit and Delete options. Edit navigates to AddProduct pre-filled with product data. Delete shows a confirmation dialog before removing from the database.
 
-### 1. Create shared utility: `src/lib/stockUtils.ts`
+### Changes
 
-Global conversion function:
-```
-totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip) → "B : S : P"
-  boxes = floor(totalPcs / (stripPerPack * pcsPerStrip))
-  remainder = totalPcs % (stripPerPack * pcsPerStrip)
-  strips = floor(remainder / pcsPerStrip)
-  pcs = remainder % pcsPerStrip
-  return `${boxes} : ${strips} : ${pcs}`
-```
-Also: `boxesToPieces(boxes, stripPerPack, pcsPerStrip) → totalPcs` for adding inventory.
+**1. Update `src/pages/Inventory.tsx`**
 
-### 2. Update `src/pages/Inventory.tsx`
+- **Long press state**: Add `longPressId` (the medicine being actioned), `pressTimer` ref, and `pressing` state for visual feedback.
+- **Touch/mouse handlers**: `onTouchStart`/`onMouseDown` starts a 1.5s timer setting `longPressId`. `onTouchEnd`/`onMouseUp`/`onTouchMove` clears the timer. While holding, set `pressing` to the card ID for the `scale-95` visual effect.
+- **Prevent click conflicts**: If long press fires, prevent the normal card click from also triggering.
+- **Action overlay**: When `longPressId` is set, render a fixed full-screen overlay with `backdrop-blur-sm bg-black/40`. Centered popup (`rounded-2xl bg-background shadow-2xl`) shows:
+  - Medicine name as title
+  - **Edit Product** button with `Pencil` icon → navigates to `/add-product` with full medicine data in `location.state`
+  - **Delete Product** button with `Trash2` icon in red
+  - Close/cancel option
+- **Delete confirmation**: Add `deleteConfirmId` state. Clicking Delete swaps the popup content to a confirmation: "Are you sure you want to delete [Name]?" with Cancel and Confirm (red) buttons.
+- **Delete logic**: On confirm, call `supabase.from("medicines").delete().eq("id", id)`, remove from local state, show toast.
+- **Card className**: Add `transition-transform duration-150` and conditionally apply `scale-95` when `pressing === med.id`.
 
-- Import `totalPiecesToTriUnit` and `boxesToPieces`
-- **Collapsed cards**: Replace price display with tri-unit stock: `1 : 2 : 5` using high-contrast font
-- **Expanded card Row 2**: Show `৳ {price}`, `pre-stock: {B:S:P}`, `Current stock: {B:S:P}` — all using tri-unit format
-- **Calculation**: When user inputs N boxes, `calculatedStock = stock_quantity + boxesToPieces(N, strip_per_pack, pcs_per_strip)`. Display result as tri-unit string
-- **Save**: Store the new total pieces value in `stock_quantity`
+**2. Update `src/pages/AddProduct.tsx`**
 
-### 3. Update `src/pages/CreateSale.tsx`
+- Support **edit mode**: Check `location.state` for an `editId` field.
+- If `editId` exists, change header to "Edit Product", pre-fill all fields from state data.
+- Change save handler: if `editId`, use `.update()` instead of `.insert()` on the medicines table.
+- Keep all existing field logic and tri-unit stock format intact.
 
-- Import `totalPiecesToTriUnit`
-- Search results: Replace `STK: {number}` with `STK: {B:S:P}`
-- Cart expanded items: Replace `STK {number}` with tri-unit format
-- Stock deduction on complete: Already subtracts quantity (pieces) — no logic change needed, just display update
-- Fetch `strip_per_pack` in the medicine select query (add to interface)
+**3. Update `src/App.tsx`**
 
-### 4. Update `src/pages/ShortItems.tsx`
+- No route changes needed — AddProduct already exists at `/add-product` and accepts `location.state`.
 
-- Import `totalPiecesToTriUnit`
-- Fetch `strip_per_pack` and `pcs_per_strip` in the query
-- STK column: Display `B : S : P` instead of raw number
-- Update interface to include the new fields
+### Technical Details
 
-### 5. Update `src/pages/Index.tsx` (Dashboard)
-
-- No direct stock display currently — the "Short Items" card shows a count. No changes needed here unless we add stock details later.
-
-### Styling
-- Tri-unit numbers: `font-mono font-bold text-foreground` for high contrast
-- Colon separator: `text-muted-foreground mx-0.5` for clear visual separation
-- Consistent across all pages
+- Long press uses `setTimeout` with 1500ms, cleared on pointer up or move (>10px threshold to avoid scroll conflicts)
+- Overlay uses `fixed inset-0 z-50` with `animate-in fade-in duration-200`
+- Popup uses `animate-in zoom-in-95 duration-200` for smooth entry
+- Delete uses `.delete().eq("id", med.id)` — RLS policy already covers pharmacy scoping
+- Edit navigation passes: `{ editId, name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity: stock_quantity, stockAlert: stock_alert, mrp: price }`
 
 ### Files Changed
-1. `src/lib/stockUtils.ts` — NEW (conversion functions)
-2. `src/pages/Inventory.tsx` — tri-unit display + calculation
-3. `src/pages/CreateSale.tsx` — tri-unit stock display
-4. `src/pages/ShortItems.tsx` — tri-unit STK column
+1. `src/pages/Inventory.tsx` — long press handlers, overlay/popup, delete flow
+2. `src/pages/AddProduct.tsx` — edit mode support with pre-filled data and update logic
 
