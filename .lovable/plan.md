@@ -1,46 +1,26 @@
 
 
-## Plan: Long Press Context Menu for Inventory Cards
+## Plan: Dynamic Stock Alert Level with Context-Aware Labels
 
 ### Overview
-Add a long-press (1.5s) interaction on medicine cards that triggers a centered action popup with Edit and Delete options. Edit navigates to AddProduct pre-filled with product data. Delete shows a confirmation dialog before removing from the database.
+Update the Stock Alert Level section in AddProduct to show dynamic help text and placeholder based on product type. Verify Short Items page correctly uses the alert threshold.
 
 ### Changes
 
-**1. Update `src/pages/Inventory.tsx`**
+**1. Update `src/pages/AddProduct.tsx` — Stock Alert section (lines 249-263)**
 
-- **Long press state**: Add `longPressId` (the medicine being actioned), `pressTimer` ref, and `pressing` state for visual feedback.
-- **Touch/mouse handlers**: `onTouchStart`/`onMouseDown` starts a 1.5s timer setting `longPressId`. `onTouchEnd`/`onMouseUp`/`onTouchMove` clears the timer. While holding, set `pressing` to the card ID for the `scale-95` visual effect.
-- **Prevent click conflicts**: If long press fires, prevent the normal card click from also triggering.
-- **Action overlay**: When `longPressId` is set, render a fixed full-screen overlay with `backdrop-blur-sm bg-black/40`. Centered popup (`rounded-2xl bg-background shadow-2xl`) shows:
-  - Medicine name as title
-  - **Edit Product** button with `Pencil` icon → navigates to `/add-product` with full medicine data in `location.state`
-  - **Delete Product** button with `Trash2` icon in red
-  - Close/cancel option
-- **Delete confirmation**: Add `deleteConfirmId` state. Clicking Delete swaps the popup content to a confirmation: "Are you sure you want to delete [Name]?" with Cancel and Confirm (red) buttons.
-- **Delete logic**: On confirm, call `supabase.from("medicines").delete().eq("id", id)`, remove from local state, show toast.
-- **Card className**: Add `transition-transform duration-150` and conditionally apply `scale-95` when `pressing === med.id`.
+- Add dynamic help text below the label:
+  - Tablet/Capsule: *"Enter the minimum number of Pieces (e.g., 30) to get a low stock alert."*
+  - Syrup/Injection/Cream: *"Enter the minimum number of Files/Units (e.g., 5) to get a low stock alert."*
+  - No type selected: generic fallback text (current text)
+- Update placeholder dynamically: `"Enter minimum pieces"` vs `"Enter minimum files"`
+- Keep the `AlertTriangle` icon and existing styling
+- Help text styled with `text-xs text-gray-500`
 
-**2. Update `src/pages/AddProduct.tsx`**
+**2. Short Items integration — already correct**
 
-- Support **edit mode**: Check `location.state` for an `editId` field.
-- If `editId` exists, change header to "Edit Product", pre-fill all fields from state data.
-- Change save handler: if `editId`, use `.update()` instead of `.insert()` on the medicines table.
-- Keep all existing field logic and tri-unit stock format intact.
-
-**3. Update `src/App.tsx`**
-
-- No route changes needed — AddProduct already exists at `/add-product` and accepts `location.state`.
-
-### Technical Details
-
-- Long press uses `setTimeout` with 1500ms, cleared on pointer up or move (>10px threshold to avoid scroll conflicts)
-- Overlay uses `fixed inset-0 z-50` with `animate-in fade-in duration-200`
-- Popup uses `animate-in zoom-in-95 duration-200` for smooth entry
-- Delete uses `.delete().eq("id", med.id)` — RLS policy already covers pharmacy scoping
-- Edit navigation passes: `{ editId, name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity: stock_quantity, stockAlert: stock_alert, mrp: price }`
+The ShortItems page (line 43-44) already compares `stock_quantity` (total pieces) against `stock_alert` threshold and displays stock in tri-unit format. No changes needed there.
 
 ### Files Changed
-1. `src/pages/Inventory.tsx` — long press handlers, overlay/popup, delete flow
-2. `src/pages/AddProduct.tsx` — edit mode support with pre-filled data and update logic
+1. `src/pages/AddProduct.tsx` — dynamic labels/placeholder in Stock Alert section
 
