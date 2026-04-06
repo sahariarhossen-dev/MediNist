@@ -122,14 +122,14 @@ const CreateSale = () => {
       const q = searchQuery.trim();
       const baseQuery = supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
         .eq("pharmacy_id", profile.pharmacy_id!);
 
       const [startsRes, containsRes] = await Promise.all([
         baseQuery.ilike("name", `${q}%`).limit(10),
         supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
           .eq("pharmacy_id", profile.pharmacy_id!)
           .ilike("name", `%${q}%`)
           .limit(10),
