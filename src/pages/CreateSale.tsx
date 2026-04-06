@@ -407,7 +407,7 @@ const CreateSale = () => {
                         <span className="text-[10px] text-gray-400 flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="gap-2 mt-2 flex items-center justify-start">
                       <button
                         onClick={() => removeFromCart(item.medicine.id)}
                         className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
@@ -416,7 +416,7 @@ const CreateSale = () => {
                       </button>
                       <span className="text-[10px] text-gray-400 font-mono">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
-                      <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold px-0 my-0 py-0 mx-[10px]">
+                      <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold my-0 mx-[10px] px-[6px] py-[2px]">
                         {item.quantity}×{unitPrice}={lineTotal}৳
                       </span>
                       <div className="ml-auto flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
