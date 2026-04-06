@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const menuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory" },
-  { label: "Profile", icon: User, path: null },
+  { label: "Profile", icon: User, path: "/profile" },
   { label: "Settings", icon: Settings, path: null },
 ];
 
