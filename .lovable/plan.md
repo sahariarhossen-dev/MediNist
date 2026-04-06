@@ -1,32 +1,43 @@
 
 
-## Plan: Refine Profile Page and Move Logout
+## Plan: Replace 2-Step Verification with Security & Password Card
 
-### Changes
+### Overview
+Replace the existing Security card (lines 243-260) with a password update form featuring show/hide toggles, a real-time strength meter, and Supabase Auth password update integration.
 
-**1. Profile.tsx — Add edit functionality to User Identity card**
-- Add a Pencil (Edit) icon button in the top-right corner of the "User Identity" card header row (next to the title).
-- Clicking it toggles inline editing: fields (Full Name, Phone) become `<input>` elements. Member ID and Designation remain read-only.
-- Show Save/Cancel buttons when in edit mode. Save calls `supabase.from("profiles").update()` then `refreshProfile()`.
+### Changes — `src/pages/Profile.tsx`
 
-**2. Profile.tsx — Remove the 7-Day Sales chart**
-- Delete the entire "My Sales — Last 7 Days" card section (lines 230-257).
-- Remove the `recharts` imports, `MiniTooltip` component, `chartData` state, and `fetchMySales` logic since they are no longer needed.
-- Remove unused `date-fns` imports.
+**1. New state variables**
+- `currentPassword`, `newPassword` (strings)
+- `showCurrentPassword`, `showNewPassword` (booleans for eye toggle)
+- `updatingPassword` (loading state)
 
-**3. Profile.tsx — Add Security section**
-- Below "Monthly Target", add a new Card titled "Security".
-- Include a row with "2-Step Verification" label, subtext "Protect your account with an extra layer of security.", and a toggle `Switch` component (visual only / informational for now since Supabase MFA requires additional setup).
+**2. Password strength helper function**
+- Returns `{ label, color, percent }` based on `newPassword`:
+  - **Weak** (red, 33%): < 6 chars or only letters/numbers
+  - **Normal** (yellow, 66%): 8+ chars with mix of letters and numbers
+  - **Strong** (green, 100%): 10+ chars with uppercase, lowercase, numbers, and special chars
 
-**4. Profile.tsx — Add Log Out button**
-- At the bottom of the page, add a prominent logout button styled with `bg-destructive/10 text-destructive` and a `LogOut` icon.
-- On click, call `signOut()` from AuthContext and navigate to `/login`.
+**3. Replace Security card (lines 243-260)**
+- Title: "Security"
+- Two input fields with `Eye`/`EyeOff` toggle buttons:
+  - "Current Password" — type toggles between `password`/`text`
+  - "New Password" — same toggle
+- Below New Password: strength label text (colored) + a small `Progress`-style bar that changes color (red → yellow → green)
+- "Update Password" button — disabled unless strength is Normal or Strong
+- On click: call `supabase.auth.updateUser({ password: newPassword })`, show success toast, clear fields
 
-**5. More.tsx — Remove Logout option**
-- Delete the standalone Logout button (lines 78-87) and remove the `handleLogout` function.
-- Remove unused `LogOut` import.
+**4. Import updates**
+- Add `Eye`, `EyeOff` from lucide-react
+- Remove `Switch` import (no longer used)
+- Remove `ShieldCheck` import
+- Remove `twoFactor` state
+- Import `Progress` from `@/components/ui/progress`
+
+**5. Styling**
+- Same `rounded-2xl bg-card border-0 shadow-sm p-5` card style
+- Strength bar uses a thin progress bar with dynamic className for color
 
 ### Files Modified
-- `src/pages/Profile.tsx` — Edit icon, remove chart, add security section, add logout button
-- `src/pages/More.tsx` — Remove logout button
+- `src/pages/Profile.tsx` — replace security section, add password logic
 
