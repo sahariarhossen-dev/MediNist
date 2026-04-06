@@ -276,21 +276,70 @@ const Profile = () => {
         </Card>
       </div>
 
-      {/* Security */}
+      {/* Security & Password */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Security</h2>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <ShieldCheck size={20} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">2-Step Verification</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">Protect your account with an extra layer of security.</p>
+          <h2 className="text-sm font-semibold text-foreground mb-4">Security</h2>
+          <div className="space-y-3">
+            {/* Current Password */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
+              <div className="relative">
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="h-9 text-sm pr-9"
+                  placeholder="Enter current password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
-            <Switch checked={twoFactor} onCheckedChange={setTwoFactor} />
+            {/* New Password */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="h-9 text-sm pr-9"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {newPassword && (
+                <div className="mt-2 space-y-1">
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${strength.barColor}`}
+                      style={{ width: `${strength.percent}%` }}
+                    />
+                  </div>
+                  <p className={`text-[11px] font-medium ${strength.color}`}>{strength.label}</p>
+                </div>
+              )}
+            </div>
+            {/* Update Button */}
+            <button
+              onClick={handleUpdatePassword}
+              disabled={!canUpdatePassword || updatingPassword}
+              className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 transition-opacity"
+            >
+              {updatingPassword ? "Updating..." : "Update Password"}
+            </button>
           </div>
         </Card>
       </div>
