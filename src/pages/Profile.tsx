@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
