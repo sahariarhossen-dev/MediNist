@@ -46,6 +46,7 @@ const More = () => {
       <div className="px-5 pt-4 pb-2">
         <div className="bg-muted rounded-2xl p-4 flex items-center gap-4">
           <Avatar className="h-14 w-14 border-2 border-primary">
+            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
             <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">
               {getInitials(profile?.full_name ?? null)}
             </AvatarFallback>
