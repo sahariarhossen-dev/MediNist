@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Search, Bell, Pill, Plus, X, Check } from "lucide-react";
+import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ interface Medicine {
   strip_per_pack: number | null;
   pcs_per_strip: number | null;
   product_type: string | null;
+  product_size: string | null;
+  stock_alert: number | null;
 }
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null }) => {
@@ -41,6 +43,14 @@ const Inventory = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [unitInputs, setUnitInputs] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Long press state
+  const [pressingId, setPressingId] = useState<string | null>(null);
+  const [longPressId, setLongPressId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const fetchMedicines = async () => {
@@ -91,6 +101,10 @@ const Inventory = () => {
   };
 
   const handleCardClick = (id: string) => {
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      return;
+    }
     if (!searchOpen) return;
     setExpandedId((prev) => (prev === id ? null : id));
   };
@@ -124,6 +138,68 @@ const Inventory = () => {
     }
     setSavingId(null);
   };
+
+  // Long press handlers
+  const startPress = (id: string, clientX: number, clientY: number) => {
+    touchStartPos.current = { x: clientX, y: clientY };
+    longPressFiredRef.current = false;
+    setPressingId(id);
+    pressTimerRef.current = setTimeout(() => {
+      setPressingId(null);
+      setLongPressId(id);
+      setDeleteConfirmId(null);
+      longPressFiredRef.current = true;
+    }, 1500);
+  };
+
+  const cancelPress = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    setPressingId(null);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
+    const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
+    if (dx > 10 || dy > 10) cancelPress();
+  };
+
+  const handleEdit = (med: Medicine) => {
+    setLongPressId(null);
+    navigate("/add-product", {
+      state: {
+        editId: med.id,
+        name: med.name,
+        companyName: med.company_name || "",
+        productType: med.product_type || "",
+        stripPerPack: med.strip_per_pack?.toString() || "",
+        pcsPerStrip: med.pcs_per_strip?.toString() || "",
+        productSize: med.product_size || "",
+        totalQuantity: med.stock_quantity?.toString() || "",
+        stockAlert: med.stock_alert?.toString() || "",
+        mrp: med.price?.toString() || "",
+      },
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return;
+    const med = medicines.find((m) => m.id === deleteConfirmId);
+    const { error } = await supabase.from("medicines").delete().eq("id", deleteConfirmId);
+    if (error) {
+      toast.error("Failed to delete product");
+    } else {
+      toast.success(`${med?.name || "Product"} deleted`);
+      setMedicines((prev) => prev.filter((m) => m.id !== deleteConfirmId));
+    }
+    setDeleteConfirmId(null);
+    setLongPressId(null);
+  };
+
+  const longPressMed = longPressId ? medicines.find((m) => m.id === longPressId) : null;
 
   return (
     <div className="min-h-screen bg-background pb-6">
@@ -233,9 +309,15 @@ const Inventory = () => {
               <div
                 key={med.id}
                 onClick={() => handleCardClick(med.id)}
-                className={`bg-muted rounded-2xl transition-all duration-300 overflow-hidden ${
+                onTouchStart={(e) => startPress(med.id, e.touches[0].clientX, e.touches[0].clientY)}
+                onTouchEnd={cancelPress}
+                onTouchMove={handleTouchMove}
+                onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
+                onMouseUp={cancelPress}
+                onMouseLeave={cancelPress}
+                className={`bg-muted rounded-2xl transition-all duration-150 overflow-hidden select-none ${
                   searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
-                }`}
+                } ${pressingId === med.id ? "scale-95" : ""}`}
               >
                 {/* Row 1: Basic info */}
                 <div className="flex items-center gap-4 p-4">
@@ -316,6 +398,83 @@ const Inventory = () => {
           })
         )}
       </div>
+
+      {/* Long Press Action Overlay */}
+      {longPressMed && !deleteConfirmId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setLongPressId(null)}
+        >
+          <div
+            className="bg-background rounded-2xl shadow-2xl w-[280px] p-5 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-bold text-foreground text-center mb-1 truncate">{longPressMed.name}</p>
+            <p className="text-xs text-muted-foreground text-center mb-5 truncate">{longPressMed.company_name || "No company"}</p>
+
+            <div className="space-y-2.5">
+              <button
+                onClick={() => handleEdit(longPressMed)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-muted hover:bg-accent transition-colors"
+              >
+                <Pencil size={18} className="text-primary" />
+                <span className="text-sm font-semibold text-foreground">Edit Product</span>
+              </button>
+              <button
+                onClick={() => setDeleteConfirmId(longPressMed.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 transition-colors"
+              >
+                <Trash2 size={18} className="text-destructive" />
+                <span className="text-sm font-semibold text-destructive">Delete Product</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setLongPressId(null)}
+              className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirmId && longPressMed && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }}
+        >
+          <div
+            className="bg-background rounded-2xl shadow-2xl w-[300px] p-6 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-center mb-4">
+              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                <Trash2 size={24} className="text-destructive" />
+              </div>
+            </div>
+            <p className="text-sm font-bold text-foreground text-center mb-1">Delete Product?</p>
+            <p className="text-xs text-muted-foreground text-center mb-5">
+              Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

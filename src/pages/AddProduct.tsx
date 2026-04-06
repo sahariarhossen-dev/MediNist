@@ -23,6 +23,7 @@ const AddProduct = () => {
   const { profile } = useAuth();
   const [saving, setSaving] = useState(false);
 
+  const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [productType, setProductType] = useState<ProductType | "">("");
@@ -38,6 +39,7 @@ const AddProduct = () => {
   useEffect(() => {
     const s = location.state;
     if (!s) return;
+    if (s.editId) setEditId(s.editId);
     if (s.companyName) setCompanyName(s.companyName);
     if (s.name) setName(s.name);
     if (s.productType) setProductType(s.productType);
@@ -53,7 +55,6 @@ const AddProduct = () => {
   const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
   const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
 
-
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Medicine name is required");
@@ -65,7 +66,8 @@ const AddProduct = () => {
     }
 
     setSaving(true);
-    const { error } = await supabase.from("medicines").insert({
+
+    const payload = {
       name: name.trim(),
       company_name: companyName.trim() || null,
       product_type: productType || null,
@@ -76,13 +78,27 @@ const AddProduct = () => {
       product_size: isLiquidOrCream ? productSize.trim() || null : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
-    });
+    };
+
+    let error;
+    if (editId) {
+      // Update mode
+      const { error: updateError } = await supabase
+        .from("medicines")
+        .update(payload)
+        .eq("id", editId);
+      error = updateError;
+    } else {
+      // Insert mode
+      const { error: insertError } = await supabase.from("medicines").insert(payload);
+      error = insertError;
+    }
 
     setSaving(false);
     if (error) {
-      toast.error("Failed to save product");
+      toast.error(editId ? "Failed to update product" : "Failed to save product");
     } else {
-      toast.success("Product added successfully!");
+      toast.success(editId ? "Product updated successfully!" : "Product added successfully!");
       navigate("/inventory");
     }
   };
@@ -113,7 +129,9 @@ const AddProduct = () => {
         >
           <ArrowLeft size={20} className="text-foreground" />
         </button>
-        <h1 className="text-lg font-bold text-foreground">Add New Product</h1>
+        <h1 className="text-lg font-bold text-foreground">
+          {editId ? "Edit Product" : "Add New Product"}
+        </h1>
       </div>
 
       <div className="px-5 py-6 space-y-5 pb-12">
@@ -136,7 +154,7 @@ const AddProduct = () => {
             onClick={() =>
               navigate("/add-company", {
                 state: {
-                  formData: { name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity, stockAlert, mrp },
+                  formData: { editId, name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity, stockAlert, mrp },
                 },
               })
             }
@@ -262,7 +280,7 @@ const AddProduct = () => {
           disabled={saving || !name.trim()}
           className="w-full bg-primary text-primary-foreground font-semibold py-3.5 rounded-2xl text-sm disabled:opacity-50 transition-colors hover:opacity-90 mt-4"
         >
-          {saving ? "Saving..." : "Save Product"}
+          {saving ? "Saving..." : editId ? "Update Product" : "Save Product"}
         </button>
       </div>
     </div>
