@@ -34,7 +34,6 @@ interface ModalData {
   label: string;
   amount: number;
   invoices: number;
-  topItems: { name: string; total: number }[];
 }
 
 const HOURLY_SLOTS = [
@@ -191,32 +190,10 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       .gte("created_at", startDate.toISOString())
       .lt("created_at", endDate.toISOString());
 
-    const saleIds = (periodSales ?? []).map((s) => s.id);
-    let topItems: { name: string; total: number }[] = [];
-
-    if (saleIds.length > 0) {
-      const { data: items } = await supabase
-        .from("sale_items")
-        .select("medicine_name, total_price")
-        .in("sale_id", saleIds);
-
-      if (items) {
-        const itemMap: Record<string, number> = {};
-        items.forEach((i) => {
-          itemMap[i.medicine_name] = (itemMap[i.medicine_name] || 0) + Number(i.total_price);
-        });
-        topItems = Object.entries(itemMap)
-          .map(([name, total]) => ({ name, total }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 5);
-      }
-    }
-
     setModalData({
       label: point.label,
       amount: point.amount,
       invoices: point.invoices,
-      topItems,
     });
     setLoadingModal(false);
   };
@@ -266,7 +243,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
           </div>
         </div>
 
-        <div className="h-1.5 bg-amber-400 rounded-full mt-2" />
+        
       </Card>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -279,35 +256,15 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
           {loadingModal ? (
             <p className="text-sm text-muted-foreground py-4 text-center">Loading...</p>
           ) : modalData ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Total Sales</p>
-                  <p className="text-lg font-bold text-foreground">৳{modalData.amount.toLocaleString()}</p>
-                </div>
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">Invoices</p>
-                  <p className="text-lg font-bold text-foreground">{modalData.invoices}</p>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-muted rounded-xl p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Total Sales</p>
+                <p className="text-lg font-bold text-foreground">৳{modalData.amount.toLocaleString()}</p>
               </div>
-
-              {modalData.topItems.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-foreground mb-2">Top Selling Items</p>
-                  <div className="space-y-1.5">
-                    {modalData.topItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground truncate mr-2">{item.name}</span>
-                        <span className="font-semibold text-foreground whitespace-nowrap">৳{item.total.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {modalData.topItems.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center">No item data for this period.</p>
-              )}
+              <div className="bg-muted rounded-xl p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Invoices</p>
+                <p className="text-lg font-bold text-foreground">{modalData.invoices}</p>
+              </div>
             </div>
           ) : null}
         </DialogContent>
