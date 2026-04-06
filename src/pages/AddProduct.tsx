@@ -99,7 +99,7 @@ const AddProduct = () => {
       toast.error(editId ? "Failed to update product" : "Failed to save product");
     } else {
       toast.success(editId ? "Product updated successfully!" : "Product added successfully!");
-      navigate("/inventory");
+      navigate("/inventory", { replace: true });
     }
   };
 
