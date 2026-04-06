@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, TrendingUp, FileText, Users, AlertTriangle, ChevronDown } from "lucide-react";
+import { Bell, TrendingUp, FileText, Users, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,32 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+import SalesTrendChart from "@/components/SalesTrendChart";
 
-const salesData = [
-  { time: "10AM", value: 800 },
-  { time: "11AM", value: 1800 },
-  { time: "12PM", value: 3200 },
-  { time: "1PM", value: 2600 },
-  { time: "2PM", value: 1900 },
-  { time: "3PM", value: 1400 },
-  { time: "4PM", value: 1100 },
-  { time: "5PM", value: 900 },
-  { time: "6PM", value: 700 },
-  { time: "7PM", value: 500 },
-  { time: "8PM", value: 400 },
-  { time: "9PM", value: 300 },
-  { time: "10PM", value: 200 },
-  { time: "11PM", value: 150 },
-  { time: "12AM", value: 100 },
-];
 
 function getStartDate(range: string): string {
   const now = new Date();
@@ -171,42 +147,8 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Hourly Sales Trend */}
-      <div className="px-5 pt-3 pb-6">
-        <Card className="border-0 shadow-sm rounded-xl bg-white p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1">Hourly Sales Trend</h2>
-          <p className="text-[11px] text-gray-400 mb-4">(8AM-12AM)</p>
-          <div className="h-48 -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData}>
-                <defs>
-                  <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
-                <XAxis
-                  dataKey="time"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: "#9CA3AF" }}
-                  interval={2}
-                />
-                <YAxis hide />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#3B82F6"
-                  strokeWidth={2.5}
-                  fill="url(#blueGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="h-1.5 bg-amber-400 rounded-full mt-2" />
-        </Card>
-      </div>
+      {/* Sales Trend Chart */}
+      <SalesTrendChart pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />
     </div>
   );
 };
