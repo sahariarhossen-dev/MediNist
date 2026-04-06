@@ -253,13 +253,13 @@ const AddProduct = () => {
             Stock Alert Level
           </Label>
           {isTabletOrCapsule && (
-            <p className="text-xs text-gray-500">Enter the minimum number of Pieces (e.g., 30) to get a low stock alert.</p>
+            <p className="text-xs text-muted-foreground">Enter the minimum number of Pieces (e.g., 30) to get a low stock alert.</p>
           )}
           {isLiquidOrCream && (
-            <p className="text-xs text-gray-500">Enter the minimum number of Files/Units (e.g., 5) to get a low stock alert.</p>
+            <p className="text-xs text-muted-foreground">Enter the minimum number of Files/Units (e.g., 5) to get a low stock alert.</p>
           )}
           {!isTabletOrCapsule && !isLiquidOrCream && (
-            <p className="text-xs text-gray-500">Select a product type first, then set the alert level.</p>
+            <p className="text-xs text-muted-foreground">Select a product type first, then set the alert level.</p>
           )}
           <Input
             type="number"
