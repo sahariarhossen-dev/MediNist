@@ -1,35 +1,58 @@
 
 
-## Plan: Redesign Inventory Page with Search-Driven Stock Update Workflow
+## Plan: Tri-Unit Inventory Logic (Box : Strip : Pcs)
 
 ### Overview
+Implement a universal `Box : Strip : Pcs` display format across the app. Store stock as total pieces internally. Create a shared conversion utility and update Inventory, CreateSale, ShortItems, and Index pages.
 
-Transform the Inventory page into a search-driven inventory update tool. When searching, results show expandable cards where users can input units to add, with real-time stock calculation. Also remove the "Total Strips in Stock" field from AddProduct.
+### 1. Create shared utility: `src/lib/stockUtils.ts`
 
-### Changes
+Global conversion function:
+```
+totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip) → "B : S : P"
+  boxes = floor(totalPcs / (stripPerPack * pcsPerStrip))
+  remainder = totalPcs % (stripPerPack * pcsPerStrip)
+  strips = floor(remainder / pcsPerStrip)
+  pcs = remainder % pcsPerStrip
+  return `${boxes} : ${strips} : ${pcs}`
+```
+Also: `boxesToPieces(boxes, stripPerPack, pcsPerStrip) → totalPcs` for adding inventory.
 
-**1. Rewrite `src/pages/Inventory.tsx`**
+### 2. Update `src/pages/Inventory.tsx`
 
-- **Search bar**: Keep existing toggle logic. Add an inner X button inside the search input to clear text (separate from the outer X that exits search mode).
-- **Search results**: When `searchQuery` is non-empty, filter medicines client-side. Show results as cards.
-- **Expandable cards**: Track `expandedId` state. Clicking a card toggles expansion.
-  - **Collapsed**: Pill icon, name, company, price (existing layout).
-  - **Expanded**: Same Row 1 + a unit input box on the right. Row 2 shows: `৳ {price}`, `pre-stock: {stock_quantity}`, `Current stock: {calculated}`.
-  - **Calculation**: `currentStock = stock_quantity + (unitsInput * strip_per_pack)`. Need to fetch `strip_per_pack` — update the Medicine interface and query to include `strip_per_pack` and `pcs_per_strip`.
-- **Default view** (no search): Show full medicine list in standard card format (non-expandable, as currently).
-- **Save logic**: When user enters units in expanded card, provide a confirm mechanism or auto-save to update `stock_quantity` in Supabase via `.update()`.
+- Import `totalPiecesToTriUnit` and `boxesToPieces`
+- **Collapsed cards**: Replace price display with tri-unit stock: `1 : 2 : 5` using high-contrast font
+- **Expanded card Row 2**: Show `৳ {price}`, `pre-stock: {B:S:P}`, `Current stock: {B:S:P}` — all using tri-unit format
+- **Calculation**: When user inputs N boxes, `calculatedStock = stock_quantity + boxesToPieces(N, strip_per_pack, pcs_per_strip)`. Display result as tri-unit string
+- **Save**: Store the new total pieces value in `stock_quantity`
 
-**2. Modify `src/pages/AddProduct.tsx`**
+### 3. Update `src/pages/CreateSale.tsx`
 
-- **Delete "Total Strips in Stock"** field (lines 208-217): Remove the `totalStrips` input, its state, and related form restoration logic.
-- Update `handleSave`: For tablet/capsule, `stock_quantity` defaults to 0 instead of using `totalStrips`.
-- Keep `totalPcs` display removed since it depended on `totalStrips`.
+- Import `totalPiecesToTriUnit`
+- Search results: Replace `STK: {number}` with `STK: {B:S:P}`
+- Cart expanded items: Replace `STK {number}` with tri-unit format
+- Stock deduction on complete: Already subtracts quantity (pieces) — no logic change needed, just display update
+- Fetch `strip_per_pack` in the medicine select query (add to interface)
 
-### Technical Details
+### 4. Update `src/pages/ShortItems.tsx`
 
-- Medicine interface adds: `strip_per_pack: number | null; pcs_per_strip: number | null`
-- Supabase query updated to `select("*")` already fetches all columns — no query change needed
-- Real-time calc: `newStock = (med.stock_quantity || 0) + (units * (med.strip_per_pack || 1))`
-- Expanded card uses `transition-all duration-200` for smooth expand/collapse
-- Unit input uses `type="number"` with min=0
+- Import `totalPiecesToTriUnit`
+- Fetch `strip_per_pack` and `pcs_per_strip` in the query
+- STK column: Display `B : S : P` instead of raw number
+- Update interface to include the new fields
+
+### 5. Update `src/pages/Index.tsx` (Dashboard)
+
+- No direct stock display currently — the "Short Items" card shows a count. No changes needed here unless we add stock details later.
+
+### Styling
+- Tri-unit numbers: `font-mono font-bold text-foreground` for high contrast
+- Colon separator: `text-muted-foreground mx-0.5` for clear visual separation
+- Consistent across all pages
+
+### Files Changed
+1. `src/lib/stockUtils.ts` — NEW (conversion functions)
+2. `src/pages/Inventory.tsx` — tri-unit display + calculation
+3. `src/pages/CreateSale.tsx` — tri-unit stock display
+4. `src/pages/ShortItems.tsx` — tri-unit STK column
 
