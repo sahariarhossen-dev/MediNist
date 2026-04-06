@@ -52,6 +52,7 @@ const Profile = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   const getPasswordStrength = (pw: string) => {
     if (!pw) return { label: "", color: "", percent: 0 };
