@@ -7,6 +7,7 @@ import { ArrowLeft, Search, Bell, Pill, Plus, X, Check } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { totalPiecesToTriUnit, boxesToPieces } from "@/lib/stockUtils";
 
 interface Medicine {
   id: string;
@@ -18,6 +19,16 @@ interface Medicine {
   pcs_per_strip: number | null;
   product_type: string | null;
 }
+
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null }) => {
+  const display = totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip);
+  const parts = display.split(" : ");
+  return (
+    <span className="font-mono font-bold text-foreground">
+      {parts[0]}<span className="text-muted-foreground mx-0.5">:</span>{parts[1]}<span className="text-muted-foreground mx-0.5">:</span>{parts[2]}
+    </span>
+  );
+};
 
 const Inventory = () => {
   const navigate = useNavigate();
@@ -86,8 +97,8 @@ const Inventory = () => {
 
   const getCalculatedStock = (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
-    const multiplier = med.strip_per_pack || 1;
-    return (med.stock_quantity || 0) + units * multiplier;
+    const addedPieces = boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    return (med.stock_quantity || 0) + addedPieces;
   };
 
   const handleConfirmStock = async (med: Medicine) => {
@@ -104,7 +115,7 @@ const Inventory = () => {
     if (error) {
       toast.error("Failed to update stock");
     } else {
-      toast.success(`${med.name} stock updated to ${newStock}`);
+      toast.success(`${med.name} stock updated`);
       setMedicines((prev) =>
         prev.map((m) => (m.id === med.id ? { ...m, stock_quantity: newStock } : m))
       );
@@ -264,9 +275,12 @@ const Inventory = () => {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-lg">💰</span>
-                      <span className="font-bold text-foreground">{med.price ?? "—"}</span>
+                    <div className="flex-shrink-0">
+                      <TriUnitDisplay
+                        totalPcs={med.stock_quantity || 0}
+                        stripPerPack={med.strip_per_pack}
+                        pcsPerStrip={med.pcs_per_strip}
+                      />
                     </div>
                   )}
                 </div>
@@ -279,10 +293,20 @@ const Inventory = () => {
                         ৳ {med.price ?? "—"}
                       </span>
                       <span className="text-muted-foreground">
-                        pre-stock : <span className="text-foreground">{med.stock_quantity ?? 0}</span>
+                        pre-stock :{" "}
+                        <TriUnitDisplay
+                          totalPcs={med.stock_quantity || 0}
+                          stripPerPack={med.strip_per_pack}
+                          pcsPerStrip={med.pcs_per_strip}
+                        />
                       </span>
                       <span className="text-primary font-semibold">
-                        Current stock : {calculatedStock}
+                        Current :{" "}
+                        <TriUnitDisplay
+                          totalPcs={calculatedStock}
+                          stripPerPack={med.strip_per_pack}
+                          pcsPerStrip={med.pcs_per_strip}
+                        />
                       </span>
                     </div>
                   </div>

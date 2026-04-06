@@ -3,6 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { totalPiecesToTriUnit } from "@/lib/stockUtils";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,8 @@ interface LowStockItem {
   product_type: string | null;
   company_name: string | null;
   stock_quantity: number;
+  strip_per_pack: number | null;
+  pcs_per_strip: number | null;
   price: number | null;
 }
 
@@ -32,7 +35,7 @@ const ShortItems = () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert")
+        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -46,6 +49,8 @@ const ShortItems = () => {
           product_type: m.product_type,
           company_name: m.company_name,
           stock_quantity: m.stock_quantity ?? 0,
+          strip_per_pack: m.strip_per_pack,
+          pcs_per_strip: m.pcs_per_strip,
           price: m.price,
         }));
 
@@ -133,8 +138,8 @@ const ShortItems = () => {
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
                     <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
                     <td className="px-2 py-3 text-gray-500">{item.product_type ?? "—"}</td>
-                    <td className={`px-2 py-3 text-center ${stockColor(item.stock_quantity)}`}>
-                      {item.stock_quantity}
+                    <td className={`px-2 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
+                      {totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700">
                       ৳{Number(item.price ?? 0).toLocaleString()}

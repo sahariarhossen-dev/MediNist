@@ -4,6 +4,7 @@ import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { totalPiecesToTriUnit } from "@/lib/stockUtils";
 
 interface Medicine {
   id: string;
@@ -12,6 +13,7 @@ interface Medicine {
   price: number | null;
   stock_quantity: number | null;
   pcs_per_strip: number | null;
+  strip_per_pack: number | null;
   product_type: string | null;
 }
 
@@ -76,7 +78,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -91,6 +93,7 @@ const CreateSale = () => {
               price: it.unit_price,
               stock_quantity: null,
               pcs_per_strip: null,
+              strip_per_pack: null,
               product_type: null,
             },
             quantity: it.quantity,
@@ -119,14 +122,14 @@ const CreateSale = () => {
       const q = searchQuery.trim();
       const baseQuery = supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
         .eq("pharmacy_id", profile.pharmacy_id!);
 
       const [startsRes, containsRes] = await Promise.all([
         baseQuery.ilike("name", `${q}%`).limit(10),
         supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
           .eq("pharmacy_id", profile.pharmacy_id!)
           .ilike("name", `%${q}%`)
           .limit(10),
@@ -360,7 +363,7 @@ const CreateSale = () => {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {med.company_name && <span className="text-[10px] text-gray-400">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] text-gray-400">STK: {med.stock_quantity ?? 0}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-xs font-semibold text-emerald-600">৳{med.price ?? 0}</p>
@@ -411,7 +414,7 @@ const CreateSale = () => {
                       >
                         <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
                       </button>
-                      <span className="text-[10px] text-gray-400">STK {item.medicine.stock_quantity ?? 0}</span>
+                      <span className="text-[10px] text-gray-400 font-mono">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
                       <span className="text-xs font-bold text-emerald-600 bg-yellow-100 px-1.5 py-0.5 rounded">
                         {item.quantity}×{unitPrice}={lineTotal}৳
