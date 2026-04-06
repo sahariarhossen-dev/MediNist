@@ -404,7 +404,7 @@ const CreateSale = () => {
                         )}
                       </p>
                       {item.medicine.company_name && (
-                        <span className="text-[10px] text-gray-400 flex-shrink-0">{item.medicine.company_name}</span>
+                        <span className="text-[10px] text-secondary flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
                     <div className="gap-2 mt-2 flex items-center justify-start">
@@ -414,43 +414,9 @@ const CreateSale = () => {
                       >
                         <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
                       </button>
-                      <span className="text-[10px] text-gray-400 font-mono">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
-                      <span className="text-[10px] text-gray-400">MRP {unitPrice}</span>
-                      <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold my-0 mx-[10px] px-[6px] py-[2px]">
-                        {item.quantity}×{unitPrice}={lineTotal}৳
-                      </span>
-                      <div className="ml-auto flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
-                        <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
-                        >
-                          <Minus className="w-3 h-3 text-emerald-600" />
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                          className="w-8 text-center text-xs font-bold text-gray-900 outline-none bg-transparent border-x border-emerald-100 py-1"
-                        />
-                        <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
-                        >
-                          <Plus className="w-3 h-3 text-emerald-600" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={item.medicine.id}
-                  onClick={() => setExpandedId(item.medicine.id)}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-gray-50 transition"
-                >
+                      <span className="text-[10px] font-mono font-bold text-primary">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                      <span className="text-[10px] text-secondary">MRP {unitPrice}</span>
+...
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-400 w-4 text-right">{idx + 1}.</span>
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">
@@ -459,11 +425,11 @@ const CreateSale = () => {
                         <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
                       )}
                     </p>
-                    <span className="text-[10px] text-gray-400">{item.quantity}×{unitPrice}</span>
+                    <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
                     <span className="text-xs font-bold text-emerald-600">{lineTotal} ৳</span>
                   </div>
                   {item.medicine.company_name && (
-                    <p className="text-[10px] text-gray-400 ml-6 mt-0.5">{item.medicine.company_name}</p>
+                    <p className="text-[10px] text-secondary ml-6 mt-0.5">{item.medicine.company_name}</p>
                   )}
                 </div>
               );
