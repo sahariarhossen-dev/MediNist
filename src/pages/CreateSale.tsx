@@ -218,7 +218,7 @@ const CreateSale = () => {
             user_id: profile.id,
             sale_type: saleType,
             subtotal,
-            discount_percent: DISCOUNT_PERCENT,
+            discount_percent: discountPercent,
             discount_amount: discountAmount,
             total: netTotal,
             status,
