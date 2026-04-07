@@ -479,7 +479,7 @@ const CreateSale = () => {
         {cartItems.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 mt-3 space-y-1.5">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500 text-right">Subtotal</span>
+              <span className="text-sm font-medium text-gray-500 text-right mx-[35px]">Subtotal</span>
               <span className="text-sm font-bold text-gray-900">
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
@@ -491,7 +491,7 @@ const CreateSale = () => {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500">Discount ({DISCOUNT_PERCENT}%)</span>
+              <span className="text-sm font-medium text-gray-500 mx-[35px]">Discount ({DISCOUNT_PERCENT}%)</span>
               <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
