@@ -1,44 +1,37 @@
 
 
-## Plan: Add Forgot Password Flow
+## Plan: Optimize Sales Item Row Layout for Mobile
 
-### Overview
-Add a "Forgot Password?" link to the login page, create a `/forgot-password` page to send reset emails, and create a `/reset-password` page that handles the recovery redirect and lets users set a new password.
+### Problem
+In the expanded item row, STK and MRP badges sit on the same horizontal line, causing text overlap on narrow screens.
 
-### Changes
+### Changes — `src/pages/CreateSale.tsx` (lines 410-443)
 
-**1. `src/pages/Login.tsx` — Add "Forgot Password?" link**
-- Between the password field and the Sign In button, add:
-  ```
-  <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-blue-600 hover:underline">
-    Forgot Password?
-  </Link>
-  ```
-- Right-align it with `text-right` on its wrapper div.
+**Restructure the second row (below product name) into two rows:**
 
-**2. Create `src/pages/ForgotPassword.tsx`**
-- Same visual style as Login (centered card, `bg-[#F4F6FB]`, rounded-xl white card).
-- Email input + "Send Reset Link" button.
-- Calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' })`.
-- On success, shows a green success message: "A password reset link has been sent to your email. Please check your inbox."
-- Back link to `/login`.
+**Row 1 (left side):** Delete button + STK badge taking full width
+- Remove MRP from this line
+- STK badge gets remaining space with `flex-1` and `whitespace-nowrap`
 
-**3. Create `src/pages/ResetPassword.tsx`**
-- Public route that handles the `type=recovery` hash from Supabase's email link.
-- On mount, listens for `PASSWORD_RECOVERY` event via `supabase.auth.onAuthStateChange`.
-- Shows New Password input with Eye toggle and the same password strength meter from Profile.
-- "Update Password" button calls `supabase.auth.updateUser({ password })`.
-- On success, shows toast and redirects to `/` (dashboard).
+**Row 2:** Left side shows the calculation chip (`1×320=320৳`), right side shows MRP label stacked above the quantity selector
 
-**4. `src/App.tsx` — Add routes**
-- Import `ForgotPassword` and `ResetPassword`.
-- Add two public routes:
-  - `/forgot-password` → `<PublicRoute><ForgotPassword /></PublicRoute>`
-  - `/reset-password` → `<ResetPassword />` (NOT wrapped in PublicRoute since user gets auto-logged in by recovery token)
+**New layout structure:**
+```text
+┌──────────────────────────────────┐
+│ 💊 osmolax  Syrup      CompanyX │
+│ 🗑 STK 5 : 0 : 0                │
+│ 1×320=320৳          MRP 320     │
+│                      [- 1 +]    │
+└──────────────────────────────────┘
+```
+
+**Specific implementation:**
+1. Replace the single flex row (lines 410-443) with a vertical stack (`flex flex-col gap-1.5 mt-2`)
+2. **First row:** `flex items-center gap-2` — trash button + STK label (with `flex-1 whitespace-nowrap`)
+3. **Second row:** `flex items-center justify-between` — left: calculation chip, right: a `flex flex-col items-end gap-1` containing MRP label on top and quantity selector below
+4. MRP styled as `text-[10px] text-primary font-medium`
+5. All vertical alignment centers within each sub-row
 
 ### Files Modified
-- `src/pages/Login.tsx`
-- `src/pages/ForgotPassword.tsx` (new)
-- `src/pages/ResetPassword.tsx` (new)
-- `src/App.tsx`
+- `src/pages/CreateSale.tsx` — restructure expanded item row layout
 
