@@ -23,7 +23,7 @@ interface CartItem {
   quantity: number;
 }
 
-const DISCOUNT_PERCENT = 10;
+const DEFAULT_DISCOUNT_PERCENT = 10;
 
 const CreateSale = () => {
   const navigate = useNavigate();
