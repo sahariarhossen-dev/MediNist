@@ -23,8 +23,6 @@ interface CartItem {
   quantity: number;
 }
 
-const DEFAULT_DISCOUNT_PERCENT = 10;
-
 const CreateSale = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -39,9 +37,27 @@ const CreateSale = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(false);
-  const [discountPercent, setDiscountPercent] = useState(DEFAULT_DISCOUNT_PERCENT);
+  const [discountPercent, setDiscountPercent] = useState(10);
   const [editingDiscount, setEditingDiscount] = useState(false);
-  const [discountInput, setDiscountInput] = useState(String(DEFAULT_DISCOUNT_PERCENT));
+  const [discountInput, setDiscountInput] = useState("10");
+
+  // Fetch global default discount from pharmacy settings
+  useEffect(() => {
+    if (!profile?.pharmacy_id) return;
+    const fetchDefault = async () => {
+      const { data } = await supabase
+        .from("pharmacies")
+        .select("default_discount")
+        .eq("id", profile.pharmacy_id!)
+        .single();
+      if (data) {
+        const val = (data as any).default_discount ?? 10;
+        setDiscountPercent(val);
+        setDiscountInput(String(val));
+      }
+    };
+    fetchDefault();
+  }, [profile?.pharmacy_id]);
 
   // Load draft sale if URL has ?draft=SALE_ID
   useEffect(() => {
@@ -527,8 +543,8 @@ const CreateSale = () => {
                       if (!isNaN(num) && num >= 0 && num <= 100) {
                         setDiscountPercent(num);
                       } else {
-                        setDiscountPercent(DEFAULT_DISCOUNT_PERCENT);
-                        setDiscountInput(String(DEFAULT_DISCOUNT_PERCENT));
+                        setDiscountPercent(10);
+                        setDiscountInput("10");
                       }
                       setEditingDiscount(false);
                     }} className="text-emerald-600 hover:text-emerald-700 transition">
