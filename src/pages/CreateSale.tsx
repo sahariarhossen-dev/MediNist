@@ -516,7 +516,7 @@ const CreateSale = () => {
           disabled={saving || cartItems.length === 0}
           className="flex-1 py-3.5 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
         >
-          {saving ? "Saving..." : "Complete Sale"}
+          {saving ? "Saving..." : <><Sparkles className="w-4 h-4 inline mr-1" />Complete Sale</>}
         </button>
       </div>
     </div>
