@@ -480,7 +480,15 @@ const CreateSale = () => {
           <div className="bg-white rounded-2xl shadow-sm p-4 mt-3 space-y-1.5">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-500">Subtotal</span>
-              <span className="text-sm font-bold text-gray-900">{subtotal} ৳</span>
+              <span className="text-sm font-bold text-gray-900">
+                {cartItems.map((c, i) => (
+                  <span key={c.medicine.id}>
+                    {i > 0 && " + "}
+                    {c.quantity * (c.medicine.price || 0)}
+                  </span>
+                ))}
+                {" = "}{subtotal} ৳
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-500">Discount ({DISCOUNT_PERCENT}%)</span>
