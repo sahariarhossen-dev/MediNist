@@ -174,7 +174,7 @@ const CreateSale = () => {
     () => cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0),
     [cartItems]
   );
-  const discountAmount = useMemo(() => Math.round(subtotal * DISCOUNT_PERCENT / 100), [subtotal]);
+  const discountAmount = useMemo(() => Math.round(subtotal * discountPercent / 100), [subtotal, discountPercent]);
   const netTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
 
   const saveSale = async (status: "draft" | "completed") => {
