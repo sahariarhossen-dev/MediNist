@@ -62,6 +62,7 @@ const ShopProfile = () => {
       setPharmacy(p);
       setEditForm({
         name: p.name || "",
+        proprietor_name: (p as any).proprietor_name || "",
         address: p.address || "",
         drug_license: p.drug_license || "",
         trade_license: p.trade_license || "",
