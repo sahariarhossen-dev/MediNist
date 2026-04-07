@@ -94,35 +94,50 @@ export type Database = {
       pharmacies: {
         Row: {
           address: string | null
+          cover_url: string | null
           created_at: string | null
           district: string | null
           division: string | null
+          drug_license: string | null
           email: string | null
           id: string
+          invoice_footer: string | null
+          logo_url: string | null
           name: string
           proprietor_name: string | null
+          trade_license: string | null
           upazila: string | null
         }
         Insert: {
           address?: string | null
+          cover_url?: string | null
           created_at?: string | null
           district?: string | null
           division?: string | null
+          drug_license?: string | null
           email?: string | null
           id?: string
+          invoice_footer?: string | null
+          logo_url?: string | null
           name: string
           proprietor_name?: string | null
+          trade_license?: string | null
           upazila?: string | null
         }
         Update: {
           address?: string | null
+          cover_url?: string | null
           created_at?: string | null
           district?: string | null
           division?: string | null
+          drug_license?: string | null
           email?: string | null
           id?: string
+          invoice_footer?: string | null
+          logo_url?: string | null
           name?: string
           proprietor_name?: string | null
+          trade_license?: string | null
           upazila?: string | null
         }
         Relationships: []
@@ -245,6 +260,39 @@ export type Database = {
           subtotal?: number
           total?: number
           user_id?: string
+        }
+        Relationships: []
+      }
+      shop_staff: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          invited_by: string
+          pharmacy_id: string
+          role: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          invited_by: string
+          pharmacy_id: string
+          role?: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          invited_by?: string
+          pharmacy_id?: string
+          role?: string
+          status?: string
+          user_id?: string | null
         }
         Relationships: []
       }
