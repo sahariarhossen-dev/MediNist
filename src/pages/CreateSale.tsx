@@ -418,7 +418,7 @@ const CreateSale = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[11px] font-mono whitespace-nowrap text-secondary-foreground">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
                       <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
                         {item.quantity}*{unitPrice}={lineTotal}৳
@@ -479,7 +479,7 @@ const CreateSale = () => {
         {cartItems.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 mt-3 space-y-1.5">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500">Subtotal</span>
+              <span className="text-sm font-medium text-gray-500 text-right">Subtotal</span>
               <span className="text-sm font-bold text-gray-900">
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
