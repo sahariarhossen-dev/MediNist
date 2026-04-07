@@ -26,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   pharmacyName: null,
   loading: true,
+  isPasswordRecovery: false,
   signOut: async () => {},
   refreshProfile: async () => {},
 });
