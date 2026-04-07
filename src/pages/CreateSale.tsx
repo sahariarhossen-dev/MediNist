@@ -404,9 +404,9 @@ const CreateSale = () => {
                           <span className="ml-1 text-[11px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">MRP {unitPrice}</span>
+                      <span className="flex-shrink-0 text-right mx-[25px] text-secondary-foreground text-xs font-medium">MRP : {unitPrice}</span>
                       {item.medicine.company_name && (
-                        <span className="text-[11px] text-emerald-600 font-medium flex-shrink-0">{item.medicine.company_name}</span>
+                        <span className="text-[11px] text-emerald-600 flex-shrink-0 font-medium mx-[10px]">{item.medicine.company_name}</span>
                       )}
                     </div>
                     {/* Line 2: Trash+STK | Calculation | Qty controller */}
