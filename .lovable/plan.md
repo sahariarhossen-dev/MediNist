@@ -1,112 +1,57 @@
 
 
-## Plan: Shop Profile Page with Staff Management
+## Plan: Expandable Shop Profile + Global Default Discount
 
 ### Overview
-Create a new `/shop-profile` page with shop info editing, staff invite system, staff list, and billing customization. Requires 2 new database tables, a new edge function for invitations, and a new page component.
+Refactor ShopProfile into accordion-style collapsible sections, add phone/email fields to shop info, and add a new "Default Discount Settings" section that persists to the database and is consumed by CreateSale.
 
-### Database Migrations
+### 1. Database Migration
 
-**Migration 1 — Add columns to `pharmacies` table + create `shop_staff` table:**
-
+Add two new columns to `pharmacies`:
 ```sql
--- Add new columns to pharmacies
 ALTER TABLE pharmacies
-  ADD COLUMN IF NOT EXISTS logo_url text,
-  ADD COLUMN IF NOT EXISTS cover_url text,
-  ADD COLUMN IF NOT EXISTS drug_license text,
-  ADD COLUMN IF NOT EXISTS trade_license text,
-  ADD COLUMN IF NOT EXISTS invoice_footer text;
-
--- Create shop_staff table
-CREATE TABLE shop_staff (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  pharmacy_id uuid NOT NULL,
-  email text NOT NULL,
-  role text NOT NULL DEFAULT 'salesman',
-  status text NOT NULL DEFAULT 'pending',
-  invited_by uuid NOT NULL,
-  user_id uuid,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(pharmacy_id, email)
-);
-
-ALTER TABLE shop_staff ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Staff accessible by pharmacy members"
-  ON shop_staff FOR ALL TO authenticated
-  USING (pharmacy_id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()));
+  ADD COLUMN IF NOT EXISTS phone text,
+  ADD COLUMN IF NOT EXISTS default_discount numeric DEFAULT 10;
 ```
 
-**Migration 2 — Add UPDATE policy to pharmacies:**
+The `email` column already exists on pharmacies.
 
-```sql
-CREATE POLICY "Pharmacy admins can update their pharmacy"
-  ON pharmacies FOR UPDATE TO authenticated
-  USING (id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()))
-  WITH CHECK (id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()));
-```
+### 2. ShopProfile.tsx — Full Rewrite
 
-### Storage
+**Accordion UI:**
+- Import `Accordion, AccordionItem, AccordionTrigger, AccordionContent` from `@/components/ui/accordion`
+- Wrap each section (Shop Info, Staff, Billing, Discount) in an `AccordionItem` inside a single `Accordion` with `type="multiple"`
+- Each item gets the `rounded-3xl` card styling with emerald border
+- Icons: `Store`, `Users`, `FileText`, `Percent` next to each section title
 
-Create a `pharmacy-assets` public bucket for logo and cover images.
+**Shop Information fields (expanded):**
+- Pharmacy Name, Proprietor Name, Shop Mobile Number (new), Shop Email Address (existing `email` col), Drug License No, Trade License No, Address
+- Update `editForm` state and `handleSaveInfo` to include `phone` and `email`
 
-### Edge Function: `invite-staff`
+**Staff Management:** Same content, just inside accordion
 
-New edge function at `supabase/functions/invite-staff/index.ts`:
-- Accepts `{ email, role }` in request body
-- Validates the caller is an admin (checks `profiles.role = 'admin'`)
-- Uses `supabase.auth.admin.inviteUserByEmail()` to send invitation
-- Inserts a row into `shop_staff` with status `pending`
-- Returns success/error
+**Billing Customization:** Same content, just inside accordion
 
-### New Page: `src/pages/ShopProfile.tsx`
+**New section — Default Discount Settings:**
+- State: `defaultDiscount` loaded from `pharmacy.default_discount`
+- Input field for percentage (0-100), validated
+- Save button updates `pharmacies.default_discount`
+- Description text: "This discount will auto-apply to every new sale. Staff can override it per transaction."
 
-**Structure:**
+### 3. CreateSale.tsx — Consume Global Discount
 
-1. **Header** — Back arrow + "Shop Profile" title
+- On mount, fetch `default_discount` from the user's pharmacy record
+- Use it as the initial value for `discountPercent` state instead of hardcoded `10`
+- Remove `const DEFAULT_DISCOUNT_PERCENT = 10` and replace with the fetched value
+- The existing manual edit icon still allows per-sale overrides
 
-2. **Cover & Logo Section**
-   - Cover image banner (uploadable, 200px height)
-   - Logo overlay (rounded, uploadable, positioned bottom-left of cover)
-
-3. **Shop Info Card** (`rounded-3xl`, emerald accents)
-   - Editable fields: Pharmacy Name, Drug License, Trade License, Full Address
-   - Edit/Save toggle with pencil/check icons
-   - Updates `pharmacies` table
-
-4. **Staff Management Card**
-   - "Manage Staff" heading
-   - Email input + role dropdown (Manager/Salesman) + "Send Invitation" button
-   - Calls `invite-staff` edge function on click
-   - Staff list below: fetches from `shop_staff` table
-   - Each row: Email, Role badge, Status badge (Active/Pending), Trash icon to remove
-
-5. **Billing Customization Card**
-   - Textarea for "Invoice Footer Note"
-   - Save button, updates `pharmacies.invoice_footer`
-
-6. Mobile responsive, white background, emerald-600 accents
-
-### Route Registration
-
-Add to `App.tsx`:
-```
-<Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
-```
-
-Add navigation link in `More.tsx` menu items.
-
-### Files Modified/Created
-- `supabase/migrations/` — 2 migration files (pharmacies columns + shop_staff table)
-- `supabase/functions/invite-staff/index.ts` — new edge function
-- `src/pages/ShopProfile.tsx` — new page
-- `src/App.tsx` — add route
-- `src/pages/More.tsx` — add menu item
+### Files Modified
+- `supabase/migrations/` — new migration (phone + default_discount columns)
+- `src/pages/ShopProfile.tsx` — accordion UI, new fields, discount section
+- `src/pages/CreateSale.tsx` — fetch default discount from pharmacy on mount
 
 ### Technical Details
-- Image uploads use Supabase Storage (`pharmacy-assets` bucket)
-- Staff invitation uses `auth.admin.inviteUserByEmail()` via service role in edge function
-- Only users with `role = 'admin'` in profiles can invite staff or edit shop info
-- The edge function validates admin status server-side before sending invitations
+- Accordion component already exists at `src/components/ui/accordion.tsx`
+- `pharmacies` table already has an `email` column per schema
+- The `default_discount` defaults to `10` so existing behavior is preserved
 
