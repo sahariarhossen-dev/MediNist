@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Package, User, Settings, ChevronRight, Bell } from "lucide-react";
+import { Package, User, Settings, ChevronRight, Bell, Store } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const menuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory" },
+  { label: "Shop Profile", icon: Store, path: "/shop-profile" },
   { label: "Profile", icon: User, path: "/profile" },
   { label: "Settings", icon: Settings, path: null },
 ];
