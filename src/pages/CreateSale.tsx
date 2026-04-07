@@ -420,10 +420,10 @@ const CreateSale = () => {
                         </button>
                         <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
-                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
                         {item.quantity}*{unitPrice}={lineTotal}৳
                       </span>
-                      <div className="flex items-center border-2 border-gray-900 rounded-xl overflow-hidden flex-shrink-0">
+                      <div className="flex items-center border-gray-900 rounded-xl overflow-hidden flex-shrink-0 border-solid border">
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
                           className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
