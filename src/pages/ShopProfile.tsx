@@ -209,6 +209,7 @@ const ShopProfile = () => {
           <div className="space-y-3">
             {[
               { label: "Pharmacy Name", key: "name" as const },
+              { label: "Proprietor Name", key: "proprietor_name" as const },
               { label: "Drug License No.", key: "drug_license" as const },
               { label: "Trade License No.", key: "trade_license" as const },
               { label: "Address", key: "address" as const },
