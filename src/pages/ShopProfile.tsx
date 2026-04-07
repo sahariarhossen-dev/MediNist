@@ -36,7 +36,7 @@ const ShopProfile = () => {
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", address: "", drug_license: "", trade_license: "" });
+  const [editForm, setEditForm] = useState({ name: "", proprietor_name: "", address: "", drug_license: "", trade_license: "" });
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("salesman");
