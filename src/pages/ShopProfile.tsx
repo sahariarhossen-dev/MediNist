@@ -100,6 +100,7 @@ const ShopProfile = () => {
     setSaving(true);
     const { error } = await supabase.from("pharmacies").update({
       name: editForm.name,
+      proprietor_name: editForm.proprietor_name,
       address: editForm.address,
       drug_license: editForm.drug_license,
       trade_license: editForm.trade_license,
