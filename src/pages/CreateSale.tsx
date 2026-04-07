@@ -496,7 +496,7 @@ const CreateSale = () => {
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-base font-extrabold text-gray-900">Net Total</span>
-              <span className="text-xl font-extrabold text-emerald-700">{netTotal} ৳</span>
+              <span className="text-xl font-extrabold text-emerald-600">{netTotal} ৳</span>
             </div>
           </div>
         )}
