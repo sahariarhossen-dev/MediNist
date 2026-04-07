@@ -438,7 +438,7 @@ const CreateSale = () => {
                           min={1}
                           value={item.quantity}
                           onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                          className="w-9 font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1 text-xs text-right"
+                          className="w-9 font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1 text-xs text-center"
                         />
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
