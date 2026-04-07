@@ -96,6 +96,7 @@ export type Database = {
           address: string | null
           cover_url: string | null
           created_at: string | null
+          default_discount: number | null
           district: string | null
           division: string | null
           drug_license: string | null
@@ -104,6 +105,7 @@ export type Database = {
           invoice_footer: string | null
           logo_url: string | null
           name: string
+          phone: string | null
           proprietor_name: string | null
           trade_license: string | null
           upazila: string | null
@@ -112,6 +114,7 @@ export type Database = {
           address?: string | null
           cover_url?: string | null
           created_at?: string | null
+          default_discount?: number | null
           district?: string | null
           division?: string | null
           drug_license?: string | null
@@ -120,6 +123,7 @@ export type Database = {
           invoice_footer?: string | null
           logo_url?: string | null
           name: string
+          phone?: string | null
           proprietor_name?: string | null
           trade_license?: string | null
           upazila?: string | null
@@ -128,6 +132,7 @@ export type Database = {
           address?: string | null
           cover_url?: string | null
           created_at?: string | null
+          default_discount?: number | null
           district?: string | null
           division?: string | null
           drug_license?: string | null
@@ -136,6 +141,7 @@ export type Database = {
           invoice_footer?: string | null
           logo_url?: string | null
           name?: string
+          phone?: string | null
           proprietor_name?: string | null
           trade_license?: string | null
           upazila?: string | null
