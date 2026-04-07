@@ -242,7 +242,7 @@ const ShopProfile = () => {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 className="rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-start">
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
@@ -250,7 +250,22 @@ const ShopProfile = () => {
                 >
                   <option value="salesman">Salesman</option>
                   <option value="manager">Manager</option>
+                  <option value="owner">Owner</option>
                 </select>
+                {inviteRole === "owner" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center h-10 w-10 shrink-0">
+                          <AlertTriangle size={18} className="text-amber-500" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px] text-xs">
+                        Giving someone 'Owner' access allows them to manage all shop settings.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   onClick={handleInvite}
                   disabled={inviting || !inviteEmail.trim()}
