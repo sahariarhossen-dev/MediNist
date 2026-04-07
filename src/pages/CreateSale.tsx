@@ -543,8 +543,8 @@ const CreateSale = () => {
                       if (!isNaN(num) && num >= 0 && num <= 100) {
                         setDiscountPercent(num);
                       } else {
-                        setDiscountPercent(DEFAULT_DISCOUNT_PERCENT);
-                        setDiscountInput(String(DEFAULT_DISCOUNT_PERCENT));
+                        setDiscountPercent(10);
+                        setDiscountInput("10");
                       }
                       setEditingDiscount(false);
                     }} className="text-emerald-600 hover:text-emerald-700 transition">
