@@ -1,56 +1,112 @@
 
 
-## Plan: Redesign Sales Page to Match Reference Layout
+## Plan: Shop Profile Page with Staff Management
 
-### Changes — `src/pages/CreateSale.tsx`
+### Overview
+Create a new `/shop-profile` page with shop info editing, staff invite system, staff list, and billing customization. Requires 2 new database tables, a new edge function for invitations, and a new page component.
 
-**1. Expanded Product Row Redesign (lines 393-451)**
+### Database Migrations
 
-Replace the current expanded card with a new 3-column grid layout:
+**Migration 1 — Add columns to `pharmacies` table + create `shop_staff` table:**
 
-```text
-┌─────────────────────────────────────────┐
-│ sergel 20  capsule   MRP 10  healthcarear│
-│ 🗑 stk 11:5:10      10*20=200৳  [- 20 +]│
-└─────────────────────────────────────────┘
+```sql
+-- Add new columns to pharmacies
+ALTER TABLE pharmacies
+  ADD COLUMN IF NOT EXISTS logo_url text,
+  ADD COLUMN IF NOT EXISTS cover_url text,
+  ADD COLUMN IF NOT EXISTS drug_license text,
+  ADD COLUMN IF NOT EXISTS trade_license text,
+  ADD COLUMN IF NOT EXISTS invoice_footer text;
+
+-- Create shop_staff table
+CREATE TABLE shop_staff (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  pharmacy_id uuid NOT NULL,
+  email text NOT NULL,
+  role text NOT NULL DEFAULT 'salesman',
+  status text NOT NULL DEFAULT 'pending',
+  invited_by uuid NOT NULL,
+  user_id uuid,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(pharmacy_id, email)
+);
+
+ALTER TABLE shop_staff ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Staff accessible by pharmacy members"
+  ON shop_staff FOR ALL TO authenticated
+  USING (pharmacy_id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()));
 ```
 
-Structure:
-- **Line 1**: Three sections in a single flex row
-  - Left: Product name (`text-base font-bold`) + product type tag (`text-red-500 text-[11px]`) as superscript
-  - Center: `MRP {price}` label (`font-bold`)
-  - Right: Company name in teal/emerald color (`text-emerald-600 text-[11px]`)
-- **Line 2**: Three sections in a single flex row
-  - Left: Red trash icon + `stk X:Y:Z` in gray text
-  - Center: Calculation string `{qty}*{price}={total}৳`
-  - Right: Quantity controller in a bold rounded-black bordered box (`border-2 border-gray-900 rounded-xl`) with larger `-` / `+` buttons and bold quantity number
+**Migration 2 — Add UPDATE policy to pharmacies:**
 
-- Increase padding to `p-4` for more vertical breathing room
-- Trash icon: use `text-red-500` instead of emerald
-- Quantity box: `border-2 border-gray-900 rounded-xl`, font-bold quantity text, larger touch targets (`w-8 h-8`)
+```sql
+CREATE POLICY "Pharmacy admins can update their pharmacy"
+  ON pharmacies FOR UPDATE TO authenticated
+  USING (id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()))
+  WITH CHECK (id = (SELECT pharmacy_id FROM profiles WHERE id = auth.uid()));
+```
 
-**2. Collapsed Row (lines 454-475)**
+### Storage
 
-- Add `popular` tag in red below product name (when product_type exists)
-- Keep numbering, show `strip_per_pack*pcs_per_strip` info between name and price
-- Price right-aligned with `font-bold`
+Create a `pharmacy-assets` public bucket for logo and cover images.
 
-**3. Summary Section Update (lines 481-495)**
+### Edge Function: `invite-staff`
 
-- Subtotal line: show individual item totals summed as `{itemTotal1} + {itemTotal2} = {subtotal} ৳`
-- Discount and Net Total remain the same
-- Net Total value in emerald-600 with larger font
+New edge function at `supabase/functions/invite-staff/index.ts`:
+- Accepts `{ email, role }` in request body
+- Validates the caller is an admin (checks `profiles.role = 'admin'`)
+- Uses `supabase.auth.admin.inviteUserByEmail()` to send invitation
+- Inserts a row into `shop_staff` with status `pending`
+- Returns success/error
 
-**4. Search Bar (lines 323-343)**
+### New Page: `src/pages/ShopProfile.tsx`
 
-- Replace the search icon section with just a clear `X` button on the right when query exists
-- Remove the `Search` icon divider — show `X` only
+**Structure:**
 
-**5. Footer Buttons (lines 499-515)**
+1. **Header** — Back arrow + "Shop Profile" title
 
-- Add sparkle icon (✦) next to "Complete Sale" text
-- Keep existing Draft/Complete styling
+2. **Cover & Logo Section**
+   - Cover image banner (uploadable, 200px height)
+   - Logo overlay (rounded, uploadable, positioned bottom-left of cover)
 
-### Files Modified
-- `src/pages/CreateSale.tsx` — restructure expanded row, update summary display, refine search bar
+3. **Shop Info Card** (`rounded-3xl`, emerald accents)
+   - Editable fields: Pharmacy Name, Drug License, Trade License, Full Address
+   - Edit/Save toggle with pencil/check icons
+   - Updates `pharmacies` table
+
+4. **Staff Management Card**
+   - "Manage Staff" heading
+   - Email input + role dropdown (Manager/Salesman) + "Send Invitation" button
+   - Calls `invite-staff` edge function on click
+   - Staff list below: fetches from `shop_staff` table
+   - Each row: Email, Role badge, Status badge (Active/Pending), Trash icon to remove
+
+5. **Billing Customization Card**
+   - Textarea for "Invoice Footer Note"
+   - Save button, updates `pharmacies.invoice_footer`
+
+6. Mobile responsive, white background, emerald-600 accents
+
+### Route Registration
+
+Add to `App.tsx`:
+```
+<Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
+```
+
+Add navigation link in `More.tsx` menu items.
+
+### Files Modified/Created
+- `supabase/migrations/` — 2 migration files (pharmacies columns + shop_staff table)
+- `supabase/functions/invite-staff/index.ts` — new edge function
+- `src/pages/ShopProfile.tsx` — new page
+- `src/App.tsx` — add route
+- `src/pages/More.tsx` — add menu item
+
+### Technical Details
+- Image uploads use Supabase Storage (`pharmacy-assets` bucket)
+- Staff invitation uses `auth.admin.inviteUserByEmail()` via service role in edge function
+- Only users with `role = 'admin'` in profiles can invite staff or edit shop info
+- The edge function validates admin status server-side before sending invitations
 
