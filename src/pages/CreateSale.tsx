@@ -460,7 +460,7 @@ const CreateSale = () => {
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">
                       {item.medicine.name}
                       {item.medicine.product_type && (
-                        <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
+                        <span className="ml-1 text-[10px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
                       )}
                     </p>
                     <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
