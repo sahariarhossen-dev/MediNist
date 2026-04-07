@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Pencil, Check } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +23,7 @@ interface CartItem {
   quantity: number;
 }
 
-const DISCOUNT_PERCENT = 10;
+const DEFAULT_DISCOUNT_PERCENT = 10;
 
 const CreateSale = () => {
   const navigate = useNavigate();
@@ -39,6 +39,9 @@ const CreateSale = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(DEFAULT_DISCOUNT_PERCENT);
+  const [editingDiscount, setEditingDiscount] = useState(false);
+  const [discountInput, setDiscountInput] = useState(String(DEFAULT_DISCOUNT_PERCENT));
 
   // Load draft sale if URL has ?draft=SALE_ID
   useEffect(() => {
@@ -171,7 +174,7 @@ const CreateSale = () => {
     () => cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0),
     [cartItems]
   );
-  const discountAmount = useMemo(() => Math.round(subtotal * DISCOUNT_PERCENT / 100), [subtotal]);
+  const discountAmount = useMemo(() => Math.round(subtotal * discountPercent / 100), [subtotal, discountPercent]);
   const netTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
 
   const saveSale = async (status: "draft" | "completed") => {
@@ -194,7 +197,7 @@ const CreateSale = () => {
           .update({
             sale_type: saleType,
             subtotal,
-            discount_percent: DISCOUNT_PERCENT,
+            discount_percent: discountPercent,
             discount_amount: discountAmount,
             total: netTotal,
             status,
@@ -215,7 +218,7 @@ const CreateSale = () => {
             user_id: profile.id,
             sale_type: saleType,
             subtotal,
-            discount_percent: DISCOUNT_PERCENT,
+            discount_percent: discountPercent,
             discount_amount: discountAmount,
             total: netTotal,
             status,
@@ -491,7 +494,49 @@ const CreateSale = () => {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500 mx-[35px]">Discount ({DISCOUNT_PERCENT}%)</span>
+              <span className="text-sm font-medium text-gray-500 mx-[35px] flex items-center gap-1.5">
+                Discount
+                {!editingDiscount ? (
+                  <>
+                    <span>({discountPercent}%)</span>
+                    <button onClick={() => { setEditingDiscount(true); setDiscountInput(String(discountPercent)); }} className="text-gray-400 hover:text-gray-600 transition">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={discountInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDiscountInput(val);
+                        const num = parseFloat(val);
+                        if (!isNaN(num) && num >= 0 && num <= 100) {
+                          setDiscountPercent(num);
+                        }
+                      }}
+                      className="w-12 text-xs text-center border border-gray-200 rounded-md px-1 py-0.5 outline-none focus:border-gray-400 bg-transparent"
+                      autoFocus
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-xs">%</span>
+                    <button onClick={() => {
+                      const num = parseFloat(discountInput);
+                      if (!isNaN(num) && num >= 0 && num <= 100) {
+                        setDiscountPercent(num);
+                      } else {
+                        setDiscountPercent(DEFAULT_DISCOUNT_PERCENT);
+                        setDiscountInput(String(DEFAULT_DISCOUNT_PERCENT));
+                      }
+                      setEditingDiscount(false);
+                    }} className="text-emerald-600 hover:text-emerald-700 transition">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                )}
+              </span>
               <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
