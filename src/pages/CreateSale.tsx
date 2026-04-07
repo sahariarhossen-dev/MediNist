@@ -404,9 +404,9 @@ const CreateSale = () => {
                           <span className="ml-1 text-[11px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">MRP {unitPrice}</span>
+                      <span className="flex-shrink-0 text-right mx-[25px] text-secondary-foreground text-xs font-medium">MRP : {unitPrice}</span>
                       {item.medicine.company_name && (
-                        <span className="text-[11px] text-emerald-600 font-medium flex-shrink-0">{item.medicine.company_name}</span>
+                        <span className="text-[11px] text-emerald-600 flex-shrink-0 font-medium mx-[10px]">{item.medicine.company_name}</span>
                       )}
                     </div>
                     {/* Line 2: Trash+STK | Calculation | Qty controller */}
@@ -420,10 +420,10 @@ const CreateSale = () => {
                         </button>
                         <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
-                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
                         {item.quantity}*{unitPrice}={lineTotal}৳
                       </span>
-                      <div className="flex items-center border-2 border-gray-900 rounded-xl overflow-hidden flex-shrink-0">
+                      <div className="flex items-center border-gray-900 rounded-xl overflow-hidden flex-shrink-0 border-solid border">
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
                           className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
@@ -435,7 +435,7 @@ const CreateSale = () => {
                           min={1}
                           value={item.quantity}
                           onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                          className="w-9 text-center text-sm font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1"
+                          className="w-9 font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1 text-xs text-right"
                         />
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
