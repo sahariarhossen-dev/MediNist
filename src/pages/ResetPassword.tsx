@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,45 +22,15 @@ const getPasswordStrength = (pw: string) => {
   return { label: "Weak", color: "text-red-500", percent: 33 };
 };
 
-type PageState = "loading" | "ready" | "expired";
-
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const { user, isPasswordRecovery } = useAuth();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [pageState, setPageState] = useState<PageState>("loading");
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => {
-    // Set a timeout — if we don't get a recovery event within 5s, mark as expired
-    timeoutRef.current = setTimeout(() => {
-      setPageState((prev) => (prev === "loading" ? "expired" : prev));
-    }, 5000);
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" && session) {
-        clearTimeout(timeoutRef.current);
-        setPageState("ready");
-      }
-    });
-
-    // Also check hash immediately for recovery token
-    const hash = window.location.hash;
-    if (hash && hash.includes("type=recovery")) {
-      // Supabase client will process the hash and fire PASSWORD_RECOVERY event
-      // We just wait for the event above
-    } else if (!hash || !hash.includes("access_token")) {
-      // No token at all — expired/invalid
-      clearTimeout(timeoutRef.current);
-      setPageState("expired");
-    }
-
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeoutRef.current);
-    };
-  }, []);
+  const isReady = !!user && isPasswordRecovery;
+  const isExpired = !user && !isPasswordRecovery;
 
   const strength = getPasswordStrength(password);
   const canUpdate = strength.label !== "Weak";
@@ -72,7 +43,8 @@ const ResetPassword = () => {
       toast.error(error.message);
     } else {
       toast.success("Password updated successfully!");
-      navigate("/");
+      // Force reload to clear recovery state
+      window.location.href = "/";
     }
     setUpdating(false);
   };
@@ -86,21 +58,19 @@ const ResetPassword = () => {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-blue-600 tracking-tight">Medinist</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {pageState === "ready" && "Set your new password"}
-            {pageState === "loading" && "Verifying reset link..."}
-            {pageState === "expired" && "Reset link expired"}
+            {isReady ? "Set your new password" : isExpired ? "Reset link expired" : "Verifying reset link..."}
           </p>
         </div>
 
         <Card className="p-6 border-0 shadow-sm rounded-xl bg-white">
-          {pageState === "loading" && (
+          {!isReady && !isExpired && (
             <div className="text-center space-y-3 py-6">
               <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
               <p className="text-sm text-gray-500">Please wait...</p>
             </div>
           )}
 
-          {pageState === "expired" && (
+          {isExpired && (
             <div className="text-center space-y-4 py-6">
               <ShieldX className="h-12 w-12 text-red-400 mx-auto" />
               <p className="text-sm text-gray-600">
@@ -112,7 +82,7 @@ const ResetPassword = () => {
             </div>
           )}
 
-          {pageState === "ready" && (
+          {isReady && (
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">New Password</label>

@@ -16,6 +16,7 @@ interface AuthContextType {
   profile: Profile | null;
   pharmacyName: string | null;
   loading: boolean;
+  isPasswordRecovery: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   pharmacyName: null,
   loading: true,
+  isPasswordRecovery: false,
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -36,6 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [pharmacyName, setPharmacyName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
     const { data: profileData } = await supabase
@@ -66,6 +69,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (event === "PASSWORD_RECOVERY") {
+          setIsPasswordRecovery(true);
+        }
         if (session?.user) {
           setUser(session.user);
           setTimeout(() => fetchProfile(session.user.id), 0);
@@ -97,7 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, isPasswordRecovery, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
