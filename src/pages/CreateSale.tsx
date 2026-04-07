@@ -407,38 +407,44 @@ const CreateSale = () => {
                         <span className="text-[10px] text-secondary flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
-                    <div className="gap-2 mt-2 flex items-center justify-start">
-                      <button
-                        onClick={() => removeFromCart(item.medicine.id)}
-                        className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
-                      </button>
-                      <span className="text-[10px] font-mono font-bold text-primary">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
-                      <span className="text-[10px] text-primary font-medium">MRP {unitPrice}</span>
-                      <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold my-0 mx-[10px] px-[6px] py-[2px]">
-                        {item.quantity}×{unitPrice}={lineTotal}৳
-                      </span>
-                      <div className="ml-auto flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
+                    <div className="flex flex-col gap-1.5 mt-2">
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
+                          onClick={() => removeFromCart(item.medicine.id)}
+                          className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
                         >
-                          <Minus className="w-3 h-3 text-emerald-600" />
+                          <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
                         </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                          className="w-8 text-center text-xs font-bold text-gray-900 outline-none bg-transparent border-x border-emerald-100 py-1"
-                        />
-                        <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
-                          className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
-                        >
-                          <Plus className="w-3 h-3 text-emerald-600" />
-                        </button>
+                        <span className="text-[10px] font-mono font-bold text-primary flex-1 whitespace-nowrap">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold px-[6px] py-[2px]">
+                          {item.quantity}×{unitPrice}={lineTotal}৳
+                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[10px] text-primary font-medium">MRP {unitPrice}</span>
+                          <div className="flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
+                            <button
+                              onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
+                              className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
+                            >
+                              <Minus className="w-3 h-3 text-emerald-600" />
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
+                              className="w-8 text-center text-xs font-bold text-gray-900 outline-none bg-transparent border-x border-emerald-100 py-1"
+                            />
+                            <button
+                              onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
+                              className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
+                            >
+                              <Plus className="w-3 h-3 text-emerald-600" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
