@@ -415,7 +415,7 @@ const CreateSale = () => {
                         <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
                       </button>
                       <span className="text-[10px] font-mono font-bold text-primary">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
-                      <span className="text-[10px] text-secondary">MRP {unitPrice}</span>
+                      <span className="text-[10px] text-primary font-medium">MRP {unitPrice}</span>
                       <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold my-0 mx-[10px] px-[6px] py-[2px]">
                         {item.quantity}×{unitPrice}={lineTotal}৳
                       </span>
