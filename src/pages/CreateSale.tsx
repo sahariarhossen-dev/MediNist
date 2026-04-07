@@ -39,6 +39,9 @@ const CreateSale = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(DEFAULT_DISCOUNT_PERCENT);
+  const [editingDiscount, setEditingDiscount] = useState(false);
+  const [discountInput, setDiscountInput] = useState(String(DEFAULT_DISCOUNT_PERCENT));
 
   // Load draft sale if URL has ?draft=SALE_ID
   useEffect(() => {
