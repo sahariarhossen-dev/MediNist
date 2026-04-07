@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 
 interface PharmacyData {
@@ -35,7 +36,7 @@ const ShopProfile = () => {
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", address: "", drug_license: "", trade_license: "" });
+  const [editForm, setEditForm] = useState({ name: "", proprietor_name: "", address: "", drug_license: "", trade_license: "" });
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("salesman");
@@ -61,6 +62,7 @@ const ShopProfile = () => {
       setPharmacy(p);
       setEditForm({
         name: p.name || "",
+        proprietor_name: (p as any).proprietor_name || "",
         address: p.address || "",
         drug_license: p.drug_license || "",
         trade_license: p.trade_license || "",
@@ -98,6 +100,7 @@ const ShopProfile = () => {
     setSaving(true);
     const { error } = await supabase.from("pharmacies").update({
       name: editForm.name,
+      proprietor_name: editForm.proprietor_name,
       address: editForm.address,
       drug_license: editForm.drug_license,
       trade_license: editForm.trade_license,
@@ -206,6 +209,7 @@ const ShopProfile = () => {
           <div className="space-y-3">
             {[
               { label: "Pharmacy Name", key: "name" as const },
+              { label: "Proprietor Name", key: "proprietor_name" as const },
               { label: "Drug License No.", key: "drug_license" as const },
               { label: "Trade License No.", key: "trade_license" as const },
               { label: "Address", key: "address" as const },
@@ -238,7 +242,7 @@ const ShopProfile = () => {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 className="rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-start">
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
@@ -246,7 +250,22 @@ const ShopProfile = () => {
                 >
                   <option value="salesman">Salesman</option>
                   <option value="manager">Manager</option>
+                  <option value="owner">Owner</option>
                 </select>
+                {inviteRole === "owner" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center h-10 w-10 shrink-0">
+                          <AlertTriangle size={18} className="text-amber-500" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px] text-xs">
+                        Giving someone 'Owner' access allows them to manage all shop settings.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   onClick={handleInvite}
                   disabled={inviting || !inviteEmail.trim()}
