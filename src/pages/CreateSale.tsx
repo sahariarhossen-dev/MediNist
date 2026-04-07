@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Pencil, Check } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
