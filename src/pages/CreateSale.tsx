@@ -393,59 +393,54 @@ const CreateSale = () => {
 
               if (isExpanded) {
                 return (
-                  <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                        <Pill className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <p className="text-sm font-bold text-gray-900 flex-1 min-w-0">
+                  <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4">
+                    {/* Line 1: Name + type | MRP | Company */}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-base font-bold text-gray-900 min-w-0 flex-1">
                         {item.medicine.name}
                         {item.medicine.product_type && (
-                          <span className="ml-1 text-[10px] font-semibold text-orange-600 align-super">{item.medicine.product_type}</span>
+                          <span className="ml-1 text-[11px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
                         )}
                       </p>
+                      <span className="text-sm font-bold text-gray-900 flex-shrink-0">MRP {unitPrice}</span>
                       {item.medicine.company_name && (
-                        <span className="text-[10px] text-secondary flex-shrink-0">{item.medicine.company_name}</span>
+                        <span className="text-[11px] text-emerald-600 font-medium flex-shrink-0">{item.medicine.company_name}</span>
                       )}
                     </div>
-                    <div className="flex flex-col gap-1.5 mt-2">
-                      <div className="flex items-center gap-2">
+                    {/* Line 2: Trash+STK | Calculation | Qty controller */}
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         <button
                           onClick={() => removeFromCart(item.medicine.id)}
-                          className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition flex-shrink-0"
+                          className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono font-bold text-primary flex-1 whitespace-nowrap">STK {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-emerald-600 bg-yellow-100 rounded font-semibold px-[6px] py-[2px]">
-                          {item.quantity}×{unitPrice}={lineTotal}৳
-                        </span>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-[10px] text-primary font-medium">MRP {unitPrice}</span>
-                          <div className="flex items-center rounded-full border border-emerald-200 bg-white overflow-hidden flex-shrink-0">
-                            <button
-                              onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
-                              className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
-                            >
-                              <Minus className="w-3 h-3 text-emerald-600" />
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
-                              className="w-8 text-center text-xs font-bold text-gray-900 outline-none bg-transparent border-x border-emerald-100 py-1"
-                            />
-                            <button
-                              onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
-                              className="w-7 h-7 flex items-center justify-center hover:bg-emerald-50 transition"
-                            >
-                              <Plus className="w-3 h-3 text-emerald-600" />
-                            </button>
-                          </div>
-                        </div>
+                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                        {item.quantity}*{unitPrice}={lineTotal}৳
+                      </span>
+                      <div className="flex items-center border-2 border-gray-900 rounded-xl overflow-hidden flex-shrink-0">
+                        <button
+                          onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
+                        >
+                          <Minus className="w-3.5 h-3.5 text-gray-900" />
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
+                          className="w-9 text-center text-sm font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1"
+                        />
+                        <button
+                          onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-gray-900" />
+                        </button>
                       </div>
                     </div>
                   </div>
