@@ -16,6 +16,7 @@ interface AuthContextType {
   profile: Profile | null;
   pharmacyName: string | null;
   loading: boolean;
+  isPasswordRecovery: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
