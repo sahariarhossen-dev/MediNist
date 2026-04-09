@@ -1,47 +1,34 @@
 
 
-## Plan: Connect Inventory Search to Master Catalog & Validate Sales/Alert Logic
+## Plan: Restore "Add New Product" Button on Inventory Page
 
-### Current State
-- **Inventory page**: searches only the local `medicines` table (shop inventory)
-- **CatalogSearch**: separate page that searches `master_medicines` and adds to `medicines`
-- **CreateSale**: searches `medicines` table — already correct (only shop inventory)
-- **ShortItems**: queries `medicines` with threshold — already correct
+### Problem
+The previous refactor removed the "Add New Product" button that lets users manually add medicines not in the master catalog. Users need this option back, visible when the search bar is idle.
 
-### What Needs to Change
+### Changes
 
-**1. Inventory Page — Merge Master Catalog Search Inline** (`src/pages/Inventory.tsx`)
+**File: `src/pages/Inventory.tsx`**
 
-When the search bar is active, query `master_medicines` alongside local `medicines`:
-- Show **two sections** in search results: "In Your Inventory" (from `medicines`) and "From Catalog" (from `master_medicines`)
-- Tapping an inventory item expands the existing stock-update UI (current behavior)
-- Tapping a catalog item expands an inline quick-add row: quantity input + "Add" button
-- On add: insert into `medicines` with `pharmacy_id`, mapping fields exactly like CatalogSearch does (brand_name→name, company→company_name, parse pack_size→pcs_per_strip, etc.)
-- Duplicate check before insert (same name + company already in medicines)
-- After adding, refresh the local medicines list and collapse the card
-- Remove the separate "Add New Product" button that navigates to `/catalog-search` — the search bar now handles this directly
-- Keep the "Can't find it? Add manually" link at the bottom of catalog results
+1. **Add button below the header area** (after the search bar section, around line 341): Insert an "Add New Product" button that navigates to `/add-product` for manual entry.
 
-**2. Sales Page — No Changes Needed**
-CreateSale already queries only `medicines` (shop inventory). It already filters by `pharmacy_id`. The stock deduction logic on sale completion is already implemented. This is correct as-is.
+2. **Conditional visibility**: Wrap the button with `{!searchOpen && ( ... )}` so it only appears when the search input is not active. When searching, the button hides to maximize space for results.
 
-**3. Stock Alerts (ShortItems) — No Changes Needed**
-ShortItems already queries only `medicines` filtered by `pharmacy_id` with threshold logic (`stock_alert` field or default 5). This matches the requirement exactly — only shop inventory items appear.
+3. **Styling**: A full-width, touch-friendly button with `w-full py-3 rounded-xl` using a dashed border style and a `Plus` icon — modern, consistent with the existing card-based design. Example:
+   ```
+   <button className="w-full py-3 rounded-xl border-2 border-dashed border-primary/30 
+     text-primary font-medium flex items-center justify-center gap-2 
+     active:scale-[0.98] transition-all">
+     <Plus size={18} /> Add New Product
+   </button>
+   ```
 
-**4. Fetch Master Catalog Once for Performance**
-- Load all `master_medicines` on Inventory mount (same pattern as CatalogSearch — ~476 items, client-side filter)
-- Use `useMemo` with the search query to filter both local medicines and master catalog simultaneously
-- Exclude catalog items that already exist in local inventory (by matching brand_name to name)
+4. **Navigation**: On tap, calls `navigate("/add-product")` — the same manual entry form used for editing products. No logic changes to the AddProduct page.
 
 ### Files Modified
-- `src/pages/Inventory.tsx` — major refactor to add master catalog search inline
+- `src/pages/Inventory.tsx` — add ~10 lines for the conditional button between the search bar and the medicine list
 
-### No Database Changes Required
-All tables and RLS policies are already correct.
-
-### Technical Details
-- Master medicines fetched once on mount, stored in state
-- Local filtering with `useMemo` for instant results
-- Catalog→medicines field mapping reused from CatalogSearch: `parsePackSize()` and `computeStripPerPack()` utilities
-- The CatalogSearch page (`/catalog-search`) remains accessible as a standalone route but the primary flow is now through the Inventory search bar
+### What Stays the Same
+- Master catalog search-to-inventory flow (unchanged)
+- Edit product flow via long-press → navigate to `/add-product` with state (unchanged)
+- AddProduct page logic (unchanged)
 
