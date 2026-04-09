@@ -14,8 +14,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const productTypes = ["Tablet", "Capsule", "Syrup", "Injection", "Cream"] as const;
+const productTypes = ["Tablet", "Capsule", "Syrup", "Injection", "Cream", "Suspension", "Ointment"] as const;
 type ProductType = (typeof productTypes)[number];
+
+const getStrengthConfig = (type: ProductType | "") => {
+  switch (type) {
+    case "Tablet":
+    case "Capsule":
+    case "Injection":
+      return { label: "Strength", unit: "mg", placeholder: "e.g. 500" };
+    case "Syrup":
+    case "Suspension":
+      return { label: "Volume", unit: "ml", placeholder: "e.g. 100" };
+    case "Cream":
+    case "Ointment":
+      return { label: "Weight", unit: "gm", placeholder: "e.g. 15" };
+    default:
+      return null;
+  }
+};
+
+const getTypeIcon = (type: string) => {
+  switch (type) {
+    case "Tablet":
+    case "Capsule":
+      return <Pill size={16} />;
+    case "Syrup":
+    case "Suspension":
+      return <FlaskConical size={16} />;
+    case "Injection":
+      return <Syringe size={16} />;
+    case "Cream":
+    case "Ointment":
+      return <Package size={16} />;
+    default:
+      return null;
+  }
+};
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -27,15 +62,10 @@ const AddProduct = () => {
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [productType, setProductType] = useState<ProductType | "">("");
-  const [stripPerPack, setStripPerPack] = useState("");
-  const [pcsPerStrip, setPcsPerStrip] = useState("");
-  
-  const [productSize, setProductSize] = useState("");
-  const [totalQuantity, setTotalQuantity] = useState("");
+  const [strength, setStrength] = useState("");
   const [stockAlert, setStockAlert] = useState("");
   const [mrp, setMrp] = useState("");
 
-  // Restore form state from navigation
   useEffect(() => {
     const s = location.state;
     if (!s) return;
@@ -43,17 +73,12 @@ const AddProduct = () => {
     if (s.companyName) setCompanyName(s.companyName);
     if (s.name) setName(s.name);
     if (s.productType) setProductType(s.productType);
-    if (s.stripPerPack) setStripPerPack(s.stripPerPack);
-    if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
-    
-    if (s.productSize) setProductSize(s.productSize);
-    if (s.totalQuantity) setTotalQuantity(s.totalQuantity);
+    if (s.strength) setStrength(s.strength);
     if (s.stockAlert) setStockAlert(s.stockAlert);
     if (s.mrp) setMrp(s.mrp);
   }, []);
 
-  const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
-  const isLiquidOrCream = productType === "Syrup" || productType === "Injection" || productType === "Cream";
+  const strengthConfig = getStrengthConfig(productType);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -72,24 +97,19 @@ const AddProduct = () => {
       company_name: companyName.trim() || null,
       product_type: productType || null,
       pharmacy_id: profile.pharmacy_id,
-      strip_per_pack: isTabletOrCapsule && stripPerPack ? Number(stripPerPack) : null,
-      pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
-      stock_quantity: isLiquidOrCream && totalQuantity ? Number(totalQuantity) : 0,
-      product_size: isLiquidOrCream ? productSize.trim() || null : null,
+      product_size: strength.trim() ? `${strength.trim()}${strengthConfig?.unit || ""}` : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
     };
 
     let error;
     if (editId) {
-      // Update mode
       const { error: updateError } = await supabase
         .from("medicines")
         .update(payload)
         .eq("id", editId);
       error = updateError;
     } else {
-      // Insert mode
       const { error: insertError } = await supabase.from("medicines").insert(payload);
       error = insertError;
     }
@@ -100,22 +120,6 @@ const AddProduct = () => {
     } else {
       toast.success(editId ? "Product updated successfully!" : "Product added successfully!");
       navigate("/inventory", { replace: true });
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "Tablet":
-      case "Capsule":
-        return <Pill size={16} />;
-      case "Syrup":
-        return <FlaskConical size={16} />;
-      case "Injection":
-        return <Syringe size={16} />;
-      case "Cream":
-        return <Package size={16} />;
-      default:
-        return null;
     }
   };
 
@@ -135,40 +139,7 @@ const AddProduct = () => {
       </div>
 
       <div className="px-5 py-6 space-y-5 pb-12">
-        {/* Medicine Name */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground">Medicine Name *</Label>
-          <Input
-            placeholder="e.g. Napa Extra"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="rounded-xl bg-muted border-0 h-12"
-          />
-        </div>
-
-        {/* Company Name - clickable */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground">Company Name</Label>
-          <button
-            type="button"
-            onClick={() =>
-              navigate("/add-company", {
-                state: {
-                  formData: { editId, name, companyName, productType, stripPerPack, pcsPerStrip, productSize, totalQuantity, stockAlert, mrp },
-                },
-              })
-            }
-            className="w-full text-left rounded-xl bg-muted h-12 px-3 text-sm flex items-center"
-          >
-            {companyName ? (
-              <span className="text-foreground">{companyName}</span>
-            ) : (
-              <span className="text-muted-foreground">Select or add company</span>
-            )}
-          </button>
-        </div>
-
-        {/* Product Type */}
+        {/* 1. Product Type */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Product Type</Label>
           <Select value={productType} onValueChange={(v) => setProductType(v as ProductType)}>
@@ -187,90 +158,59 @@ const AddProduct = () => {
           </Select>
         </div>
 
-        {/* Conditional: Tablet / Capsule */}
-        {isTabletOrCapsule && (
-          <div className="space-y-4 p-4 bg-muted rounded-2xl">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Strip & Pack Details
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Strip per Pack</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 10"
-                  value={stripPerPack}
-                  onChange={(e) => setStripPerPack(e.target.value)}
-                  className="rounded-xl bg-background border-0 h-11"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 10"
-                  value={pcsPerStrip}
-                  onChange={(e) => setPcsPerStrip(e.target.value)}
-                  className="rounded-xl bg-background border-0 h-11"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Conditional: Syrup / Injection / Cream */}
-        {isLiquidOrCream && (
-          <div className="space-y-4 p-4 bg-muted rounded-2xl">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Product Details
-            </p>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Product Size (ml / gm)</Label>
-              <Input
-                placeholder="e.g. 100ml"
-                value={productSize}
-                onChange={(e) => setProductSize(e.target.value)}
-                className="rounded-xl bg-background border-0 h-11"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Total Quantity in Stock</Label>
-              <Input
-                type="number"
-                placeholder="e.g. 20"
-                value={totalQuantity}
-                onChange={(e) => setTotalQuantity(e.target.value)}
-                className="rounded-xl bg-background border-0 h-11"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Stock Alert */}
+        {/* 2. Medicine Name */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-            <AlertTriangle size={14} className="text-destructive" />
-            Stock Alert Level
-          </Label>
-          {isTabletOrCapsule && (
-            <p className="text-xs text-muted-foreground">Enter the minimum number of Pieces (e.g., 30) to get a low stock alert.</p>
-          )}
-          {isLiquidOrCream && (
-            <p className="text-xs text-muted-foreground">Enter the minimum number of Files/Units (e.g., 5) to get a low stock alert.</p>
-          )}
-          {!isTabletOrCapsule && !isLiquidOrCream && (
-            <p className="text-xs text-muted-foreground">Select a product type first, then set the alert level.</p>
-          )}
+          <Label className="text-sm font-medium text-foreground">Medicine Name *</Label>
           <Input
-            type="number"
-            placeholder={isTabletOrCapsule ? "Enter minimum pieces" : isLiquidOrCream ? "Enter minimum files" : "e.g. 10"}
-            value={stockAlert}
-            onChange={(e) => setStockAlert(e.target.value)}
+            placeholder="e.g. Napa Extra"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="rounded-xl bg-muted border-0 h-12"
           />
         </div>
 
-        {/* MRP */}
+        {/* 3. Strength / Volume / Weight */}
+        {strengthConfig && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-foreground">{strengthConfig.label}</Label>
+            <div className="relative">
+              <Input
+                type="number"
+                placeholder={strengthConfig.placeholder}
+                value={strength}
+                onChange={(e) => setStrength(e.target.value)}
+                className="rounded-xl bg-muted border-0 h-12 pr-14"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground bg-background px-2 py-1 rounded-lg">
+                {strengthConfig.unit}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Company Name */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-foreground">Company Name</Label>
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/add-company", {
+                state: {
+                  formData: { editId, name, companyName, productType, strength, stockAlert, mrp },
+                },
+              })
+            }
+            className="w-full text-left rounded-xl bg-muted h-12 px-3 text-sm flex items-center"
+          >
+            {companyName ? (
+              <span className="text-foreground">{companyName}</span>
+            ) : (
+              <span className="text-muted-foreground">Select or add company</span>
+            )}
+          </button>
+        </div>
+
+        {/* 5. MRP */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">MRP (৳)</Label>
           <Input
@@ -278,6 +218,24 @@ const AddProduct = () => {
             placeholder="e.g. 12.50"
             value={mrp}
             onChange={(e) => setMrp(e.target.value)}
+            className="rounded-xl bg-muted border-0 h-12"
+          />
+        </div>
+
+        {/* 6. Stock Alert Level */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+            <AlertTriangle size={14} className="text-destructive" />
+            Stock Alert Level
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Set the minimum quantity to trigger a low stock alert.
+          </p>
+          <Input
+            type="number"
+            placeholder="e.g. 10"
+            value={stockAlert}
+            onChange={(e) => setStockAlert(e.target.value)}
             className="rounded-xl bg-muted border-0 h-12"
           />
         </div>
