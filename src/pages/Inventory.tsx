@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,32 @@ interface Medicine {
   stock_alert: number | null;
 }
 
+interface MasterMedicine {
+  id: string;
+  brand_name: string;
+  generic_name: string | null;
+  strength: string | null;
+  unit_price: number | null;
+  company: string | null;
+  format: string | null;
+  pack_size: string | null;
+  box_size: string | null;
+}
+
+const parsePackSize = (val: string | null): number | null => {
+  if (!val || val === "N/A") return null;
+  const match = val.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const computeStripPerPack = (packSize: string | null, boxSize: string | null): number | null => {
+  const pcs = parsePackSize(packSize);
+  const box = parsePackSize(boxSize);
+  if (!pcs || !box || pcs === 0) return null;
+  const result = Math.floor(box / pcs);
+  return result > 0 ? result : null;
+};
+
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null }) => {
   const display = totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip);
   const parts = display.split(" : ");
@@ -36,13 +62,17 @@ const Inventory = () => {
   const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedCatalogId, setExpandedCatalogId] = useState<string | null>(null);
   const [unitInputs, setUnitInputs] = useState<Record<string, string>>({});
+  const [catalogQty, setCatalogQty] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [addingCatalog, setAddingCatalog] = useState(false);
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
@@ -53,20 +83,20 @@ const Inventory = () => {
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    const fetchMedicines = async () => {
+    const fetchData = async () => {
       if (!profile?.pharmacy_id) {
         setLoading(false);
         return;
       }
-      const { data } = await supabase
-        .from("medicines")
-        .select("*")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .order("name", { ascending: true });
-      setMedicines(data || []);
+      const [medsRes, catalogRes] = await Promise.all([
+        supabase.from("medicines").select("*").eq("pharmacy_id", profile.pharmacy_id).order("name", { ascending: true }),
+        supabase.from("master_medicines").select("*").order("brand_name", { ascending: true }),
+      ]);
+      setMedicines(medsRes.data || []);
+      setCatalog(catalogRes.data || []);
       setLoading(false);
     };
-    fetchMedicines();
+    fetchData();
   }, [profile?.pharmacy_id]);
 
   useEffect(() => {
@@ -75,6 +105,7 @@ const Inventory = () => {
     }
   }, [searchOpen]);
 
+  // Filter local medicines
   const filteredMedicines = useMemo(
     () =>
       searchQuery
@@ -85,6 +116,20 @@ const Inventory = () => {
     [medicines, searchQuery]
   );
 
+  // Filter catalog results (exclude items already in local inventory)
+  const filteredCatalog = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
+    return catalog.filter(
+      (m) =>
+        (m.brand_name.toLowerCase().includes(q) ||
+          (m.generic_name && m.generic_name.toLowerCase().includes(q)) ||
+          (m.company && m.company.toLowerCase().includes(q))) &&
+        !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
+    );
+  }, [catalog, medicines, searchQuery]);
+
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
@@ -92,7 +137,9 @@ const Inventory = () => {
     setSearchOpen(false);
     setSearchQuery("");
     setExpandedId(null);
+    setExpandedCatalogId(null);
     setUnitInputs({});
+    setCatalogQty("");
   };
 
   const handleClearSearch = () => {
@@ -107,6 +154,14 @@ const Inventory = () => {
     }
     if (!searchOpen) return;
     setExpandedId((prev) => (prev === id ? null : id));
+    setExpandedCatalogId(null);
+    setCatalogQty("");
+  };
+
+  const handleCatalogCardClick = (id: string) => {
+    setExpandedCatalogId((prev) => (prev === id ? null : id));
+    setExpandedId(null);
+    setCatalogQty("");
   };
 
   const getCalculatedStock = (med: Medicine) => {
@@ -118,25 +173,52 @@ const Inventory = () => {
   const handleConfirmStock = async (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
     if (units <= 0) return;
-
     setSavingId(med.id);
     const newStock = getCalculatedStock(med);
-    const { error } = await supabase
-      .from("medicines")
-      .update({ stock_quantity: newStock })
-      .eq("id", med.id);
-
+    const { error } = await supabase.from("medicines").update({ stock_quantity: newStock }).eq("id", med.id);
     if (error) {
       toast.error("Failed to update stock");
     } else {
       toast.success(`${med.name} stock updated`);
-      setMedicines((prev) =>
-        prev.map((m) => (m.id === med.id ? { ...m, stock_quantity: newStock } : m))
-      );
+      setMedicines((prev) => prev.map((m) => (m.id === med.id ? { ...m, stock_quantity: newStock } : m)));
       setUnitInputs((prev) => ({ ...prev, [med.id]: "" }));
       setExpandedId(null);
     }
     setSavingId(null);
+  };
+
+  const handleAddFromCatalog = async (med: MasterMedicine) => {
+    if (!profile?.pharmacy_id) {
+      toast.error("No pharmacy linked");
+      return;
+    }
+    setAddingCatalog(true);
+    const pcsPerStrip = parsePackSize(med.pack_size);
+    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+    const qty = parseInt(catalogQty, 10) || 0;
+
+    const { data: inserted, error } = await supabase.from("medicines").insert({
+      pharmacy_id: profile.pharmacy_id,
+      name: med.brand_name,
+      company_name: med.company || null,
+      product_type: med.format || null,
+      price: med.unit_price || null,
+      stock_quantity: qty,
+      pcs_per_strip: pcsPerStrip,
+      strip_per_pack: stripPerPack,
+    }).select().single();
+
+    if (error) {
+      toast.error("Failed to add product");
+    } else {
+      toast.success(`${med.brand_name} added to inventory`);
+      if (inserted) {
+        setMedicines((prev) => [...prev, inserted as Medicine].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+      setExpandedCatalogId(null);
+      setCatalogQty("");
+    }
+    setAddingCatalog(false);
   };
 
   // Long press handlers
@@ -206,17 +288,12 @@ const Inventory = () => {
       {/* Top Header */}
       <div className="px-5 pt-6 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/")}
-            className="p-2 rounded-full bg-primary text-primary-foreground"
-          >
+          <button onClick={() => navigate("/")} className="p-2 rounded-full bg-primary text-primary-foreground">
             <ArrowLeft size={18} />
           </button>
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">Medinist</h1>
-            <p className="text-xs mt-0.5 text-secondary-foreground">
-              {pharmacyName || "Your Pharmacy"}
-            </p>
+            <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -231,7 +308,7 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Add Inventory Title + Search */}
+      {/* Search Bar */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3">
         {searchOpen ? (
           <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
@@ -240,47 +317,27 @@ const Inventory = () => {
                 ref={searchRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search medicines..."
+                placeholder="Search inventory & catalog..."
                 className="flex-1 h-10 rounded-xl border-muted bg-muted pr-9 focus-visible:ring-primary"
               />
               {searchQuery && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={handleClearSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                   <X size={16} />
                 </button>
               )}
             </div>
-            <button
-              onClick={handleCloseSearch}
-              className="p-2 rounded-full bg-muted text-foreground flex-shrink-0"
-            >
+            <button onClick={handleCloseSearch} className="p-2 rounded-full bg-muted text-foreground flex-shrink-0">
               <X size={18} />
             </button>
           </div>
         ) : (
           <>
             <h2 className="text-lg font-bold text-foreground">Add Inventory</h2>
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="p-2 rounded-full bg-muted"
-            >
+            <button onClick={() => setSearchOpen(true)} className="p-2 rounded-full bg-muted">
               <Search size={18} className="text-foreground" />
             </button>
           </>
         )}
-      </div>
-
-      {/* Add New Product Button */}
-      <div className="px-5 pb-4">
-        <button
-          onClick={() => navigate("/catalog-search")}
-          className="w-full flex items-center justify-center gap-2 bg-muted rounded-xl py-3.5 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
-        >
-          <Plus size={18} />
-          Add New Product
-        </button>
       </div>
 
       {/* Medicine List */}
@@ -289,166 +346,214 @@ const Inventory = () => {
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full rounded-2xl" />
           ))
-        ) : filteredMedicines.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Pill size={48} className="text-muted-foreground mb-4" />
-            <p className="text-muted-foreground font-medium">
-              {searchQuery ? "No medicines found." : "No medicines added yet."}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {searchQuery ? "Try a different search term." : "Tap + to start."}
-            </p>
-          </div>
         ) : (
-          filteredMedicines.map((med) => {
-            const isExpanded = expandedId === med.id;
-            const units = Number(unitInputs[med.id] || 0);
-            const calculatedStock = getCalculatedStock(med);
+          <>
+            {/* Section: In Your Inventory */}
+            {filteredMedicines.length === 0 && !searchQuery ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Pill size={48} className="text-muted-foreground mb-4" />
+                <p className="text-muted-foreground font-medium">No medicines added yet.</p>
+                <p className="text-sm text-muted-foreground mt-1">Use the search to find and add medicines.</p>
+              </div>
+            ) : (
+              <>
+                {searchQuery && filteredMedicines.length > 0 && (
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">
+                    In Your Inventory ({filteredMedicines.length})
+                  </p>
+                )}
+                {filteredMedicines.map((med) => {
+                  const isExpanded = expandedId === med.id;
+                  const units = Number(unitInputs[med.id] || 0);
+                  const calculatedStock = getCalculatedStock(med);
 
-            return (
-              <div
-                key={med.id}
-                onClick={() => handleCardClick(med.id)}
-                onTouchStart={(e) => startPress(med.id, e.touches[0].clientX, e.touches[0].clientY)}
-                onTouchEnd={cancelPress}
-                onTouchMove={handleTouchMove}
-                onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
-                onMouseUp={cancelPress}
-                onMouseLeave={cancelPress}
-                className={`bg-muted rounded-2xl transition-all duration-150 overflow-hidden select-none ${
-                  searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
-                } ${pressingId === med.id ? "scale-95" : ""}`}
-              >
-                {/* Row 1: Basic info */}
-                <div className="flex items-center gap-4 p-4">
-                  <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Pill size={20} className="text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground truncate">{med.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {med.company_name || "—"}
+                  return (
+                    <div
+                      key={med.id}
+                      onClick={() => handleCardClick(med.id)}
+                      onTouchStart={(e) => startPress(med.id, e.touches[0].clientX, e.touches[0].clientY)}
+                      onTouchEnd={cancelPress}
+                      onTouchMove={handleTouchMove}
+                      onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
+                      onMouseUp={cancelPress}
+                      onMouseLeave={cancelPress}
+                      className={`bg-muted rounded-2xl transition-all duration-150 overflow-hidden select-none ${
+                        searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
+                      } ${pressingId === med.id ? "scale-95" : ""}`}
+                    >
+                      <div className="flex items-center gap-4 p-4">
+                        <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Pill size={20} className="text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground truncate">{med.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{med.company_name || "—"}</p>
+                        </div>
+                        {isExpanded ? (
+                          <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <Input
+                              ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
+                              type="number"
+                              min={0}
+                              placeholder="0"
+                              value={unitInputs[med.id] || ""}
+                              onChange={(e) => setUnitInputs((prev) => ({ ...prev, [med.id]: e.target.value }))}
+                              className="w-16 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
+                            />
+                            <button
+                              onClick={() => handleConfirmStock(med)}
+                              disabled={units <= 0 || savingId === med.id}
+                              className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
+                            >
+                              <Check size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex-shrink-0">
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                          </div>
+                        )}
+                      </div>
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
+                            <span className="text-foreground">৳ {med.price ?? "—"}</span>
+                            <span className="text-muted-foreground">
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                            </span>
+                            <span className="text-primary font-semibold">
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Section: From Catalog */}
+                {searchQuery && filteredCatalog.length > 0 && (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">
+                      From Catalog ({filteredCatalog.length})
                     </p>
-                  </div>
+                    {filteredCatalog.map((med) => {
+                      const isExpanded = expandedCatalogId === med.id;
+                      return (
+                        <div
+                          key={med.id}
+                          onClick={() => handleCatalogCardClick(med.id)}
+                          className={`bg-muted rounded-2xl overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
+                            isExpanded ? "ring-1 ring-primary/30" : ""
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 p-3">
+                            <div className="flex-shrink-0 h-11 w-11 rounded-full bg-accent flex items-center justify-center">
+                              <Plus size={20} className="text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-foreground text-sm truncate">{med.brand_name}</p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{med.generic_name || "—"}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {med.company && (
+                                  <span className="text-[11px] text-muted-foreground truncate max-w-[50%]">{med.company}</span>
+                                )}
+                                {med.strength && (
+                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.strength}</span>
+                                )}
+                                {med.format && (
+                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.format}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              <p className="font-bold text-foreground text-sm">৳{med.unit_price ?? 0}</p>
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
+                                <span className="text-xs text-muted-foreground flex-shrink-0">Qty (pcs):</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  placeholder="0"
+                                  value={catalogQty}
+                                  onChange={(e) => setCatalogQty(e.target.value)}
+                                  className="flex-1 h-9 text-center rounded-lg border-border text-sm font-semibold"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleAddFromCatalog(med)}
+                                  disabled={addingCatalog}
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-50 flex-shrink-0"
+                                >
+                                  {addingCatalog ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                                  Add
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
 
-                  {isExpanded ? (
-                    <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <Input
-                        ref={(el) => {
-                          if (el && isExpanded) {
-                            setTimeout(() => el.focus(), 50);
-                          }
-                        }}
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        value={unitInputs[med.id] || ""}
-                        onChange={(e) =>
-                          setUnitInputs((prev) => ({ ...prev, [med.id]: e.target.value }))
-                        }
-                        className="w-16 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
-                      />
-                      <button
-                        onClick={() => handleConfirmStock(med)}
-                        disabled={units <= 0 || savingId === med.id}
-                        className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
-                      >
-                        <Check size={16} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex-shrink-0">
-                      <TriUnitDisplay
-                        totalPcs={med.stock_quantity || 0}
-                        stripPerPack={med.strip_per_pack}
-                        pcsPerStrip={med.pcs_per_strip}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Row 2: Expanded details */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
-                      <span className="text-foreground">
-                        ৳ {med.price ?? "—"}
-                      </span>
-                      <span className="text-muted-foreground">
-                        pre-stock :{" "}
-                        <TriUnitDisplay
-                          totalPcs={med.stock_quantity || 0}
-                          stripPerPack={med.strip_per_pack}
-                          pcsPerStrip={med.pcs_per_strip}
-                        />
-                      </span>
-                      <span className="text-primary font-semibold">
-                        Current :{" "}
-                        <TriUnitDisplay
-                          totalPcs={calculatedStock}
-                          stripPerPack={med.strip_per_pack}
-                          pcsPerStrip={med.pcs_per_strip}
-                        />
-                      </span>
-                    </div>
+                {/* No results at all */}
+                {searchQuery && filteredMedicines.length === 0 && filteredCatalog.length === 0 && (
+                  <div className="text-center py-16">
+                    <Pill size={48} className="text-muted-foreground mb-4 mx-auto" />
+                    <p className="text-muted-foreground font-medium">No medicines found</p>
+                    <button
+                      onClick={() => navigate("/add-product")}
+                      className="mt-4 text-sm text-primary font-semibold underline-offset-2 hover:underline"
+                    >
+                      Can't find it? Add manually →
+                    </button>
                   </div>
                 )}
-              </div>
-            );
-          })
+
+                {/* Manual add link at bottom of catalog results */}
+                {searchQuery && filteredCatalog.length > 0 && (
+                  <button
+                    onClick={() => navigate("/add-product")}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-3"
+                  >
+                    Can't find it? Add manually →
+                  </button>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
 
       {/* Long Press Action Overlay */}
       {longPressMed && !deleteConfirmId && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setLongPressId(null)}
-        >
-          <div
-            className="bg-background rounded-2xl shadow-2xl w-[280px] p-5 animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setLongPressId(null)}>
+          <div className="bg-background rounded-2xl shadow-2xl w-[85%] max-w-[280px] p-5 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-bold text-foreground text-center mb-1 truncate">{longPressMed.name}</p>
             <p className="text-xs text-muted-foreground text-center mb-5 truncate">{longPressMed.company_name || "No company"}</p>
-
             <div className="space-y-2.5">
-              <button
-                onClick={() => handleEdit(longPressMed)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-muted hover:bg-accent transition-colors"
-              >
+              <button onClick={() => handleEdit(longPressMed)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-muted hover:bg-accent transition-colors">
                 <Pencil size={18} className="text-primary" />
                 <span className="text-sm font-semibold text-foreground">Edit Product</span>
               </button>
-              <button
-                onClick={() => setDeleteConfirmId(longPressMed.id)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 transition-colors"
-              >
+              <button onClick={() => setDeleteConfirmId(longPressMed.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 transition-colors">
                 <Trash2 size={18} className="text-destructive" />
                 <span className="text-sm font-semibold text-destructive">Delete Product</span>
               </button>
             </div>
-
-            <button
-              onClick={() => setLongPressId(null)}
-              className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              Cancel
-            </button>
+            <button onClick={() => setLongPressId(null)} className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground transition-colors py-2">Cancel</button>
           </div>
         </div>
       )}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmId && longPressMed && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }}
-        >
-          <div
-            className="bg-background rounded-2xl shadow-2xl w-[300px] p-6 animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }}>
+          <div className="bg-background rounded-2xl shadow-2xl w-[85%] max-w-[300px] p-6 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-center mb-4">
               <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
                 <Trash2 size={24} className="text-destructive" />
@@ -459,18 +564,8 @@ const Inventory = () => {
               Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }}
-                className="flex-1 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors"
-              >
-                Delete
-              </button>
+              <button onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }} className="flex-1 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-accent transition-colors">Cancel</button>
+              <button onClick={handleDeleteConfirm} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors">Delete</button>
             </div>
           </div>
         </div>
