@@ -340,6 +340,18 @@ const Inventory = () => {
         )}
       </div>
 
+      {/* Add New Product Button - visible only when not searching */}
+      {!searchOpen && (
+        <div className="px-5 mt-3">
+          <button
+            onClick={() => navigate("/add-product")}
+            className="w-full py-3 rounded-xl border-2 border-dashed border-primary/30 text-primary font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+          >
+            <Plus size={18} /> Add New Product
+          </button>
+        </div>
+      )}
+
       {/* Medicine List */}
       <div className="px-5 space-y-3">
         {loading ? (
