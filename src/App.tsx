@@ -19,6 +19,7 @@ import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
 import Profile from "./pages/Profile.tsx";
 import ShopProfile from "./pages/ShopProfile.tsx";
+import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="/create-sale" element={<ProtectedRoute><CreateSale /></ProtectedRoute>} />
             <Route path="/invoice/:saleId" element={<ProtectedRoute><Invoice /></ProtectedRoute>} />
             <Route path="/short-items" element={<ProtectedRoute><ShortItems /></ProtectedRoute>} />
+            <Route path="/catalog-search" element={<ProtectedRoute><CatalogSearch /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
