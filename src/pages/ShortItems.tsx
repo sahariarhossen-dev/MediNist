@@ -136,12 +136,12 @@ const ShortItems = () => {
               ) : (
                 displayedItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
-                    <td className="px-2 py-3 text-gray-500">{item.product_type ?? "—"}</td>
-                    <td className={`px-2 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
+                    <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">{item.name}</td>
+                    <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
+                    <td className={`px-1.5 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
                       {totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
+                    <td className="px-2 py-3 text-right text-gray-700">
                       ৳{Number(item.price ?? 0).toLocaleString()}
                     </td>
                   </tr>
