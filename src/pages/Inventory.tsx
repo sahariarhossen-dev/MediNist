@@ -309,7 +309,7 @@ const Inventory = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3">
+      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
         {searchOpen ? (
           <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
             <div className="relative flex-1">
@@ -345,7 +345,7 @@ const Inventory = () => {
         <div className="px-5 mt-3">
           <button
             onClick={() => navigate("/add-product")}
-            className="w-full py-3 rounded-xl border-2 border-dashed border-primary/30 text-primary font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            className="w-full py-3 rounded-xl text-primary font-medium flex items-center justify-center active:scale-[0.98] transition-all my-[10px] gap-[10px] border border-primary border-solid"
           >
             <Plus size={18} /> Add New Product
           </button>
