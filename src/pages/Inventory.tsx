@@ -7,7 +7,7 @@ import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { totalPiecesToTriUnit, boxesToPieces } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 
 interface Medicine {
   id: string;
@@ -48,7 +48,10 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
   return result > 0 ? result : null;
 };
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null }) => {
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
+  if (isSingleUnit(productType ?? null)) {
+    return <span className="font-mono font-bold text-foreground">{totalPcs} Pcs</span>;
+  }
   const display = totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip);
   const parts = display.split(" : ");
   return (
@@ -166,7 +169,7 @@ const Inventory = () => {
 
   const getCalculatedStock = (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
-    const addedPieces = boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    const addedPieces = isSingleUnit(med.product_type) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
     return (med.stock_quantity || 0) + addedPieces;
   };
 
@@ -407,6 +410,7 @@ const Inventory = () => {
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med.product_type) ? "Qty" : "Box"}</span>
                             <Input
                               ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
                               type="number"
@@ -426,7 +430,7 @@ const Inventory = () => {
                           </div>
                         ) : (
                           <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                           </div>
                         )}
                       </div>
@@ -435,10 +439,10 @@ const Inventory = () => {
                           <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
                             <span className="text-foreground">৳ {med.price ?? "—"}</span>
                             <span className="text-muted-foreground">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                             <span className="text-primary font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} />
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                           </div>
                         </div>
