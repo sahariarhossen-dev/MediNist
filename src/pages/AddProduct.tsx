@@ -81,6 +81,8 @@ const AddProduct = () => {
     if (s.strength) setStrength(s.strength);
     if (s.stockAlert) setStockAlert(s.stockAlert);
     if (s.mrp) setMrp(s.mrp);
+    if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
+    if (s.stripPerBox) setStripPerBox(s.stripPerBox);
   }, []);
 
   const strengthConfig = getStrengthConfig(productType);
