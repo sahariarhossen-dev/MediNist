@@ -1,34 +1,41 @@
 
 
-## Plan: Restore "Add New Product" Button on Inventory Page
+## Plan: Restructure Add New Product Form
 
-### Problem
-The previous refactor removed the "Add New Product" button that lets users manually add medicines not in the master catalog. Users need this option back, visible when the search bar is idle.
+### New Field Order
+1. **Product Type** (top) — drives conditional fields below
+2. **Medicine Name** — placeholder "e.g. Napa Extra"
+3. **Dosage/Strength** (new field) — label and unit change based on type:
+   - Tablet/Capsule/Injection → label "Strength", unit suffix "mg"
+   - Syrup/Suspension → label "Volume", unit suffix "ml"
+   - Cream/Ointment → label "Weight", unit suffix "gm"
+   - Hidden when no type selected
+4. **Company Name** — existing clickable selector
+5. **MRP (৳)** — moved up from bottom
+6. **Stock Alert Level** — moved to bottom
 
-### Changes
+### What Gets Removed
+- The conditional "Strip & Pack Details" section (strip per pack, pcs per strip)
+- The conditional "Product Details" section (product size, total quantity)
+- These fields are replaced by the new unified Strength/Volume/Weight input
 
-**File: `src/pages/Inventory.tsx`**
+### New State
+- Add `strength` state variable (string)
+- Add to form state passed to `/add-company` navigation and restored from `location.state`
 
-1. **Add button below the header area** (after the search bar section, around line 341): Insert an "Add New Product" button that navigates to `/add-product` for manual entry.
+### Payload Mapping
+- Map `strength` → `product_size` in the save payload (reusing existing DB column)
+- Remove `strip_per_pack`, `pcs_per_strip`, `stock_quantity` from manual form payload (these are only relevant for catalog imports)
 
-2. **Conditional visibility**: Wrap the button with `{!searchOpen && ( ... )}` so it only appears when the search input is not active. When searching, the button hides to maximize space for results.
+### Expanded Product Types
+- Add "Suspension", "Ointment" to the `productTypes` array to support the new conditional logic
 
-3. **Styling**: A full-width, touch-friendly button with `w-full py-3 rounded-xl` using a dashed border style and a `Plus` icon — modern, consistent with the existing card-based design. Example:
-   ```
-   <button className="w-full py-3 rounded-xl border-2 border-dashed border-primary/30 
-     text-primary font-medium flex items-center justify-center gap-2 
-     active:scale-[0.98] transition-all">
-     <Plus size={18} /> Add New Product
-   </button>
-   ```
+### Styling
+- All inputs: `rounded-xl bg-muted border-0 h-12` (consistent)
+- Strength input gets a unit suffix badge inside using `relative` positioning
+- Vertical `flex-col` stacking with `space-y-5`, `px-5` padding
+- Fully fluid, no fixed pixel widths
 
-4. **Navigation**: On tap, calls `navigate("/add-product")` — the same manual entry form used for editing products. No logic changes to the AddProduct page.
-
-### Files Modified
-- `src/pages/Inventory.tsx` — add ~10 lines for the conditional button between the search bar and the medicine list
-
-### What Stays the Same
-- Master catalog search-to-inventory flow (unchanged)
-- Edit product flow via long-press → navigate to `/add-product` with state (unchanged)
-- AddProduct page logic (unchanged)
+### File Modified
+- `src/pages/AddProduct.tsx` — reorder JSX, add strength field with conditional label/unit, expand product types, update payload
 
