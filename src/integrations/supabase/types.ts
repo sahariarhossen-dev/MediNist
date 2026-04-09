@@ -35,6 +35,45 @@ export type Database = {
         }
         Relationships: []
       }
+      master_medicines: {
+        Row: {
+          box_size: string | null
+          brand_name: string
+          company: string | null
+          created_at: string | null
+          format: string | null
+          generic_name: string | null
+          id: string
+          pack_size: string | null
+          strength: string | null
+          unit_price: number | null
+        }
+        Insert: {
+          box_size?: string | null
+          brand_name: string
+          company?: string | null
+          created_at?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string
+          pack_size?: string | null
+          strength?: string | null
+          unit_price?: number | null
+        }
+        Update: {
+          box_size?: string | null
+          brand_name?: string
+          company?: string | null
+          created_at?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string
+          pack_size?: string | null
+          strength?: string | null
+          unit_price?: number | null
+        }
+        Relationships: []
+      }
       medicines: {
         Row: {
           company_name: string | null
