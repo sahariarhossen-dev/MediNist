@@ -3,7 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { totalPiecesToTriUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import {
   Select,
   SelectContent,
@@ -146,7 +146,7 @@ const ShortItems = () => {
                     </td>
                     <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
                     <td className={`px-1.5 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
-                      {totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
+                      {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                     </td>
                     <td className="px-2 py-3 text-right text-gray-700">
                       ৳{Number(item.price ?? 0).toLocaleString()}

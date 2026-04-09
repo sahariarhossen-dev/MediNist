@@ -47,7 +47,26 @@ export const totalPiecesToTriUnit = (
 /**
  * Convert a number of boxes into total pieces.
  */
+/**
+ * Check if a product type uses single-unit quantity (not Box:Strip:Pcs).
+ */
+export const isSingleUnit = (productType: string | null): boolean => {
+  const triUnitTypes = ["tablet", "capsule"];
+  return !triUnitTypes.includes((productType || "").toLowerCase());
+};
+
+/**
+ * Convert a number of boxes into total pieces.
+ */
 export const boxesToPieces = (
+  boxes: number,
+  stripPerPack: number | null,
+  pcsPerStrip: number | null
+): number => {
+  const spp = stripPerPack || 1;
+  const pps = pcsPerStrip || 1;
+  return boxes * spp * pps;
+};
   boxes: number,
   stripPerPack: number | null,
   pcsPerStrip: number | null
