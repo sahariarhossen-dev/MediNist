@@ -67,11 +67,5 @@ export const boxesToPieces = (
   const pps = pcsPerStrip || 1;
   return boxes * spp * pps;
 };
-  boxes: number,
-  stripPerPack: number | null,
-  pcsPerStrip: number | null
-): number => {
-  const spp = stripPerPack || 1;
-  const pps = pcsPerStrip || 1;
   return boxes * spp * pps;
 };
