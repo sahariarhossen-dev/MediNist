@@ -90,7 +90,7 @@ const ShortItems = () => {
         <h1 className="text-lg font-bold text-gray-900">Short Items</h1>
         <div className="ml-auto">
           <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-            <SelectTrigger className="w-[140px] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
+            <SelectTrigger className="w-auto max-w-[40vw] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
               <SelectValue placeholder="All Companies" />
             </SelectTrigger>
             <SelectContent>
@@ -108,13 +108,13 @@ const ShortItems = () => {
       {/* Table */}
       <div className="px-4">
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-[13px]">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400">Product</th>
-                <th className="text-left px-2 py-3 text-xs font-semibold text-gray-400">Category</th>
-                <th className="text-center px-2 py-3 text-xs font-semibold text-gray-400">STK</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400">Price</th>
+                <th className="w-[40%] text-left px-2 py-3 text-xs font-semibold text-gray-400">Product</th>
+                <th className="w-[20%] text-left px-1.5 py-3 text-xs font-semibold text-gray-400">Category</th>
+                <th className="w-[18%] text-center px-1.5 py-3 text-xs font-semibold text-gray-400">STK</th>
+                <th className="w-[22%] text-right px-2 py-3 text-xs font-semibold text-gray-400">Price</th>
               </tr>
             </thead>
             <tbody>
@@ -136,12 +136,12 @@ const ShortItems = () => {
               ) : (
                 displayedItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
-                    <td className="px-2 py-3 text-gray-500">{item.product_type ?? "—"}</td>
-                    <td className={`px-2 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
+                    <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">{item.name}</td>
+                    <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
+                    <td className={`px-1.5 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
                       {totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
+                    <td className="px-2 py-3 text-right text-gray-700">
                       ৳{Number(item.price ?? 0).toLocaleString()}
                     </td>
                   </tr>
