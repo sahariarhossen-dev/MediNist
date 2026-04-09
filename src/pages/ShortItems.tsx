@@ -21,6 +21,7 @@ interface LowStockItem {
   strip_per_pack: number | null;
   pcs_per_strip: number | null;
   price: number | null;
+  product_size: string | null;
 }
 
 const ShortItems = () => {
@@ -35,7 +36,7 @@ const ShortItems = () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip")
+        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip, product_size")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -52,6 +53,7 @@ const ShortItems = () => {
           strip_per_pack: m.strip_per_pack,
           pcs_per_strip: m.pcs_per_strip,
           price: m.price,
+          product_size: m.product_size,
         }));
 
       setItems(filtered);
@@ -136,7 +138,12 @@ const ShortItems = () => {
               ) : (
                 displayedItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
-                    <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">{item.name}</td>
+                    <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">
+                      <span className="flex items-center gap-1">
+                        <span className="truncate">{item.name}</span>
+                        {item.product_size && <span className="text-[11px] text-gray-400 font-normal flex-shrink-0">{item.product_size}</span>}
+                      </span>
+                    </td>
                     <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
                     <td className={`px-1.5 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
                       {totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}

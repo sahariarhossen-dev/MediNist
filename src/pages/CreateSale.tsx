@@ -16,6 +16,7 @@ interface Medicine {
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
   product_type: string | null;
+  product_size: string | null;
 }
 
 interface CartItem {
@@ -98,7 +99,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -142,14 +143,14 @@ const CreateSale = () => {
       const q = searchQuery.trim();
       const baseQuery = supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
         .eq("pharmacy_id", profile.pharmacy_id!);
 
       const [startsRes, containsRes] = await Promise.all([
         baseQuery.ilike("name", `${q}%`).limit(10),
         supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
           .eq("pharmacy_id", profile.pharmacy_id!)
           .ilike("name", `%${q}%`)
           .limit(10),
@@ -376,10 +377,11 @@ const CreateSale = () => {
                   <Pill className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900">
-                    {med.name}
+                  <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
+                    <span className="truncate">{med.name}</span>
+                    {med.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{med.product_size}</span>}
                     {med.product_type && (
-                      <span className="ml-1.5 text-[10px] font-semibold text-orange-600 align-super">{med.product_type}</span>
+                      <span className="ml-0.5 text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{med.product_type}</span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -417,10 +419,11 @@ const CreateSale = () => {
                   <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4">
                     {/* Line 1: Name + type | MRP | Company */}
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-base font-bold text-gray-900 min-w-0 flex-1">
-                        {item.medicine.name}
+                      <p className="text-base font-bold text-gray-900 min-w-0 flex-1 flex items-center gap-1">
+                        <span className="truncate">{item.medicine.name}</span>
+                        {item.medicine.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{item.medicine.product_size}</span>}
                         {item.medicine.product_type && (
-                          <span className="ml-1 text-[11px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
+                          <span className="ml-0.5 text-[11px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                         )}
                       </p>
                       <span className="flex-shrink-0 text-right mx-[25px] text-secondary-foreground text-xs font-medium">MRP : {unitPrice}</span>
@@ -476,10 +479,11 @@ const CreateSale = () => {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-400 w-4 text-right">{idx + 1}.</span>
-                    <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 truncate">
-                      {item.medicine.name}
+                    <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
+                      <span className="truncate">{item.medicine.name}</span>
+                      {item.medicine.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{item.medicine.product_size}</span>}
                       {item.medicine.product_type && (
-                        <span className="ml-1 text-[10px] font-semibold text-red-500 align-super">{item.medicine.product_type}</span>
+                        <span className="ml-0.5 text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                       )}
                     </p>
                     <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
