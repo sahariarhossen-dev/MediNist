@@ -90,7 +90,7 @@ const ShortItems = () => {
         <h1 className="text-lg font-bold text-gray-900">Short Items</h1>
         <div className="ml-auto">
           <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-            <SelectTrigger className="w-[140px] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
+            <SelectTrigger className="w-auto max-w-[40vw] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
               <SelectValue placeholder="All Companies" />
             </SelectTrigger>
             <SelectContent>
