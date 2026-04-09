@@ -116,6 +116,7 @@ const CreateSale = () => {
               pcs_per_strip: null,
               strip_per_pack: null,
               product_type: null,
+              product_size: null,
             },
             quantity: it.quantity,
           };
