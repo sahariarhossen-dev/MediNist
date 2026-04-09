@@ -107,6 +107,8 @@ const AddProduct = () => {
       product_size: strength.trim() ? `${strength.trim()}${strengthConfig?.unit || ""}` : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
+      pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
+      strip_per_pack: isTabletOrCapsule && stripPerBox ? Number(stripPerBox) : null,
     };
 
     let error;
