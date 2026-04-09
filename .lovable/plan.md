@@ -1,41 +1,28 @@
 
 
-## Plan: Restructure Add New Product Form
+## Plan: Add Strip/Pack Fields for Tablet & Capsule
 
-### New Field Order
-1. **Product Type** (top) — drives conditional fields below
-2. **Medicine Name** — placeholder "e.g. Napa Extra"
-3. **Dosage/Strength** (new field) — label and unit change based on type:
-   - Tablet/Capsule/Injection → label "Strength", unit suffix "mg"
-   - Syrup/Suspension → label "Volume", unit suffix "ml"
-   - Cream/Ointment → label "Weight", unit suffix "gm"
-   - Hidden when no type selected
-4. **Company Name** — existing clickable selector
-5. **MRP (৳)** — moved up from bottom
-6. **Stock Alert Level** — moved to bottom
+### What Changes
 
-### What Gets Removed
-- The conditional "Strip & Pack Details" section (strip per pack, pcs per strip)
-- The conditional "Product Details" section (product size, total quantity)
-- These fields are replaced by the new unified Strength/Volume/Weight input
+**File: `src/pages/AddProduct.tsx`**
 
-### New State
-- Add `strength` state variable (string)
-- Add to form state passed to `/add-company` navigation and restored from `location.state`
+1. **New state variables**: `pcsPerStrip` and `stripPerBox` (strings, default "")
+2. **Restore from location.state** and **pass to /add-company navigation**
+3. **Conditional UI**: When `productType` is "Tablet" or "Capsule", show a new section after the Strength field:
+   - Two inputs side-by-side using `grid grid-cols-2 gap-3`
+     - "Pcs per Strip" (placeholder "eg. 10")
+     - "Strips per Box" (placeholder "eg. 5")
+   - Below them, a read-only "Total Box Size" display showing `pcsPerStrip × stripPerBox = N pcs` (auto-calculated, shown only when both values are filled)
+4. **Payload mapping**: Add `pcs_per_strip` and `strip_per_pack` (existing DB columns) to the save payload when type is Tablet/Capsule; set to `null` otherwise
 
-### Payload Mapping
-- Map `strength` → `product_size` in the save payload (reusing existing DB column)
-- Remove `strip_per_pack`, `pcs_per_strip`, `stock_quantity` from manual form payload (these are only relevant for catalog imports)
+### DB Columns Used (already exist)
+- `medicines.pcs_per_strip` (integer, nullable)
+- `medicines.strip_per_pack` (integer, nullable)
 
-### Expanded Product Types
-- Add "Suspension", "Ointment" to the `productTypes` array to support the new conditional logic
+No database migration needed.
 
 ### Styling
-- All inputs: `rounded-xl bg-muted border-0 h-12` (consistent)
-- Strength input gets a unit suffix badge inside using `relative` positioning
-- Vertical `flex-col` stacking with `space-y-5`, `px-5` padding
-- Fully fluid, no fixed pixel widths
-
-### File Modified
-- `src/pages/AddProduct.tsx` — reorder JSX, add strength field with conditional label/unit, expand product types, update payload
+- Side-by-side grid: `grid grid-cols-2 gap-3` — stacks naturally on very narrow screens via inputs' `w-full`
+- Total display: small muted text below the grid row
+- Consistent `rounded-xl bg-muted border-0 h-12` inputs
 
