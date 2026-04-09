@@ -202,6 +202,7 @@ const Inventory = () => {
       name: med.brand_name,
       company_name: med.company || null,
       product_type: med.format || null,
+      product_size: med.strength || null,
       price: med.unit_price || null,
       stock_quantity: qty,
       pcs_per_strip: pcsPerStrip,
@@ -398,7 +399,10 @@ const Inventory = () => {
                           <Pill size={20} className="text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground truncate">{med.name}</p>
+                          <p className="font-semibold text-foreground truncate flex items-center gap-1">
+                            <span className="truncate">{med.name}</span>
+                            {med.product_size && <span className="text-xs text-muted-foreground font-normal flex-shrink-0">{med.product_size}</span>}
+                          </p>
                           <p className="text-xs text-muted-foreground truncate">{med.company_name || "—"}</p>
                         </div>
                         {isExpanded ? (
@@ -545,7 +549,10 @@ const Inventory = () => {
       {longPressMed && !deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setLongPressId(null)}>
           <div className="bg-background rounded-2xl shadow-2xl w-[85%] max-w-[280px] p-5 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-bold text-foreground text-center mb-1 truncate">{longPressMed.name}</p>
+            <p className="text-sm font-bold text-foreground text-center mb-1 truncate">
+              {longPressMed.name}
+              {longPressMed.product_size && <span className="text-xs text-muted-foreground font-normal ml-1">{longPressMed.product_size}</span>}
+            </p>
             <p className="text-xs text-muted-foreground text-center mb-5 truncate">{longPressMed.company_name || "No company"}</p>
             <div className="space-y-2.5">
               <button onClick={() => handleEdit(longPressMed)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-muted hover:bg-accent transition-colors">
