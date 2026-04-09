@@ -65,6 +65,11 @@ const AddProduct = () => {
   const [strength, setStrength] = useState("");
   const [stockAlert, setStockAlert] = useState("");
   const [mrp, setMrp] = useState("");
+  const [pcsPerStrip, setPcsPerStrip] = useState("");
+  const [stripPerBox, setStripPerBox] = useState("");
+
+  const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
+  const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   useEffect(() => {
     const s = location.state;
