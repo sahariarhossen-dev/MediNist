@@ -380,9 +380,9 @@ const CreateSale = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
                     <span className="truncate">{med.name}</span>
-                    {med.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{med.product_size}</span>}
+                    {med.product_size && <span className="text-xs font-normal flex-shrink-0 text-muted-foreground my-0 py-[5px] pt-0 pb-[10px] mr-0 mx-0 ml-[3px]">{med.product_size}</span>}
                     {med.product_type && (
-                      <span className="ml-0.5 text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{med.product_type}</span>
+                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0 pb-[10px] ml-[5px]">{med.product_type}</span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -391,7 +391,7 @@ const CreateSale = () => {
                     <span className="text-[10px] font-mono font-bold text-primary">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
-                <p className="text-xs font-semibold text-lime-900">৳{med.price ?? 0}</p>
+                <p className="text-lime-900 text-sm font-bold">৳{med.price ?? 0}</p>
               </button>
             ))}
           </div>
