@@ -5,7 +5,7 @@ import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { totalPiecesToTriUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 
 interface Medicine {
   id: string;
@@ -388,7 +388,7 @@ const CreateSale = () => {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {med.company_name && <span className="text-[10px] text-secondary-foreground">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] font-mono font-bold text-primary">STK: {totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+                    <span className="text-[10px] font-mono font-bold text-primary">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-lime-900 text-sm font-bold">৳{med.price ?? 0}</p>
@@ -441,7 +441,7 @@ const CreateSale = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[11px] font-mono whitespace-nowrap text-secondary-foreground">stk {totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[11px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type) ? `${item.medicine.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
                       <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
                         {item.quantity}*{unitPrice}={lineTotal}৳
