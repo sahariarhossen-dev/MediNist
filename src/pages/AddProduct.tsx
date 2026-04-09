@@ -197,6 +197,40 @@ const AddProduct = () => {
           </div>
         )}
 
+        {/* 3b. Strip & Pack Details (Tablet/Capsule only) */}
+        {isTabletOrCapsule && (
+          <div className="space-y-3">
+            <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
+                <Input
+                  type="number"
+                  placeholder="eg. 10"
+                  value={pcsPerStrip}
+                  onChange={(e) => setPcsPerStrip(e.target.value)}
+                  className="rounded-xl bg-muted border-0 h-12"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Strips per Box</Label>
+                <Input
+                  type="number"
+                  placeholder="eg. 5"
+                  value={stripPerBox}
+                  onChange={(e) => setStripPerBox(e.target.value)}
+                  className="rounded-xl bg-muted border-0 h-12"
+                />
+              </div>
+            </div>
+            {totalBoxSize !== null && totalBoxSize > 0 && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                Total Box Size: <span className="font-semibold text-foreground">{pcsPerStrip} × {stripPerBox} = {totalBoxSize} pcs</span>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 4. Company Name */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Company Name</Label>
@@ -205,7 +239,7 @@ const AddProduct = () => {
             onClick={() =>
               navigate("/add-company", {
                 state: {
-                  formData: { editId, name, companyName, productType, strength, stockAlert, mrp },
+                  formData: { editId, name, companyName, productType, strength, stockAlert, mrp, pcsPerStrip, stripPerBox },
                 },
               })
             }
