@@ -61,7 +61,8 @@ Deno.serve(async (req) => {
     // Send invitation email
     const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email);
     if (inviteError && !inviteError.message.includes("already been registered")) {
-      return new Response(JSON.stringify({ error: inviteError.message }), {
+      console.error("Invite error:", inviteError.message);
+      return new Response(JSON.stringify({ error: "Failed to send invitation. Please try again." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -80,7 +81,8 @@ Deno.serve(async (req) => {
     );
 
     if (insertError) {
-      return new Response(JSON.stringify({ error: insertError.message }), {
+      console.error("Insert error:", insertError.message);
+      return new Response(JSON.stringify({ error: "Failed to register staff invitation. Please try again." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -91,7 +93,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error("Unexpected error:", err.message);
+    return new Response(JSON.stringify({ error: "An unexpected error occurred. Please try again." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
