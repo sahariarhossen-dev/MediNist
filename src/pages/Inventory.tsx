@@ -113,15 +113,46 @@ const Inventory = () => {
     }
   }, [searchOpen]);
 
+  // Unique company names from both sources
+  const allCompanies = useMemo(() => {
+    const names = new Set<string>();
+    medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
+    catalog.forEach((m) => { if (m.company) names.add(m.company); });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [medicines, catalog]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch.trim()) return allCompanies;
+    const q = companySearch.toLowerCase();
+    return allCompanies.filter((c) => c.toLowerCase().includes(q));
+  }, [allCompanies, companySearch]);
+
+  const toggleCompany = (name: string) => {
+    setSelectedCompanies((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSelectedCompanies(new Set());
+    setCompanySearch("");
+  };
+
   // Filter local medicines
   const filteredMedicines = useMemo(
-    () =>
-      searchQuery
-        ? medicines.filter((m) =>
-            m.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : medicines,
-    [medicines, searchQuery]
+    () => {
+      let result = medicines;
+      if (searchQuery) {
+        result = result.filter((m) => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      }
+      if (selectedCompanies.size > 0) {
+        result = result.filter((m) => m.company_name && selectedCompanies.has(m.company_name));
+      }
+      return result;
+    },
+    [medicines, searchQuery, selectedCompanies]
   );
 
   // Filter catalog results (exclude items already in local inventory)
@@ -129,14 +160,18 @@ const Inventory = () => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
-    return catalog.filter(
+    let result = catalog.filter(
       (m) =>
         (m.brand_name.toLowerCase().includes(q) ||
           (m.generic_name && m.generic_name.toLowerCase().includes(q)) ||
           (m.company && m.company.toLowerCase().includes(q))) &&
         !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
-  }, [catalog, medicines, searchQuery]);
+    if (selectedCompanies.size > 0) {
+      result = result.filter((m) => m.company && selectedCompanies.has(m.company));
+    }
+    return result;
+  }, [catalog, medicines, searchQuery, selectedCompanies]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
