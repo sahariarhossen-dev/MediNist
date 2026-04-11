@@ -1,51 +1,35 @@
 
 
-## Plan: Dynamic Quantity Display Based on Product Type
+## Plan: Fix Catalog Input Logic & Edit Page Data Mapping
 
-### Problem
-Currently, all medicines show the Box:Strip:Pcs tri-unit display and use `boxesToPieces` for stock input — even for Syrups, Creams, Injections, etc., where this makes no sense.
+### Problems Found
 
-### Helper Function
-Add an `isSingleUnit` helper in `src/lib/stockUtils.ts`:
-```ts
-export const isSingleUnit = (productType: string | null): boolean => {
-  const triUnitTypes = ["tablet", "capsule"];
-  return !triUnitTypes.includes((productType || "").toLowerCase());
-};
-```
+1. **Catalog input always shows "Qty (pcs)"** — even for Tablets/Capsules. Should show "Box" and convert to pieces using `boxesToPieces`.
+2. **Edit page fields are empty** — `handleEdit` passes `productSize`, `stripPerPack` but AddProduct reads `strength`, `stripPerBox`. Key name mismatch.
+3. **Strength not parsed back** — `product_size` is stored as "500 mg" but needs to be split back into value ("500") and unit is auto-determined by type.
 
-### Changes to `src/pages/Inventory.tsx`
+### Changes
 
-**1. TriUnitDisplay component** — add a conditional branch:
-- If `isSingleUnit(productType)` → render just `"{totalPcs} Pcs"` (plain text, no Box:Strip breakdown)
-- If Tablet/Capsule → keep current `Box : Strip : Pcs` format
+#### File: `src/pages/Inventory.tsx`
 
-**2. Inventory list (non-expanded, line ~428-430)**:
-- Use the updated TriUnitDisplay with `productType` prop
+**1. Catalog expanded input (line ~496)**: Make label dynamic based on `med.format`:
+- Tablet/Capsule → label "Box", convert qty via `boxesToPieces(qty, stripPerPack, pcsPerStrip)` before saving
+- Others → label "Qty (pcs)", save raw number
 
-**3. Expanded stock input (line ~409-426)**:
-- For single-unit types: show one input labeled "Qty" that directly adds pieces (no box conversion)
-- For Tablet/Capsule: keep current "Boxes" input with `boxesToPieces` conversion
+**2. `handleAddFromCatalog` (line ~201)**: For Tablet/Capsule, convert `catalogQty` from boxes to pieces using computed `pcsPerStrip` and `stripPerPack`. For others, save raw qty.
 
-**4. Expanded detail bar (line ~434-444)**:
-- For single-unit: show `pre-stock: N Pcs` and `Current: N Pcs`
-- For Tablet/Capsule: keep tri-unit display
+**3. `handleEdit` state keys (line ~259)**: Fix key names to match what AddProduct expects:
+- `stripPerPack` → `stripPerBox` (AddProduct reads `s.stripPerBox`)
+- `productSize` → `strength` (parse "500 mg" → "500", stripping the unit suffix)
 
-**5. `handleConfirmStock` (line ~173)**:
-- For single-unit: add raw input value as pieces (no `boxesToPieces` conversion)
-- For Tablet/Capsule: keep existing box→pieces logic
+#### File: `src/pages/AddProduct.tsx`
 
-**6. `getCalculatedStock` (line ~167)**:
-- Same conditional: single-unit adds raw number, Tablet/Capsule uses `boxesToPieces`
+**4. Parse strength from `product_size`** (line ~81): When restoring from edit state, extract the numeric part from "500 mg" → set strength to "500". The unit is already auto-determined by product type via `getStrengthConfig`.
 
-**7. Catalog "Add" expanded section (line ~490-511)**:
-- Already shows a simple "Qty (pcs)" input — no change needed here
+### No database changes needed.
 
-### Changes to `src/pages/ShortItems.tsx`
-- Use `isSingleUnit` to show either plain quantity or tri-unit display in the stock alerts table
-
-### Files Modified
-- `src/lib/stockUtils.ts` — add `isSingleUnit` helper
-- `src/pages/Inventory.tsx` — conditional display & input logic
-- `src/pages/ShortItems.tsx` — conditional stock display
+### Summary of fixes:
+- Catalog: dynamic "Box" vs "Qty" label + correct box→pieces conversion on save
+- Edit: fix state key mismatches so MRP, strength, strips, pcs all populate correctly
+- Strength parsing: split "500 mg" back to numeric value for the input field
 
