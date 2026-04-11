@@ -22,6 +22,7 @@ interface Medicine {
 interface CartItem {
   medicine: Medicine;
   quantity: number;
+  discountPercent: number;
 }
 
 const CreateSale = () => {
@@ -41,6 +42,7 @@ const CreateSale = () => {
   const [discountPercent, setDiscountPercent] = useState(10);
   const [editingDiscount, setEditingDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("10");
+  const [defaultDiscount, setDefaultDiscount] = useState(10);
 
   // Fetch global default discount from pharmacy settings
   useEffect(() => {
@@ -55,6 +57,7 @@ const CreateSale = () => {
         const val = (data as any).default_discount ?? 10;
         setDiscountPercent(val);
         setDiscountInput(String(val));
+        setDefaultDiscount(val);
       }
     };
     fetchDefault();
@@ -68,7 +71,6 @@ const CreateSale = () => {
     const loadDraft = async () => {
       setLoadingDraft(true);
       try {
-        // Fetch sale
         const { data: sale } = await supabase
           .from("sales")
           .select("id, sale_type, status")
@@ -84,10 +86,9 @@ const CreateSale = () => {
         setDraftId(sale.id);
         setSaleType(sale.sale_type as "retail" | "wholesale");
 
-        // Fetch sale items
         const { data: items } = await supabase
           .from("sale_items")
-          .select("medicine_id, medicine_name, company_name, quantity, unit_price")
+          .select("medicine_id, medicine_name, company_name, quantity, unit_price, discount_percent")
           .eq("sale_id", sale.id);
 
         if (!items || items.length === 0) {
@@ -95,7 +96,6 @@ const CreateSale = () => {
           return;
         }
 
-        // Fetch current medicine data for each item
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
@@ -119,6 +119,7 @@ const CreateSale = () => {
               product_size: null,
             },
             quantity: it.quantity,
+            discountPercent: (it as any).discount_percent ?? 0,
           };
         });
 
@@ -170,12 +171,12 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      return [{ medicine, quantity: 1 }, ...prev];
+      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(medicine.id);
     setSearchQuery("");
     setSearchResults([]);
-  }, []);
+  }, [saleType, defaultDiscount]);
 
   const removeFromCart = useCallback((id: string) => {
     setCartItems((prev) => prev.filter((c) => c.medicine.id !== id));
@@ -188,12 +189,48 @@ const CreateSale = () => {
     );
   }, []);
 
+  const updateItemDiscount = useCallback((id: string, percent: number) => {
+    const clamped = Math.min(100, Math.max(0, percent));
+    setCartItems((prev) =>
+      prev.map((c) => (c.medicine.id === id ? { ...c, discountPercent: clamped } : c))
+    );
+  }, []);
+
+  // When switching modes, reset item discounts
+  const handleSaleTypeChange = useCallback((type: "retail" | "wholesale") => {
+    setSaleType(type);
+    setShowDropdown(false);
+    setCartItems((prev) =>
+      prev.map((c) => ({ ...c, discountPercent: type === "wholesale" ? defaultDiscount : 0 }))
+    );
+  }, [defaultDiscount]);
+
+  // Calculate line total for an item (after item-wise discount in wholesale)
+  const getLineTotal = useCallback((item: CartItem) => {
+    const gross = item.quantity * (item.medicine.price || 0);
+    if (saleType === "wholesale") {
+      return Math.round(gross * (1 - item.discountPercent / 100));
+    }
+    return gross;
+  }, [saleType]);
+
   const subtotal = useMemo(
     () => cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0),
     [cartItems]
   );
+
+  // For wholesale: net total = sum of per-item net amounts (no global discount)
+  // For retail: net total = subtotal - global discount
+  const wholesaleNetTotal = useMemo(
+    () => cartItems.reduce((sum, c) => sum + getLineTotal(c), 0),
+    [cartItems, getLineTotal]
+  );
+
   const discountAmount = useMemo(() => Math.round(subtotal * discountPercent / 100), [subtotal, discountPercent]);
-  const netTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
+  const retailNetTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
+
+  const netTotal = saleType === "wholesale" ? wholesaleNetTotal : retailNetTotal;
+  const totalDiscountAmount = saleType === "wholesale" ? subtotal - wholesaleNetTotal : discountAmount;
 
   const saveSale = async (status: "draft" | "completed") => {
     if (cartItems.length === 0) {
@@ -208,42 +245,33 @@ const CreateSale = () => {
     try {
       let saleId: string;
 
+      const salePayload = {
+        sale_type: saleType,
+        subtotal,
+        discount_percent: saleType === "wholesale" ? 0 : discountPercent,
+        discount_amount: totalDiscountAmount,
+        total: netTotal,
+        status,
+      };
+
       if (draftId) {
-        // Update existing draft
         const { error: updateError } = await supabase
           .from("sales")
-          .update({
-            sale_type: saleType,
-            subtotal,
-            discount_percent: discountPercent,
-            discount_amount: discountAmount,
-            total: netTotal,
-            status,
-          })
+          .update(salePayload)
           .eq("id", draftId);
-
         if (updateError) throw updateError;
         saleId = draftId;
-
-        // Delete old sale_items and re-insert
         await supabase.from("sale_items").delete().eq("sale_id", draftId);
       } else {
-        // Insert new sale
         const { data: sale, error: saleError } = await supabase
           .from("sales")
           .insert({
             pharmacy_id: profile.pharmacy_id,
             user_id: profile.id,
-            sale_type: saleType,
-            subtotal,
-            discount_percent: discountPercent,
-            discount_amount: discountAmount,
-            total: netTotal,
-            status,
+            ...salePayload,
           })
           .select("id")
           .single();
-
         if (saleError) throw saleError;
         saleId = sale.id;
       }
@@ -255,13 +283,13 @@ const CreateSale = () => {
         company_name: c.medicine.company_name,
         quantity: c.quantity,
         unit_price: c.medicine.price || 0,
-        total_price: c.quantity * (c.medicine.price || 0),
+        total_price: getLineTotal(c),
+        discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
       }));
 
       const { error: itemsError } = await supabase.from("sale_items").insert(items);
       if (itemsError) throw itemsError;
 
-      // Deduct stock for each sold item only on complete
       if (status === "completed") {
         for (const c of cartItems) {
           const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - c.quantity);
@@ -294,6 +322,8 @@ const CreateSale = () => {
     );
   }
 
+  const isWholesale = saleType === "wholesale";
+
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex flex-col">
       {/* Header */}
@@ -321,16 +351,20 @@ const CreateSale = () => {
         <div className="relative">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="px-4 py-1.5 rounded-full border border-emerald-200 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition shadow-sm"
+            className={`px-4 py-1.5 rounded-full border text-sm font-semibold transition shadow-sm ${
+              isWholesale
+                ? "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                : "border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+            }`}
           >
-            {saleType === "retail" ? "Retail" : "Wholesale"}
+            {isWholesale ? "Wholesale" : "Retail"}
           </button>
           {showDropdown && (
             <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
               {(["retail", "wholesale"] as const).map((t) => (
                 <button
                   key={t}
-                  onClick={() => { setSaleType(t); setShowDropdown(false); }}
+                  onClick={() => handleSaleTypeChange(t)}
                   className={`w-full px-4 py-2.5 text-left text-sm font-medium transition ${saleType === t ? "bg-emerald-600 text-white" : "text-gray-700 hover:bg-gray-50"}`}
                 >
                   {t === "retail" ? "Retail" : "Wholesale"}
@@ -412,13 +446,14 @@ const CreateSale = () => {
           <div className="space-y-2">
             {cartItems.map((item, idx) => {
               const unitPrice = item.medicine.price || 0;
-              const lineTotal = item.quantity * unitPrice;
+              const grossTotal = item.quantity * unitPrice;
+              const lineTotal = getLineTotal(item);
               const isExpanded = expandedId === item.medicine.id;
 
               if (isExpanded) {
                 return (
                   <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4">
-                    {/* Line 1: Name + type | MRP | Company */}
+                    {/* Row 1: Name + type | MRP | Company */}
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-base font-bold text-gray-900 min-w-0 flex-1 flex items-center gap-1">
                         <span className="truncate">{item.medicine.name}</span>
@@ -432,9 +467,10 @@ const CreateSale = () => {
                         <span className="text-[11px] text-emerald-600 flex-shrink-0 font-medium mx-[10px]">{item.medicine.company_name}</span>
                       )}
                     </div>
-                    {/* Line 2: Trash+STK | Calculation | Qty controller */}
+
+                    {/* Row 2: Trash | STK | Discount% (wholesale) | Qty controller */}
                     <div className="flex items-center justify-between gap-2 mt-2">
-                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <button
                           onClick={() => removeFromCart(item.medicine.id)}
                           className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
@@ -443,9 +479,29 @@ const CreateSale = () => {
                         </button>
                         <span className="text-[11px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type) ? `${item.medicine.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
-                      <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
-                        {item.quantity}*{unitPrice}={lineTotal}৳
-                      </span>
+
+                      {/* Wholesale: item discount input */}
+                      {isWholesale && (
+                        <div className="flex items-center border border-blue-300 rounded-lg overflow-hidden flex-shrink-0">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={item.discountPercent}
+                            onChange={(e) => updateItemDiscount(item.medicine.id, parseFloat(e.target.value) || 0)}
+                            className="w-10 text-xs text-center font-bold text-blue-700 outline-none bg-blue-50 py-1.5 appearance-none"
+                          />
+                          <span className="px-1.5 text-xs font-bold text-blue-600 bg-blue-50 border-l border-blue-300">%</span>
+                        </div>
+                      )}
+
+                      {/* Retail: show calculation */}
+                      {!isWholesale && (
+                        <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
+                          {item.quantity}*{unitPrice}={grossTotal}৳
+                        </span>
+                      )}
+
                       <div className="flex items-center border-gray-900 rounded-xl overflow-hidden flex-shrink-0 border-solid border">
                         <button
                           onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
@@ -468,10 +524,20 @@ const CreateSale = () => {
                         </button>
                       </div>
                     </div>
+
+                    {/* Row 3: Wholesale calculation string */}
+                    {isWholesale && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs font-mono text-gray-500 text-center">
+                          {unitPrice} × {item.quantity} = {grossTotal} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{lineTotal} ৳</span>
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               }
 
+              // Collapsed card
               return (
                 <div
                   key={item.medicine.id}
@@ -487,8 +553,17 @@ const CreateSale = () => {
                         <span className="ml-0.5 text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                       )}
                     </p>
-                    <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
-                    <span className="text-xs font-bold text-emerald-600">{lineTotal} ৳</span>
+                    {isWholesale ? (
+                      <>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{unitPrice}-{item.discountPercent}%</span>
+                        <span className="text-xs font-bold text-blue-700">{lineTotal} ৳</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
+                        <span className="text-xs font-bold text-emerald-600">{grossTotal} ৳</span>
+                      </>
+                    )}
                   </div>
                   {item.medicine.company_name && (
                     <p className="text-[10px] ml-6 mt-0.5 text-secondary-foreground">{item.medicine.company_name}</p>
@@ -514,55 +589,68 @@ const CreateSale = () => {
                 {" = "}{subtotal} ৳
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500 mx-[35px] flex items-center gap-1.5">
-                Discount
-                {!editingDiscount ? (
-                  <>
-                    <span>({discountPercent}%)</span>
-                    <button onClick={() => { setEditingDiscount(true); setDiscountInput(String(discountPercent)); }} className="text-gray-400 hover:text-gray-600 transition">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <span className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={discountInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setDiscountInput(val);
-                        const num = parseFloat(val);
+
+            {/* Retail: global discount editor */}
+            {!isWholesale && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-500 mx-[35px] flex items-center gap-1.5">
+                  Discount
+                  {!editingDiscount ? (
+                    <>
+                      <span>({discountPercent}%)</span>
+                      <button onClick={() => { setEditingDiscount(true); setDiscountInput(String(discountPercent)); }} className="text-gray-400 hover:text-gray-600 transition">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={discountInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDiscountInput(val);
+                          const num = parseFloat(val);
+                          if (!isNaN(num) && num >= 0 && num <= 100) {
+                            setDiscountPercent(num);
+                          }
+                        }}
+                        className="w-12 text-xs text-center border border-gray-200 rounded-md px-1 py-0.5 outline-none focus:border-gray-400 bg-transparent"
+                        autoFocus
+                        min={0}
+                        max={100}
+                      />
+                      <span className="text-xs">%</span>
+                      <button onClick={() => {
+                        const num = parseFloat(discountInput);
                         if (!isNaN(num) && num >= 0 && num <= 100) {
                           setDiscountPercent(num);
+                        } else {
+                          setDiscountPercent(10);
+                          setDiscountInput("10");
                         }
-                      }}
-                      className="w-12 text-xs text-center border border-gray-200 rounded-md px-1 py-0.5 outline-none focus:border-gray-400 bg-transparent"
-                      autoFocus
-                      min={0}
-                      max={100}
-                    />
-                    <span className="text-xs">%</span>
-                    <button onClick={() => {
-                      const num = parseFloat(discountInput);
-                      if (!isNaN(num) && num >= 0 && num <= 100) {
-                        setDiscountPercent(num);
-                      } else {
-                        setDiscountPercent(10);
-                        setDiscountInput("10");
-                      }
-                      setEditingDiscount(false);
-                    }} className="text-emerald-600 hover:text-emerald-700 transition">
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                )}
-              </span>
-              <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
-            </div>
+                        setEditingDiscount(false);
+                      }} className="text-emerald-600 hover:text-emerald-700 transition">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                </span>
+                <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
+              </div>
+            )}
+
+            {/* Wholesale: total discount display */}
+            {isWholesale && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-500 mx-[35px]">Item Discounts</span>
+                <span className="text-sm font-bold text-gray-900">-{totalDiscountAmount} ৳</span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-base font-extrabold text-gray-900">Net Total</span>
-              <span className="text-xl font-extrabold text-emerald-600">{netTotal} ৳</span>
+              <span className={`text-xl font-extrabold ${isWholesale ? "text-blue-700" : "text-emerald-600"}`}>{netTotal} ৳</span>
             </div>
           </div>
         )}
