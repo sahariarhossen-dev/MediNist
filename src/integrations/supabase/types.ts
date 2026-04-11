@@ -229,6 +229,7 @@ export type Database = {
         Row: {
           company_name: string | null
           created_at: string
+          discount_percent: number
           id: string
           medicine_id: string
           medicine_name: string
@@ -240,6 +241,7 @@ export type Database = {
         Insert: {
           company_name?: string | null
           created_at?: string
+          discount_percent?: number
           id?: string
           medicine_id: string
           medicine_name: string
@@ -251,6 +253,7 @@ export type Database = {
         Update: {
           company_name?: string | null
           created_at?: string
+          discount_percent?: number
           id?: string
           medicine_id?: string
           medicine_name?: string
