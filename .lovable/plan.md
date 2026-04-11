@@ -1,36 +1,48 @@
 
 
-## Plan: Transform More Page into Professional Branded UI
+## Plan: Ensure Shop Logo Syncs After Upload
 
-### Changes — Single file: `src/pages/More.tsx`
+### What's Already Working
+The Shop Profile page already has full image upload functionality:
+- Logo upload with camera icon and file input
+- Cover photo upload with camera icon overlay
+- Supabase Storage integration (`pharmacy-assets` bucket)
+- Updates `logo_url` and `cover_url` columns in `pharmacies` table
+- More page fetches and displays the pharmacy logo
 
-**1. Remove redundant "Profile" menu item**
-- Delete `{ label: "Profile", icon: User, path: "/profile" }` from `menuItems`
-- Add `LogOut` action and `HelpCircle` menu item
-- Update menu items with colorful icon backgrounds (different colors per item)
+### The One Gap
+The More page only fetches the pharmacy logo when `profile?.pharmacy_id` changes. If the user uploads a new logo on the Shop Profile page and navigates back, **the More page shows the stale logo** because the dependency hasn't changed.
 
-**2. Replace top header + user card with a gradient profile header**
-- Remove the existing plain header (Medinist title + bell + avatar)
-- Remove the separate "User Info Card" section
-- Replace with a single gradient hero section (`bg-gradient-to-r from-blue-600 to-indigo-700`) containing:
-  - White-bordered avatar circle (large, centered or left-aligned)
-  - User name in bold white, phone in white/70 opacity
-  - Pharmacy name in white/60 opacity
-  - Make entire section clickable → navigates to `/shop-profile`
+### Fix — Single file: `src/pages/More.tsx`
 
-**3. Page background**
-- Change `bg-background` to `bg-gray-50`
+**Re-fetch logo on every mount** by adding a trigger that runs when the component mounts (not just when `pharmacy_id` changes). This can be done by removing the stale cache — either:
+- Add a timestamp or navigation key to the dependency, or
+- Simply remove the conditional dependency so it re-fetches on every render/mount using a function that runs on focus/mount.
 
-**4. Menu items styling**
-- Use white `bg-white` cards with `shadow-sm rounded-xl` instead of `bg-muted rounded-2xl`
-- Each item gets a unique colored icon circle (e.g., Inventory=blue, Shop=emerald, Settings=gray, Help=amber, Logout=red)
-- Keep `ChevronRight` on the right
-- Add `LogOut` as the last item with red styling, calling `signOut`
+The simplest approach: use `useEffect` without the `pharmacy_id` guard as a stable dependency, or add a listener for window focus so the logo refreshes when the user returns from the Shop Profile page.
 
-**5. Add imports**
-- `LogOut, HelpCircle` from lucide-react
-- `signOut` from `useAuth`
+**Concrete change**: Wrap the fetch in a focus event listener so the logo auto-refreshes when returning to the More page:
 
-### No other files modified
-The AppLayout header is minimal (just renders children + BottomNav), so no header sync needed — the More page owns its own header.
+```tsx
+useEffect(() => {
+  const fetchPharmacyLogo = async () => {
+    if (!profile?.pharmacy_id) return;
+    const { data } = await supabase
+      .from("pharmacies")
+      .select("logo_url")
+      .eq("id", profile.pharmacy_id)
+      .single();
+    setPharmacyLogo(data?.logo_url ?? null);
+  };
+  
+  fetchPharmacyLogo(); // fetch on mount
+  
+  // Also re-fetch when user returns to this tab/page
+  window.addEventListener("focus", fetchPharmacyLogo);
+  return () => window.removeEventListener("focus", fetchPharmacyLogo);
+}, [profile?.pharmacy_id]);
+```
+
+### No database changes needed
+Storage buckets and columns (`logo_url`, `cover_url`) already exist.
 
