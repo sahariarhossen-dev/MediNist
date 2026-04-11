@@ -1,48 +1,37 @@
 
 
-## Plan: Ensure Shop Logo Syncs After Upload
+## Plan: Fix Forgot Password Flow
 
-### What's Already Working
-The Shop Profile page already has full image upload functionality:
-- Logo upload with camera icon and file input
-- Cover photo upload with camera icon overlay
-- Supabase Storage integration (`pharmacy-assets` bucket)
-- Updates `logo_url` and `cover_url` columns in `pharmacies` table
-- More page fetches and displays the pharmacy logo
+### Analysis
+The core flow is already implemented and mostly working (auth logs confirm recovery emails are being sent). The issues to fix are:
 
-### The One Gap
-The More page only fetches the pharmacy logo when `profile?.pharmacy_id` changes. If the user uploads a new logo on the Shop Profile page and navigates back, **the More page shows the stale logo** because the dependency hasn't changed.
+1. **Redirect URL**: Currently uses `window.location.origin` which is correct, but the published URL (`https://medi-nist.lovable.app`) must be added to Supabase's **Redirect URLs** allowlist in the Auth settings. This is the most likely reason the flow breaks in production.
 
-### Fix — Single file: `src/pages/More.tsx`
+2. **Missing "Confirm Password" field**: The ResetPassword page only has one password field — needs a confirmation field with match validation.
 
-**Re-fetch logo on every mount** by adding a trigger that runs when the component mounts (not just when `pharmacy_id` changes). This can be done by removing the stale cache — either:
-- Add a timestamp or navigation key to the dependency, or
-- Simply remove the conditional dependency so it re-fetches on every render/mount using a function that runs on focus/mount.
+3. **Better feedback messages**: Add spam folder mention, improve error display.
 
-The simplest approach: use `useEffect` without the `pharmacy_id` guard as a stable dependency, or add a listener for window focus so the logo refreshes when the user returns from the Shop Profile page.
+### Important Note on "User not found"
+Supabase intentionally does NOT reveal whether an email exists in the system (security best practice to prevent email enumeration). The API returns success even for non-existent emails. We'll show a generic success message instead.
 
-**Concrete change**: Wrap the fetch in a focus event listener so the logo auto-refreshes when returning to the More page:
+### SMTP Reminder
+Supabase's built-in email provider has a limit of ~4 emails/hour in development. For production, you should configure a custom SMTP provider (like Resend, SendGrid, or your own SMTP) in **Supabase Dashboard → Authentication → Email Templates → SMTP Settings**. This is likely why some users aren't receiving emails.
 
-```tsx
-useEffect(() => {
-  const fetchPharmacyLogo = async () => {
-    if (!profile?.pharmacy_id) return;
-    const { data } = await supabase
-      .from("pharmacies")
-      .select("logo_url")
-      .eq("id", profile.pharmacy_id)
-      .single();
-    setPharmacyLogo(data?.logo_url ?? null);
-  };
-  
-  fetchPharmacyLogo(); // fetch on mount
-  
-  // Also re-fetch when user returns to this tab/page
-  window.addEventListener("focus", fetchPharmacyLogo);
-  return () => window.removeEventListener("focus", fetchPharmacyLogo);
-}, [profile?.pharmacy_id]);
-```
+---
+
+### Changes
+
+**File 1: `src/pages/ForgotPassword.tsx`**
+- Update success message to mention checking spam/junk folder
+- Use the published URL (`https://medi-nist.lovable.app/reset-password`) as `redirectTo` so it works reliably in production
+
+**File 2: `src/pages/ResetPassword.tsx`**
+- Add "Confirm Password" field with show/hide toggle
+- Add password match validation (disable submit if passwords don't match, show mismatch error)
+- Keep existing password strength meter
+
+**Manual step (user action required):**
+- Go to **Supabase Dashboard → Authentication → URL Configuration** and add `https://medi-nist.lovable.app/reset-password` to the **Redirect URLs** allowlist. Without this, Supabase will block the redirect after the user clicks the email link.
 
 ### No database changes needed
-Storage buckets and columns (`logo_url`, `cover_url`) already exist.
 
