@@ -78,7 +78,11 @@ const AddProduct = () => {
     if (s.companyName) setCompanyName(s.companyName);
     if (s.name) setName(s.name);
     if (s.productType) setProductType(s.productType);
-    if (s.strength) setStrength(s.strength);
+    if (s.strength) {
+      // Parse numeric part from strength like "500" or already-numeric values
+      const numericStrength = String(s.strength).replace(/[^0-9.]/g, "");
+      setStrength(numericStrength);
+    }
     if (s.stockAlert) setStockAlert(s.stockAlert);
     if (s.mrp) setMrp(s.mrp);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);

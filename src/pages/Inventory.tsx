@@ -198,7 +198,9 @@ const Inventory = () => {
     setAddingCatalog(true);
     const pcsPerStrip = parsePackSize(med.pack_size);
     const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
-    const qty = parseInt(catalogQty, 10) || 0;
+    const rawQty = parseInt(catalogQty, 10) || 0;
+    const isMultiUnit = !isSingleUnit(med.format);
+    const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
@@ -207,7 +209,7 @@ const Inventory = () => {
       product_type: med.format || null,
       product_size: med.strength || null,
       price: med.unit_price || null,
-      stock_quantity: qty,
+      stock_quantity: stockQty,
       pcs_per_strip: pcsPerStrip,
       strip_per_pack: stripPerPack,
     }).select().single();
@@ -255,15 +257,16 @@ const Inventory = () => {
 
   const handleEdit = (med: Medicine) => {
     setLongPressId(null);
+    const rawStrength = med.product_size ? med.product_size.replace(/[^0-9.]/g, "") : "";
     navigate("/add-product", {
       state: {
         editId: med.id,
         name: med.name,
         companyName: med.company_name || "",
         productType: med.product_type || "",
-        stripPerPack: med.strip_per_pack?.toString() || "",
+        stripPerBox: med.strip_per_pack?.toString() || "",
         pcsPerStrip: med.pcs_per_strip?.toString() || "",
-        productSize: med.product_size || "",
+        strength: rawStrength,
         totalQuantity: med.stock_quantity?.toString() || "",
         stockAlert: med.stock_alert?.toString() || "",
         mrp: med.price?.toString() || "",
@@ -493,7 +496,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
-                                <span className="text-xs text-muted-foreground flex-shrink-0">Qty (pcs):</span>
+                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(med.format) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
