@@ -234,7 +234,7 @@ const ShopProfile = () => {
         </div>
       </div>
 
-      <div className="mt-12 px-4">
+      <div className="mt-14 px-4">
         <Accordion type="multiple" className="space-y-4">
           {/* Shop Information */}
           <AccordionItem value="shop-info" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
