@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 
 interface Medicine {
@@ -76,6 +78,9 @@ const Inventory = () => {
   const [catalogQty, setCatalogQty] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [addingCatalog, setAddingCatalog] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
+  const [companySearch, setCompanySearch] = useState("");
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
@@ -108,15 +113,46 @@ const Inventory = () => {
     }
   }, [searchOpen]);
 
+  // Unique company names from both sources
+  const allCompanies = useMemo(() => {
+    const names = new Set<string>();
+    medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
+    catalog.forEach((m) => { if (m.company) names.add(m.company); });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [medicines, catalog]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch.trim()) return allCompanies;
+    const q = companySearch.toLowerCase();
+    return allCompanies.filter((c) => c.toLowerCase().includes(q));
+  }, [allCompanies, companySearch]);
+
+  const toggleCompany = (name: string) => {
+    setSelectedCompanies((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSelectedCompanies(new Set());
+    setCompanySearch("");
+  };
+
   // Filter local medicines
   const filteredMedicines = useMemo(
-    () =>
-      searchQuery
-        ? medicines.filter((m) =>
-            m.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : medicines,
-    [medicines, searchQuery]
+    () => {
+      let result = medicines;
+      if (searchQuery) {
+        result = result.filter((m) => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      }
+      if (selectedCompanies.size > 0) {
+        result = result.filter((m) => m.company_name && selectedCompanies.has(m.company_name));
+      }
+      return result;
+    },
+    [medicines, searchQuery, selectedCompanies]
   );
 
   // Filter catalog results (exclude items already in local inventory)
@@ -124,14 +160,18 @@ const Inventory = () => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
-    return catalog.filter(
+    let result = catalog.filter(
       (m) =>
         (m.brand_name.toLowerCase().includes(q) ||
           (m.generic_name && m.generic_name.toLowerCase().includes(q)) ||
           (m.company && m.company.toLowerCase().includes(q))) &&
         !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
-  }, [catalog, medicines, searchQuery]);
+    if (selectedCompanies.size > 0) {
+      result = result.filter((m) => m.company && selectedCompanies.has(m.company));
+    }
+    return result;
+  }, [catalog, medicines, searchQuery, selectedCompanies]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
@@ -319,7 +359,7 @@ const Inventory = () => {
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
         {searchOpen ? (
           <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Input
                 ref={searchRef}
                 value={searchQuery}
@@ -333,6 +373,24 @@ const Inventory = () => {
                 </button>
               )}
             </div>
+            {selectedCompanies.size > 0 && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex-shrink-0"
+              >
+                {selectedCompanies.size} filter{selectedCompanies.size > 1 ? "s" : ""}
+                <X size={12} />
+              </button>
+            )}
+            <button
+              onClick={() => setFilterOpen(true)}
+              className="relative p-2 rounded-full bg-muted text-foreground flex-shrink-0"
+            >
+              <SlidersHorizontal size={18} />
+              {selectedCompanies.size > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary" />
+              )}
+            </button>
             <button onClick={handleCloseSearch} className="p-2 rounded-full bg-muted text-foreground flex-shrink-0">
               <X size={18} />
             </button>
@@ -552,7 +610,66 @@ const Inventory = () => {
         )}
       </div>
 
-      {/* Long Press Action Overlay */}
+      {/* Company Filter Bottom Sheet */}
+      <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh] flex flex-col px-4 pb-6">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-base font-bold text-foreground">Filter by Company</SheetTitle>
+          </SheetHeader>
+          <div className="relative mb-3">
+            <Input
+              value={companySearch}
+              onChange={(e) => setCompanySearch(e.target.value)}
+              placeholder="Search companies..."
+              className="h-9 rounded-xl border-muted bg-muted pr-8 text-sm"
+            />
+            {companySearch && (
+              <button onClick={() => setCompanySearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-xs text-muted-foreground">{selectedCompanies.size} selected</span>
+            <button
+              onClick={() => {
+                if (selectedCompanies.size === filteredCompanies.length) {
+                  setSelectedCompanies(new Set());
+                } else {
+                  setSelectedCompanies(new Set(filteredCompanies));
+                }
+              }}
+              className="text-xs font-semibold text-primary"
+            >
+              {selectedCompanies.size === filteredCompanies.length && filteredCompanies.length > 0 ? "Clear All" : "Select All"}
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            {filteredCompanies.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No companies found</p>
+            ) : (
+              filteredCompanies.map((company) => (
+                <label
+                  key={company}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 cursor-pointer transition-colors"
+                >
+                  <Checkbox
+                    checked={selectedCompanies.has(company)}
+                    onCheckedChange={() => toggleCompany(company)}
+                  />
+                  <span className="text-sm text-foreground truncate flex-1">{company}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => setFilterOpen(false)}
+            className="mt-3 w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            Apply Filter
+          </button>
+        </SheetContent>
+      </Sheet>
       {longPressMed && !deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setLongPressId(null)}>
           <div className="bg-background rounded-2xl shadow-2xl w-[85%] max-w-[280px] p-5 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
