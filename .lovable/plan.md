@@ -1,44 +1,36 @@
 
 
-## Plan: Add Company Filter to Inventory Search
+## Plan: Transform More Page into Professional Branded UI
 
-### Overview
-Add a filter icon next to the search bar that opens a bottom sheet with company checkboxes. When filters are active, both inventory and catalog results are filtered to selected companies only. A "Clear" badge appears when filters are active.
+### Changes — Single file: `src/pages/More.tsx`
 
-### Changes — Single file: `src/pages/Inventory.tsx`
+**1. Remove redundant "Profile" menu item**
+- Delete `{ label: "Profile", icon: User, path: "/profile" }` from `menuItems`
+- Add `LogOut` action and `HelpCircle` menu item
+- Update menu items with colorful icon backgrounds (different colors per item)
 
-**1. New state variables**
-- `filterOpen: boolean` — controls bottom sheet visibility
-- `selectedCompanies: Set<string>` — selected company names
-- `companySearch: string` — search within the company list
+**2. Replace top header + user card with a gradient profile header**
+- Remove the existing plain header (Medinist title + bell + avatar)
+- Remove the separate "User Info Card" section
+- Replace with a single gradient hero section (`bg-gradient-to-r from-blue-600 to-indigo-700`) containing:
+  - White-bordered avatar circle (large, centered or left-aligned)
+  - User name in bold white, phone in white/70 opacity
+  - Pharmacy name in white/60 opacity
+  - Make entire section clickable → navigates to `/shop-profile`
 
-**2. Compute unique company list**
-- `useMemo` that collects unique company names from both `medicines` (company_name) and `catalog` (company), sorted alphabetically, filtered by `companySearch`
+**3. Page background**
+- Change `bg-background` to `bg-gray-50`
 
-**3. Search bar redesign (line ~318-348)**
-- When `searchOpen`: shrink the search input slightly, add a `SlidersHorizontal` (Lucide) icon button between the search input and the close X
-- When filters are active: show a small badge/dot on the filter icon + a "Clear" chip near the search bar
-- When not searching: keep existing layout unchanged
+**4. Menu items styling**
+- Use white `bg-white` cards with `shadow-sm rounded-xl` instead of `bg-muted rounded-2xl`
+- Each item gets a unique colored icon circle (e.g., Inventory=blue, Shop=emerald, Settings=gray, Help=amber, Logout=red)
+- Keep `ChevronRight` on the right
+- Add `LogOut` as the last item with red styling, calling `signOut`
 
-**4. Bottom Sheet for company filter**
-- Use the existing `Sheet` component (`@/components/ui/sheet`) with `side="bottom"`
-- Contents: search input for companies → scrollable checkbox list → "Apply Filter" button
-- Each company row: checkbox + company name + count of medicines
-- "Select All / Clear All" toggle at top
+**5. Add imports**
+- `LogOut, HelpCircle` from lucide-react
+- `signOut` from `useAuth`
 
-**5. Filter logic integration (lines ~112-134)**
-- `filteredMedicines`: add condition — if `selectedCompanies.size > 0`, only include medicines whose `company_name` is in the set
-- `filteredCatalog`: same — filter by `med.company` being in the set
-
-**6. Active filter indicator**
-- When `selectedCompanies.size > 0` and search is open: show a small pill/badge like "2 filters" next to the search bar with an X to clear
-
-### UI Details
-- Filter icon: `SlidersHorizontal` from lucide-react
-- Bottom sheet: rounded top corners, max-height 70vh, scrollable company list
-- Checkboxes: use `@/components/ui/checkbox`
-- Mobile-friendly: full-width on small screens, thumb-reachable apply button at bottom
-
-### No database or migration changes needed
-All filtering is client-side on already-fetched data.
+### No other files modified
+The AppLayout header is minimal (just renders children + BottomNav), so no header sync needed — the More page owns its own header.
 
