@@ -18,7 +18,7 @@ const ForgotPassword = () => {
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + "/reset-password",
+      redirectTo: "https://medi-nist.lovable.app/reset-password",
     });
 
     if (error) {
@@ -45,7 +45,7 @@ const ForgotPassword = () => {
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Check your inbox</h2>
               <p className="text-sm text-gray-500">
-                A password reset link has been sent to your email. Please check your inbox.
+                A password reset link has been sent to your email. Please check your inbox and spam/junk folder.
               </p>
               <Link to="/login" className="inline-block text-sm text-blue-600 font-medium hover:underline mt-2">
                 Back to Sign In
