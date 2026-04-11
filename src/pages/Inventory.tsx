@@ -610,7 +610,66 @@ const Inventory = () => {
         )}
       </div>
 
-      {/* Long Press Action Overlay */}
+      {/* Company Filter Bottom Sheet */}
+      <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh] flex flex-col px-4 pb-6">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-base font-bold text-foreground">Filter by Company</SheetTitle>
+          </SheetHeader>
+          <div className="relative mb-3">
+            <Input
+              value={companySearch}
+              onChange={(e) => setCompanySearch(e.target.value)}
+              placeholder="Search companies..."
+              className="h-9 rounded-xl border-muted bg-muted pr-8 text-sm"
+            />
+            {companySearch && (
+              <button onClick={() => setCompanySearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-xs text-muted-foreground">{selectedCompanies.size} selected</span>
+            <button
+              onClick={() => {
+                if (selectedCompanies.size === filteredCompanies.length) {
+                  setSelectedCompanies(new Set());
+                } else {
+                  setSelectedCompanies(new Set(filteredCompanies));
+                }
+              }}
+              className="text-xs font-semibold text-primary"
+            >
+              {selectedCompanies.size === filteredCompanies.length && filteredCompanies.length > 0 ? "Clear All" : "Select All"}
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            {filteredCompanies.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No companies found</p>
+            ) : (
+              filteredCompanies.map((company) => (
+                <label
+                  key={company}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 cursor-pointer transition-colors"
+                >
+                  <Checkbox
+                    checked={selectedCompanies.has(company)}
+                    onCheckedChange={() => toggleCompany(company)}
+                  />
+                  <span className="text-sm text-foreground truncate flex-1">{company}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => setFilterOpen(false)}
+            className="mt-3 w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            Apply Filter
+          </button>
+        </SheetContent>
+      </Sheet>
       {longPressMed && !deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setLongPressId(null)}>
           <div className="bg-background rounded-2xl shadow-2xl w-[85%] max-w-[280px] p-5 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
