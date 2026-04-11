@@ -479,10 +479,10 @@ const CreateSale = () => {
                   className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-gray-50 transition"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-400 w-4 text-right">{idx + 1}.</span>
+                    <span className="text-xs font-bold w-4 text-right text-slate-700">{idx + 1}.</span>
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
                       <span className="truncate">{item.medicine.name}</span>
-                      {item.medicine.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{item.medicine.product_size}</span>}
+                      {item.medicine.product_size && <span className="text-xs font-normal flex-shrink-0 mx-[5px] text-slate-800">{item.medicine.product_size}</span>}
                       {item.medicine.product_type && (
                         <span className="ml-0.5 text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                       )}
@@ -491,7 +491,7 @@ const CreateSale = () => {
                     <span className="text-xs font-bold text-emerald-600">{lineTotal} ৳</span>
                   </div>
                   {item.medicine.company_name && (
-                    <p className="text-[10px] text-secondary ml-6 mt-0.5">{item.medicine.company_name}</p>
+                    <p className="text-[10px] ml-6 mt-0.5 text-secondary-foreground">{item.medicine.company_name}</p>
                   )}
                 </div>
               );
