@@ -26,14 +26,17 @@ const ResetPassword = () => {
   const navigate = useNavigate();
   const { user, isPasswordRecovery } = useAuth();
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   const isReady = !!user && isPasswordRecovery;
   const isExpired = !user && !isPasswordRecovery;
 
   const strength = getPasswordStrength(password);
-  const canUpdate = strength.label !== "Weak";
+  const passwordsMatch = password === confirmPassword;
+  const canUpdate = strength.label !== "Weak" && passwordsMatch && confirmPassword.length > 0;
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,6 +120,29 @@ const ResetPassword = () => {
                   <style>{`[role="progressbar"] > div { background: ${strengthBarColor} !important; }`}</style>
                 </div>
               )}
+
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Confirm Password</label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {confirmPassword && !passwordsMatch && (
+                  <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                )}
+              </div>
 
               <Button
                 type="submit"
