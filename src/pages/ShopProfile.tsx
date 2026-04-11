@@ -207,23 +207,23 @@ const ShopProfile = () => {
           </div>
         )}
         {isAdmin && (
-          <label className="absolute top-3 right-3 p-2 rounded-full bg-white/80 backdrop-blur cursor-pointer shadow">
+          <label className="absolute top-3 right-3 p-2 rounded-full bg-white/80 backdrop-blur cursor-pointer shadow border-secondary-foreground border">
             <Camera size={18} className="text-emerald-600" />
             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("cover", e)} />
           </label>
         )}
         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
           <div className="relative">
-            <label className={isAdmin ? "cursor-pointer" : ""}>
-              <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                {pharmacy?.logo_url ? <AvatarImage src={pharmacy.logo_url} className="object-cover" /> : null}
+            <label className={isAdmin ? "cursor-pointer py-0 my-0 mt-0 px-0 pt-0 mx-0 mr-0 ml-0 pb-0 pl-[350px] mb-0" : ""}>
+              <Avatar className="h-24 w-24 border-4 border-background shadow-lg mt-0 my-[2px] py-[10px] px-0 pb-0 pt-0 mb-[20px] mr-0 ml-0">
+                {pharmacy?.logo_url ? <AvatarImage src={pharmacy.logo_url} className="object-cover mx-0 mt-0 mb-0 pt-0 pb-0" /> : null}
                 <AvatarFallback className="bg-emerald-100 text-emerald-700 text-2xl font-bold">
                   {pharmacy?.name?.[0] || "P"}
                 </AvatarFallback>
               </Avatar>
               {isAdmin && (
                 <>
-                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-emerald-600 shadow border-2 border-background">
+                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-emerald-600 shadow border-2 border-background px-[6px] mt-0 mb-[30px] mr-[10px]">
                     <Camera size={14} className="text-white" />
                   </div>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("logo", e)} />
