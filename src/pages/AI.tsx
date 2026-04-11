@@ -188,7 +188,7 @@ const AI = () => {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-bold text-foreground truncate">MediNist AI Assistant</h1>
-          <p className="text-[10px] text-muted-foreground">Pharmacy Assistant • Naseer Medical Hall</p>
+          <p className="text-[10px] font-semibold text-secondary-foreground">Pharmacy Assistant • Naseer Medical Hall</p>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={handleClear}>
           <Trash2 className="w-4 h-4" />
@@ -240,7 +240,7 @@ const AI = () => {
 
       {/* Input */}
       <div className="shrink-0 bg-[#F4F6FB] px-3 pb-[env(safe-area-inset-bottom,8px)] pt-1">
-        <div className="flex gap-2 items-end bg-white rounded-2xl border shadow-sm px-3 py-2">
+        <div className="flex gap-2 items-end bg-white rounded-2xl border shadow-sm px-3 py-2 my-[25px]">
           <textarea
             ref={inputRef}
             value={input}
