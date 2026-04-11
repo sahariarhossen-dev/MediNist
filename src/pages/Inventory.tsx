@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 
 interface Medicine {
