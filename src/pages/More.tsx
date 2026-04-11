@@ -27,6 +27,8 @@ const More = () => {
       setPharmacyLogo(data?.logo_url ?? null);
     };
     fetchPharmacyLogo();
+    window.addEventListener("focus", fetchPharmacyLogo);
+    return () => window.removeEventListener("focus", fetchPharmacyLogo);
   }, [profile?.pharmacy_id]);
 
   const getUserInitials = (name: string | null) =>
