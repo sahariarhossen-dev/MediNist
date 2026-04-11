@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
+import { truncateName, truncateStrength } from "@/lib/formatUtils";
 
 interface Medicine {
   id: string;
@@ -464,10 +465,10 @@ const Inventory = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-foreground truncate flex items-center gap-1">
-                            <span className="truncate">{med.name}</span>
-                            {med.product_size && <span className="text-xs text-muted-foreground font-normal flex-shrink-0">{med.product_size}</span>}
+                            <span className="truncate">{truncateName(med.name)}</span>
+                            {med.product_size && <span className="text-[10px] text-muted-foreground font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">{med.company_name || "—"}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[120px]">{med.company_name || "—"}</p>
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>

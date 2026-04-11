@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
+import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import {
   Select,
   SelectContent,
@@ -140,8 +141,8 @@ const ShortItems = () => {
                   <tr key={item.id} className="border-b border-gray-50 last:border-0">
                     <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">
                       <span className="flex items-center gap-1">
-                        <span className="truncate">{item.name}</span>
-                        {item.product_size && <span className="text-[11px] text-gray-400 font-normal flex-shrink-0">{item.product_size}</span>}
+                        <span className="truncate">{truncateName(item.name)}</span>
+                        {item.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.product_size)}</span>}
                       </span>
                     </td>
                     <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>

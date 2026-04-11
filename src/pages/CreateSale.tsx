@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
+import { truncateName, truncateStrength } from "@/lib/formatUtils";
 
 interface Medicine {
   id: string;
@@ -413,16 +414,16 @@ const CreateSale = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
-                    <span className="truncate">{med.name}</span>
-                    {med.product_size && <span className="text-xs font-normal flex-shrink-0 text-muted-foreground my-0 py-[5px] pt-0 pb-[10px] mr-0 mx-0 ml-[3px]">{med.product_size}</span>}
+                    <span className="truncate">{truncateName(med.name)}</span>
+                    {med.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">{truncateStrength(med.product_size)}</span>}
                     {med.product_type && (
-                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0 pb-[10px] ml-[5px]">{med.product_type}</span>
+                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{med.product_type}</span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    {med.company_name && <span className="text-[10px] text-secondary-foreground">{med.company_name}</span>}
+                    {med.company_name && <span className="text-[10px] text-secondary-foreground truncate max-w-[100px]">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] font-mono font-bold text-primary">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-lime-900 text-sm font-bold">৳{med.price ?? 0}</p>
@@ -454,30 +455,30 @@ const CreateSale = () => {
                 return (
                   <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4">
                     {/* Row 1: Name + type | MRP | Company */}
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-base font-bold text-gray-900 min-w-0 flex-1 flex items-center gap-1">
-                        <span className="truncate">{item.medicine.name}</span>
-                        {item.medicine.product_size && <span className="text-xs text-gray-400 font-normal flex-shrink-0">{item.medicine.product_size}</span>}
+                    <div className="flex items-center gap-2 flex-nowrap">
+                      <p className="text-sm font-bold text-gray-900 min-w-0 truncate flex items-center gap-1">
+                        <span className="truncate">{truncateName(item.medicine.name)}</span>
+                        {item.medicine.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.medicine.product_size)}</span>}
                         {item.medicine.product_type && (
-                          <span className="ml-0.5 text-[11px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      <span className="flex-shrink-0 text-right mx-[25px] text-secondary-foreground text-xs font-medium">MRP : {unitPrice}</span>
+                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{unitPrice}</span>
                       {item.medicine.company_name && (
-                        <span className="text-[11px] text-emerald-600 flex-shrink-0 font-medium mx-[10px]">{item.medicine.company_name}</span>
+                        <span className="text-[10px] text-emerald-600 flex-shrink-0 font-medium truncate max-w-[60px]">{item.medicine.company_name}</span>
                       )}
                     </div>
 
                     {/* Row 2: Trash | STK | Discount% (wholesale) | Qty controller */}
-                    <div className="flex items-center justify-between gap-2 mt-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-1.5 mt-2 flex-nowrap">
+                      <div className="flex items-center gap-1 min-w-0 flex-shrink-0">
                         <button
                           onClick={() => removeFromCart(item.medicine.id)}
                           className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[11px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type) ? `${item.medicine.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
 
                       {/* Wholesale: item discount input */}
@@ -497,7 +498,7 @@ const CreateSale = () => {
 
                       {/* Retail: show calculation */}
                       {!isWholesale && (
-                        <span className="text-xs font-semibold text-emerald-700 whitespace-nowrap mx-[10px]">
+                        <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0 ml-auto">
                           {item.quantity}*{unitPrice}={grossTotal}৳
                         </span>
                       )}
@@ -547,10 +548,10 @@ const CreateSale = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold w-4 text-right text-slate-700">{idx + 1}.</span>
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
-                      <span className="truncate">{item.medicine.name}</span>
-                      {item.medicine.product_size && <span className="text-xs font-normal flex-shrink-0 mx-[5px] text-slate-800">{item.medicine.product_size}</span>}
+                      <span className="truncate">{truncateName(item.medicine.name)}</span>
+                      {item.medicine.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-slate-800">{truncateStrength(item.medicine.product_size)}</span>}
                       {item.medicine.product_type && (
-                        <span className="ml-0.5 text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                       )}
                     </p>
                     {isWholesale ? (
@@ -578,7 +579,7 @@ const CreateSale = () => {
         {cartItems.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 mt-3 space-y-1.5">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-500 text-right mx-[35px]">Subtotal</span>
+              <span className="text-sm font-medium text-gray-500 text-right ml-2">Subtotal</span>
               <span className="text-sm font-bold text-gray-900">
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
@@ -593,7 +594,7 @@ const CreateSale = () => {
             {/* Retail: global discount editor */}
             {!isWholesale && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-500 mx-[35px] flex items-center gap-1.5">
+                <span className="text-sm font-medium text-gray-500 ml-2 flex items-center gap-1.5">
                   Discount
                   {!editingDiscount ? (
                     <>
@@ -643,7 +644,7 @@ const CreateSale = () => {
             {/* Wholesale: total discount display */}
             {isWholesale && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-500 mx-[35px]">Item Discounts</span>
+                <span className="text-sm font-medium text-gray-500 ml-2">Item Discounts</span>
                 <span className="text-sm font-bold text-gray-900">-{totalDiscountAmount} ৳</span>
               </div>
             )}
