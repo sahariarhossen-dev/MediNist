@@ -184,6 +184,7 @@ const Invoice = () => {
                 <th className="text-left py-3 px-4 font-semibold uppercase tracking-wide text-xs">Description</th>
                 <th className="text-center py-3 px-4 font-semibold uppercase tracking-wide text-xs">Qty</th>
                 <th className="text-right py-3 px-4 font-semibold uppercase tracking-wide text-xs">Unit Price</th>
+                {isWholesale && <th className="text-center py-3 px-4 font-semibold uppercase tracking-wide text-xs">Disc%</th>}
                 <th className="text-right py-3 px-4 font-semibold uppercase tracking-wide text-xs">Total</th>
               </tr>
             </thead>
@@ -197,6 +198,7 @@ const Invoice = () => {
                   </td>
                   <td className="py-2.5 px-4 text-center font-medium text-gray-700">{item.quantity}</td>
                   <td className="py-2.5 px-4 text-right font-medium text-gray-700 font-mono">৳{Number(item.unit_price).toLocaleString()}</td>
+                  {isWholesale && <td className="py-2.5 px-4 text-center font-medium text-gray-700">{item.discount_percent ?? 0}%</td>}
                   <td className="py-2.5 px-4 text-right font-bold text-gray-900 font-mono">৳{Number(item.total_price).toLocaleString()}</td>
                 </tr>
               ))}
