@@ -1,35 +1,44 @@
 
 
-## Plan: Fix Catalog Input Logic & Edit Page Data Mapping
+## Plan: Add Company Filter to Inventory Search
 
-### Problems Found
+### Overview
+Add a filter icon next to the search bar that opens a bottom sheet with company checkboxes. When filters are active, both inventory and catalog results are filtered to selected companies only. A "Clear" badge appears when filters are active.
 
-1. **Catalog input always shows "Qty (pcs)"** — even for Tablets/Capsules. Should show "Box" and convert to pieces using `boxesToPieces`.
-2. **Edit page fields are empty** — `handleEdit` passes `productSize`, `stripPerPack` but AddProduct reads `strength`, `stripPerBox`. Key name mismatch.
-3. **Strength not parsed back** — `product_size` is stored as "500 mg" but needs to be split back into value ("500") and unit is auto-determined by type.
+### Changes — Single file: `src/pages/Inventory.tsx`
 
-### Changes
+**1. New state variables**
+- `filterOpen: boolean` — controls bottom sheet visibility
+- `selectedCompanies: Set<string>` — selected company names
+- `companySearch: string` — search within the company list
 
-#### File: `src/pages/Inventory.tsx`
+**2. Compute unique company list**
+- `useMemo` that collects unique company names from both `medicines` (company_name) and `catalog` (company), sorted alphabetically, filtered by `companySearch`
 
-**1. Catalog expanded input (line ~496)**: Make label dynamic based on `med.format`:
-- Tablet/Capsule → label "Box", convert qty via `boxesToPieces(qty, stripPerPack, pcsPerStrip)` before saving
-- Others → label "Qty (pcs)", save raw number
+**3. Search bar redesign (line ~318-348)**
+- When `searchOpen`: shrink the search input slightly, add a `SlidersHorizontal` (Lucide) icon button between the search input and the close X
+- When filters are active: show a small badge/dot on the filter icon + a "Clear" chip near the search bar
+- When not searching: keep existing layout unchanged
 
-**2. `handleAddFromCatalog` (line ~201)**: For Tablet/Capsule, convert `catalogQty` from boxes to pieces using computed `pcsPerStrip` and `stripPerPack`. For others, save raw qty.
+**4. Bottom Sheet for company filter**
+- Use the existing `Sheet` component (`@/components/ui/sheet`) with `side="bottom"`
+- Contents: search input for companies → scrollable checkbox list → "Apply Filter" button
+- Each company row: checkbox + company name + count of medicines
+- "Select All / Clear All" toggle at top
 
-**3. `handleEdit` state keys (line ~259)**: Fix key names to match what AddProduct expects:
-- `stripPerPack` → `stripPerBox` (AddProduct reads `s.stripPerBox`)
-- `productSize` → `strength` (parse "500 mg" → "500", stripping the unit suffix)
+**5. Filter logic integration (lines ~112-134)**
+- `filteredMedicines`: add condition — if `selectedCompanies.size > 0`, only include medicines whose `company_name` is in the set
+- `filteredCatalog`: same — filter by `med.company` being in the set
 
-#### File: `src/pages/AddProduct.tsx`
+**6. Active filter indicator**
+- When `selectedCompanies.size > 0` and search is open: show a small pill/badge like "2 filters" next to the search bar with an X to clear
 
-**4. Parse strength from `product_size`** (line ~81): When restoring from edit state, extract the numeric part from "500 mg" → set strength to "500". The unit is already auto-determined by product type via `getStrengthConfig`.
+### UI Details
+- Filter icon: `SlidersHorizontal` from lucide-react
+- Bottom sheet: rounded top corners, max-height 70vh, scrollable company list
+- Checkboxes: use `@/components/ui/checkbox`
+- Mobile-friendly: full-width on small screens, thumb-reachable apply button at bottom
 
-### No database changes needed.
-
-### Summary of fixes:
-- Catalog: dynamic "Box" vs "Qty" label + correct box→pieces conversion on save
-- Edit: fix state key mismatches so MRP, strength, strips, pcs all populate correctly
-- Strength parsing: split "500 mg" back to numeric value for the input field
+### No database or migration changes needed
+All filtering is client-side on already-fetched data.
 
