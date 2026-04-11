@@ -146,7 +146,7 @@ const ShortItems = () => {
                       </span>
                     </td>
                     <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
-                    <td className={`px-1.5 py-3 text-center font-mono ${stockColor(item.stock_quantity)}`}>
+                    <td className={`px-1.5 py-3 font-mono text-left text-xs pt-0 pb-0 pl-0 pr-0 ${stockColor(item.stock_quantity)}`}>
                       {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                     </td>
                     <td className="px-2 py-3 text-right text-gray-700">
