@@ -12,17 +12,25 @@ const ForgotPassword = () => {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
+  const getFriendlyError = (message: string) => {
+    if (message.toLowerCase().includes("rate limit"))
+      return "Too many requests. Please wait a few minutes before trying again.";
+    if (message.toLowerCase().includes("redirect url not allowed"))
+      return "Configuration error: redirect URL is not allowed. Please contact support.";
+    return message;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "https://medi-nist.lovable.app/reset-password",
+      redirectTo: window.location.origin + "/reset-password",
     });
 
     if (error) {
-      setError(error.message);
+      setError(getFriendlyError(error.message));
     } else {
       setSent(true);
     }
