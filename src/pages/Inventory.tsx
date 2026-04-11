@@ -359,7 +359,7 @@ const Inventory = () => {
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
         {searchOpen ? (
           <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Input
                 ref={searchRef}
                 value={searchQuery}
@@ -373,6 +373,24 @@ const Inventory = () => {
                 </button>
               )}
             </div>
+            {selectedCompanies.size > 0 && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex-shrink-0"
+              >
+                {selectedCompanies.size} filter{selectedCompanies.size > 1 ? "s" : ""}
+                <X size={12} />
+              </button>
+            )}
+            <button
+              onClick={() => setFilterOpen(true)}
+              className="relative p-2 rounded-full bg-muted text-foreground flex-shrink-0"
+            >
+              <SlidersHorizontal size={18} />
+              {selectedCompanies.size > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary" />
+              )}
+            </button>
             <button onClick={handleCloseSearch} className="p-2 rounded-full bg-muted text-foreground flex-shrink-0">
               <X size={18} />
             </button>
