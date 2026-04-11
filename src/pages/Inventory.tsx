@@ -78,6 +78,9 @@ const Inventory = () => {
   const [catalogQty, setCatalogQty] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [addingCatalog, setAddingCatalog] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
+  const [companySearch, setCompanySearch] = useState("");
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
