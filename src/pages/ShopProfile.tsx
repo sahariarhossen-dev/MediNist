@@ -212,20 +212,24 @@ const ShopProfile = () => {
             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("cover", e)} />
           </label>
         )}
-        <div className="absolute -bottom-8 left-5">
+        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
           <div className="relative">
-            <Avatar className="h-20 w-20 border-4 border-background shadow-lg">
-              {pharmacy?.logo_url ? <AvatarImage src={pharmacy.logo_url} className="object-cover" /> : null}
-              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xl font-bold">
-                {pharmacy?.name?.[0] || "P"}
-              </AvatarFallback>
-            </Avatar>
-            {isAdmin && (
-              <label className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-emerald-600 cursor-pointer shadow">
-                <Plus size={12} className="text-white" />
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("logo", e)} />
-              </label>
-            )}
+            <label className={isAdmin ? "cursor-pointer" : ""}>
+              <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
+                {pharmacy?.logo_url ? <AvatarImage src={pharmacy.logo_url} className="object-cover" /> : null}
+                <AvatarFallback className="bg-emerald-100 text-emerald-700 text-2xl font-bold">
+                  {pharmacy?.name?.[0] || "P"}
+                </AvatarFallback>
+              </Avatar>
+              {isAdmin && (
+                <>
+                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-emerald-600 shadow border-2 border-background">
+                    <Camera size={14} className="text-white" />
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("logo", e)} />
+                </>
+              )}
+            </label>
           </div>
         </div>
       </div>
