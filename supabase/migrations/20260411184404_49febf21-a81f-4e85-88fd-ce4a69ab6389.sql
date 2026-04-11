@@ -1,0 +1,1 @@
+ALTER TABLE public.sale_items ADD COLUMN discount_percent numeric NOT NULL DEFAULT 0;
