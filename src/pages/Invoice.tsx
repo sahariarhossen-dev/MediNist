@@ -27,6 +27,7 @@ interface SaleItemData {
   quantity: number;
   unit_price: number;
   total_price: number;
+  discount_percent: number;
 }
 
 interface PharmacyData {
@@ -65,7 +66,7 @@ const Invoice = () => {
       setSale(saleData as SaleData);
 
       const [itemsRes, pharmacyRes, sellerRes] = await Promise.all([
-        supabase.from("sale_items").select("id, medicine_name, company_name, quantity, unit_price, total_price").eq("sale_id", saleId),
+        supabase.from("sale_items").select("id, medicine_name, company_name, quantity, unit_price, total_price, discount_percent").eq("sale_id", saleId),
         supabase.from("pharmacies").select("name, address, division, district, upazila, email, proprietor_name").eq("id", saleData.pharmacy_id).single(),
         supabase.from("profiles").select("full_name, phone").eq("id", saleData.user_id).single(),
       ]);
@@ -116,6 +117,7 @@ const Invoice = () => {
   }
 
   const invoiceId = `INV-${sale.id.slice(0, 11)}`;
+  const isWholesale = sale.sale_type === "wholesale";
   const dateObj = parseISO(sale.created_at);
   const timeStr = format(dateObj, "HH:mm");
   const dateStr = format(dateObj, "dd-MM-yy");
