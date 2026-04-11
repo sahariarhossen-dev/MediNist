@@ -1,33 +1,63 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+const STORAGE_KEY = "medinistai_chat_history";
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-pharmacy`;
 
+const DEFAULT_MSG: Msg = {
+  role: "assistant",
+  content:
+    "আসসালামু আলাইকুম! 👋 I'm **MediNist AI**, your pharmacy assistant for Naseer Medical Hall.\n\nI can help you with:\n- 📦 Inventory queries\n- 💰 Sales reports\n- 💊 Medicine suggestions\n\nHow can I help you today?",
+};
+
+const loadMessages = (): Msg[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [DEFAULT_MSG];
+};
+
+const saveMessages = (msgs: Msg[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+  } catch { /* ignore */ }
+};
+
 const AI = () => {
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      role: "assistant",
-      content:
-        "আসসালামু আলাইকুম! 👋 I'm **MediNist AI**, your pharmacy assistant for Naseer Medical Hall.\n\nI can help you with:\n- 📦 Inventory queries\n- 💰 Sales reports\n- 💊 Medicine suggestions\n\nHow can I help you today?",
-    },
-  ]);
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<Msg[]>(loadMessages);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Persist messages on every change
+  useEffect(() => {
+    saveMessages(messages);
+  }, [messages]);
+
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleClear = useCallback(() => {
+    setMessages([DEFAULT_MSG]);
+    toast.success("Chat cleared");
+  }, []);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -38,7 +68,6 @@ const AI = () => {
     setInput("");
     setIsLoading(true);
 
-    // Get session token
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast.error("Please log in to use the AI assistant.");
@@ -110,7 +139,6 @@ const AI = () => {
         }
       }
 
-      // Flush remaining
       if (textBuffer.trim()) {
         for (let raw of textBuffer.split("\n")) {
           if (!raw) continue;
@@ -149,16 +177,22 @@ const AI = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto flex flex-col pb-20">
+    <div className="fixed inset-0 flex flex-col bg-[#F4F6FB] z-50">
       {/* Header */}
-      <div className="bg-white border-b px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-          <Bot className="w-5 h-5 text-white" />
+      <div className="bg-white border-b px-2 py-2.5 flex items-center gap-2 shrink-0">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+          <Bot className="w-4 h-4 text-white" />
         </div>
-        <div>
-          <h1 className="text-sm font-bold text-foreground">MediNist AI</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-sm font-bold text-foreground truncate">MediNist AI Assistant</h1>
           <p className="text-[10px] text-muted-foreground">Pharmacy Assistant • Naseer Medical Hall</p>
         </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={handleClear}>
+          <Trash2 className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Messages */}
@@ -166,7 +200,7 @@ const AI = () => {
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 mt-1">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0 mt-1">
                 <Bot className="w-3.5 h-3.5 text-white" />
               </div>
             )}
@@ -186,7 +220,7 @@ const AI = () => {
               )}
             </div>
             {msg.role === "user" && (
-              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1">
+              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-1">
                 <User className="w-3.5 h-3.5 text-muted-foreground" />
               </div>
             )}
@@ -205,7 +239,7 @@ const AI = () => {
       </div>
 
       {/* Input */}
-      <div className="sticky bottom-20 bg-[#F4F6FB] px-3 pb-2 pt-1">
+      <div className="shrink-0 bg-[#F4F6FB] px-3 pb-[env(safe-area-inset-bottom,8px)] pt-1">
         <div className="flex gap-2 items-end bg-white rounded-2xl border shadow-sm px-3 py-2">
           <textarea
             ref={inputRef}
@@ -220,7 +254,7 @@ const AI = () => {
             size="icon"
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className="h-8 w-8 rounded-full flex-shrink-0"
+            className="h-8 w-8 rounded-full shrink-0"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
