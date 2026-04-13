@@ -1,4 +1,5 @@
 import { DEFAULT_FIRST_MESSAGE, type Msg } from "./chatStore";
+import { isTransientAssistantMessage } from "./chatMessageUtils";
 
 const MAX_CONTEXT_MESSAGES = 6;
 
@@ -6,9 +7,6 @@ const isDefaultWelcomeMessage = (message: Msg, index: number) =>
   index === 0 &&
   message.role === DEFAULT_FIRST_MESSAGE.role &&
   message.content === DEFAULT_FIRST_MESSAGE.content;
-
-const isTransientAssistantMessage = (message: Msg) =>
-  message.role === "assistant" && message.content.trim().startsWith("⚠️");
 
 export const buildChatRequestMessages = (messages: Msg[]) =>
   messages
