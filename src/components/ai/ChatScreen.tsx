@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown";
 import { Send, Bot, Loader2, ArrowLeft, Settings, Plus } from "lucide-react";
 import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
+import ChatSettingsDialog from "./ChatSettingsDialog";
+import { buildChatRequestMessages } from "./chatRequestUtils";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getConversation,
@@ -17,11 +19,74 @@ interface Props {
   onBack: () => void;
 }
 
+const parseAssistantStream = async (response: Response, onChunk: (chunk: string) => void) => {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response stream");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]") continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) onChunk(content);
+      } catch {
+        // skip malformed chunks
+      }
+    }
+  }
+};
+
+const invokeChatPharmacy = async ({
+  accessToken,
+  messages,
+  testConnection = false,
+  onChunk,
+}: {
+  accessToken: string;
+  messages: Msg[];
+  testConnection?: boolean;
+  onChunk: (chunk: string) => void;
+}) => {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-pharmacy`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ messages, testConnection }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(err || `Server error ${response.status}`);
+  }
+
+  await parseAssistantStream(response, onChunk);
+};
+
 const ChatScreen = ({ conversationId, onBack }: Props) => {
   const convo = getConversation(conversationId);
   const [messages, setMessages] = useState<Msg[]>(convo?.messages || [DEFAULT_FIRST_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,6 +105,42 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
     toast.success("Chat deleted");
     onBack();
   }, [conversationId, onBack]);
+
+  const handleTestConnection = useCallback(async () => {
+    setIsTestingConnection(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        toast.error("Please log in to test the AI assistant.");
+        return;
+      }
+
+      let assistantReply = "";
+      await invokeChatPharmacy({
+        accessToken: session.access_token,
+        messages: [],
+        testConnection: true,
+        onChunk: (chunk) => {
+          assistantReply += chunk;
+        },
+      });
+
+      if (!assistantReply.trim() || assistantReply.trim().startsWith("⚠️")) {
+        throw new Error(assistantReply.trim() || "Connection test failed");
+      }
+
+      toast.success("Gemini connection is ready.");
+      setIsSettingsOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Connection test failed");
+    } finally {
+      setIsTestingConnection(false);
+    }
+  }, []);
 
   const doSend = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -69,52 +170,12 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
         return;
       }
 
-      // Send only non-system messages (skip the first welcome message)
-      const chatMessages = updatedMessages.slice(1);
-
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-pharmacy`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ messages: chatMessages }),
+      const chatMessages = buildChatRequestMessages(updatedMessages);
+      await invokeChatPharmacy({
+        accessToken: session.access_token,
+        messages: chatMessages,
+        onChunk: upsert,
       });
-
-      if (!response.ok) {
-        const err = await response.text();
-        throw new Error(err || `Server error ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) upsert(content);
-          } catch {
-            // skip malformed chunks
-          }
-        }
-      }
 
       if (!assistantSoFar) {
         upsert("I'm sorry, I couldn't generate a response. Please try again.");
@@ -148,7 +209,10 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
           <h1 className="text-sm font-bold text-[#F1F5F9] truncate">Naseer Medical AI Assistant</h1>
           <p className="text-[10px] text-[#64748B]">Pharmacy Assistant • Online</p>
         </div>
-        <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#1E293B] transition-colors">
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-accent"
+        >
           <Settings className="w-4 h-4 text-[#94A3B8]" />
         </button>
       </div>
@@ -230,6 +294,13 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
           </button>
         </div>
       </div>
+
+      <ChatSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        onTestConnection={handleTestConnection}
+        isTestingConnection={isTestingConnection}
+      />
     </div>
   );
 };

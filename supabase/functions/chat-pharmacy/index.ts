@@ -8,6 +8,9 @@ const corsHeaders = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const RATE_LIMIT_RETRY_DELAY_MS = 5000;
+const MAX_CHAT_HISTORY_MESSAGES = 6;
+const MAX_LOW_STOCK_ITEMS = 5;
 
 const jsonResponse = (status: number, payload: Record<string, unknown>) =>
   new Response(JSON.stringify(payload), {
@@ -27,6 +30,10 @@ const streamAssistantMessage = (message: string) => {
 };
 
 const getRetryDelay = (response: Response, attempt: number) => {
+  if (response.status === 429) {
+    return RATE_LIMIT_RETRY_DELAY_MS;
+  }
+
   const retryAfterHeader = response.headers.get("retry-after");
   const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
@@ -36,7 +43,7 @@ const getRetryDelay = (response: Response, attempt: number) => {
   return 1200 * 2 ** attempt;
 };
 
-const fetchGeminiWithRetry = async (url: string, init: RequestInit, maxAttempts = 3) => {
+const fetchGeminiWithRetry = async (url: string, init: RequestInit, maxAttempts = 2) => {
   let lastResponse: Response | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -100,99 +107,111 @@ serve(async (req) => {
     }
 
     const body = await req.json().catch(() => null);
-    const messages = Array.isArray(body?.messages) ? body.messages : null;
-    if (!messages) {
+    const isConnectionTest = body?.testConnection === true;
+    const incomingMessages = Array.isArray(body?.messages) ? body.messages : null;
+    if (!isConnectionTest && !incomingMessages) {
       return jsonResponse(400, { error: "Invalid request body" });
     }
 
-    const [inventoryRes, salesTodayRes, lowStockRes] = await Promise.all([
-      supabaseAdmin
-        .from("medicines")
-        .select("id", { count: "exact", head: true })
-        .eq("pharmacy_id", pharmacyId),
-      supabaseAdmin
-        .from("sales")
-        .select("id, total")
-        .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", new Date().toISOString().split("T")[0]),
-      supabaseAdmin
-        .from("medicines")
-        .select("name, stock_quantity, stock_alert, company_name, price")
-        .eq("pharmacy_id", pharmacyId)
-        .lt("stock_quantity", 10)
-        .order("stock_quantity", { ascending: true })
-        .limit(15),
-    ]);
+    const messages = (incomingMessages ?? [])
+      .filter((message: { role?: string; content?: string }) => typeof message?.content === "string")
+      .filter((message: { role?: string; content?: string }) => message.content!.trim().length > 0)
+      .filter(
+        (message: { role?: string; content?: string }) =>
+          !(message.role === "assistant" && message.content!.trim().startsWith("⚠️")),
+      )
+      .slice(-MAX_CHAT_HISTORY_MESSAGES);
 
-    const totalProducts = inventoryRes.count ?? 0;
-    const todaySales = salesTodayRes.data ?? [];
-    const todaySalesCount = todaySales.length;
-    const todaySalesTotal = todaySales.reduce((sum, row) => sum + Number(row.total), 0);
-    const lowStockItems = lowStockRes.data ?? [];
+    let dataContext = "";
 
-    const dataContext = `
-## Real-Time Pharmacy Data (Naseer Medical Hall)
-- Total products in inventory: ${totalProducts}
+    if (!isConnectionTest) {
+      const [inventoryRes, salesTodayRes, lowStockRes] = await Promise.all([
+        supabaseAdmin
+          .from("medicines")
+          .select("id", { count: "exact", head: true })
+          .eq("pharmacy_id", pharmacyId),
+        supabaseAdmin
+          .from("sales")
+          .select("id, total")
+          .eq("pharmacy_id", pharmacyId)
+          .gte("created_at", new Date().toISOString().split("T")[0]),
+        supabaseAdmin
+          .from("medicines")
+          .select("name, stock_quantity, stock_alert, company_name, price")
+          .eq("pharmacy_id", pharmacyId)
+          .lt("stock_quantity", 10)
+          .order("stock_quantity", { ascending: true })
+          .limit(MAX_LOW_STOCK_ITEMS),
+      ]);
+
+      const totalProducts = inventoryRes.count ?? 0;
+      const todaySales = salesTodayRes.data ?? [];
+      const todaySalesCount = todaySales.length;
+      const todaySalesTotal = todaySales.reduce((sum, row) => sum + Number(row.total), 0);
+      const lowStockItems = lowStockRes.data ?? [];
+
+      dataContext = `
+## Live Pharmacy Summary
+- Total products: ${totalProducts}
 - Today's sales: ${todaySalesCount} transactions, total ৳${todaySalesTotal.toFixed(2)}
-- Low stock items (qty < 10): ${lowStockItems.length} items
+- Low stock items (qty < 10): ${lowStockItems.length}
 ${
   lowStockItems.length > 0
-    ? "Low stock details:\n" +
+    ? "- Lowest stock examples:\n" +
       lowStockItems
         .map(
           (item) =>
-            `  - ${item.name} (${item.company_name || "N/A"}): ${item.stock_quantity} left, alert at ${item.stock_alert}, price ৳${item.price}`,
+            `  - ${item.name}: ${item.stock_quantity} left${item.company_name ? ` (${item.company_name})` : ""}`,
         )
         .join("\n")
     : ""
 }
 `;
-
-    const systemPrompt = `You are MediNist AI, a smart pharmacy assistant for "Naseer Medical Hall". You speak both English and Bangla based on the user's language.
-
-You have access to real-time inventory and sales data from the pharmacy's database. Use this data to answer questions accurately.
+    }
+    const geminiContents = isConnectionTest
+      ? [
+          {
+            role: "user",
+            parts: [{ text: "Reply with exactly: Connection OK" }],
+          },
+        ]
+      : [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `You are MediNist AI for \"Naseer Medical Hall\". Match the user's language (English or Bangla) and keep replies concise and practical.
 
 ${dataContext}
 
-Your capabilities:
-1. Answer inventory questions (stock counts, low stock alerts, product searches)
-2. Answer sales questions (today's sales, revenue)
-3. Suggest medicines based on symptoms (always with medical disclaimer)
-4. Help with general pharmacy management advice
-
 Rules:
-- When suggesting medicines for symptoms, ALWAYS add: "⚠️ Disclaimer: This is not medical advice. Please consult a qualified healthcare professional before taking any medication."
-- Be concise and helpful
-- Format numbers with ৳ for Bangladeshi Taka
-- If you don't have enough data to answer, say so honestly
-- Keep responses focused and practical for a pharmacy setting`;
+- Use ৳ for Bangladeshi Taka.
+- When suggesting medicines for symptoms, ALWAYS add: \"⚠️ Disclaimer: This is not medical advice. Please consult a qualified healthcare professional before taking any medication.\"
+- If data is insufficient, say so clearly.`,
+              },
+            ],
+          },
+          {
+            role: "model",
+            parts: [{ text: "Understood." }],
+          },
+          ...messages.map((message: { role?: string; content?: string }) => ({
+            role: message.role === "assistant" ? "model" : "user",
+            parts: [{ text: typeof message.content === "string" ? message.content : "" }],
+          })),
+        ];
 
-    const geminiContents = [
-      {
-        role: "user",
-        parts: [{ text: systemPrompt }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "Understood. I'm MediNist AI, ready to assist with pharmacy queries for Naseer Medical Hall. How can I help you?" }],
-      },
-      ...messages.map((message: { role?: string; content?: string }) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: typeof message.content === "string" ? message.content : "" }],
-      })),
-    ];
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
     const response = await fetchGeminiWithRetry(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: geminiContents,
         generationConfig: {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 2048,
+          temperature: isConnectionTest ? 0 : 0.4,
+          topP: isConnectionTest ? 0.1 : 0.8,
+          topK: isConnectionTest ? 1 : 20,
+          maxOutputTokens: isConnectionTest ? 24 : 768,
         },
       }),
     });
