@@ -156,17 +156,16 @@ const ConversationList = ({ onOpenChat }: Props) => {
 
       {/* Action Row: New Chat + Search */}
       {!selectMode && (
-        <div className="px-4 mb-3 flex items-center gap-3">
+        <div className="px-4 flex items-center gap-3 pr-0 pl-[10px] mb-0 mr-[10px]">
           <button
             onClick={handleNew}
-            className="flex-1 flex items-center justify-center gap-2 rounded-full py-2.5 bg-[#1A8CFF] text-white
-              font-semibold text-sm shadow-lg shadow-[#1A8CFF]/20 hover:bg-[#1578D9] transition-colors active:scale-[0.98]"
+            className="flex-1 gap-2 rounded-full py-2.5 bg-[#1A8CFF] text-white font-semibold shadow-lg shadow-[#1A8CFF]/20 hover:bg-[#1578D9] transition-colors active:scale-[0.98] text-center flex items-center justify-center text-xs mr-[180px]"
           >
             <Plus className="w-5 h-5" />
             New Chat
           </button>
-          <button className="w-10 h-10 rounded-full bg-[#111827] flex items-center justify-center text-[#94A3B8] hover:text-[#F1F5F9] transition-colors">
-            <Search className="w-5 h-5" />
+          <button className="w-10 h-10 rounded-full bg-[#111827] flex items-center justify-center text-[#94A3B8] hover:text-[#F1F5F9] transition-colors mr-[20px]">
+            <Search className="w-5 h-5 pl-0 mr-0 ml-0" />
           </button>
         </div>
       )}

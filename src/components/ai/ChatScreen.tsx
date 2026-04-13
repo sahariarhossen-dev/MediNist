@@ -158,8 +158,8 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
     <div className="fixed inset-0 flex flex-col bg-[#0F1623] z-50">
       {/* Header */}
       <div className="bg-[#111827] border-b border-[#1E293B] px-2 py-2.5 flex items-center gap-2 shrink-0">
-        <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10">
-          <ArrowLeft className="w-4.5 h-4.5 text-red-400" />
+        <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 border-secondary-foreground">
+          <ArrowLeft className="w-4.5 h-4.5 text-destructive-foreground" />
         </button>
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1A8CFF] to-[#0EA5E9] flex items-center justify-center shrink-0">
           <Bot className="w-4 h-4 text-white" />
