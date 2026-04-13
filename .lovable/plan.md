@@ -1,37 +1,40 @@
 
 
-## Activate MediNist AI with Client-Side Gemini SDK
+## Secure Gemini API Key via Backend Edge Function
 
 ### Overview
-Replace the current edge-function-based chat with a direct client-side integration using the `@google/generative-ai` npm package and `VITE_GEMINI_API_KEY`.
+Move all Gemini API calls to the existing `chat-pharmacy` edge function (which already uses the `GEMINI_API_KEY` secret server-side). Remove all client-side API key logic.
 
-### What changes
+### Steps
 
-**1. Install dependency**
-- Add `@google/generative-ai` npm package
+**1. Update the GEMINI_API_KEY secret**
+- Use the secrets tool to set `GEMINI_API_KEY` to the value you provided (`AIzaSyAiKt-9HxPvK3QaE5r7cRS2qqPMw7ls2d0`)
 
-**2. Create `src/lib/geminiClient.ts`**
-- Initialize `GoogleGenerativeAI` with `import.meta.env.VITE_GEMINI_API_KEY`
-- Use `gemini-1.5-flash` model
-- System instruction: *"You are a professional pharmacy assistant for Naseer Medical Hall. Help the owner manage inventory, sales, and medicine information."*
-- Export a `streamChat` function that takes message history and streams responses
+**2. Update `src/components/ai/ChatScreen.tsx`**
+- Remove imports of `ApiKeySetup`, `streamChat`, `checkConnection`, `hasApiKey` from geminiClient
+- Remove the `needsKey` state and `ApiKeySetup` modal rendering
+- Remove the connection-check `useEffect`
+- Replace `streamChat()` with an SSE fetch to the `chat-pharmacy` edge function, parsing streamed tokens the same way
+- Use `supabase.auth.getSession()` for the Authorization header
 
-**3. Update `src/components/ai/ChatScreen.tsx`**
-- Remove the edge function fetch logic (`CHAT_URL`, auth session check, SSE parsing)
-- Replace with `streamChat()` from `geminiClient.ts` using the SDK's built-in streaming
-- Keep all existing UI, markdown rendering, suggestion chips, and localStorage persistence (already handled via `chatStore.ts`)
+**3. Delete `src/components/ai/ApiKeySetup.tsx`**
+- No longer needed
 
-**4. User must set the environment variable**
-- `VITE_GEMINI_API_KEY` in the project's `.env` file — you'll need to provide the key value
+**4. Clean up `src/lib/geminiClient.ts`**
+- Delete or gut this file — all Gemini logic is now server-side
 
-### Persistent memory
-Already implemented — `chatStore.ts` saves all conversations to localStorage and `ChatScreen` calls `updateMessages()` on every change. No modifications needed.
+**5. Edge function (`chat-pharmacy`) — no changes needed**
+- Already reads `GEMINI_API_KEY` from env, authenticates user, fetches pharmacy data, and streams Gemini responses
 
 ### Files changed
-- `src/lib/geminiClient.ts` — new file
-- `src/components/ai/ChatScreen.tsx` — replace fetch logic with SDK calls
-- `package.json` — new dependency
+- `src/components/ai/ChatScreen.tsx` — rewrite send logic to call edge function
+- `src/components/ai/ApiKeySetup.tsx` — delete
+- `src/lib/geminiClient.ts` — delete
+- Secret `GEMINI_API_KEY` — update value
 
-### Important note
-Exposing `VITE_GEMINI_API_KEY` on the client side means the key is visible in the browser. This is acceptable for personal/internal use but not for production apps with public access.
+### Security result
+- API key never reaches the browser
+- No localStorage key storage
+- No API key input UI
+- All requests authenticated via Supabase JWT
 
