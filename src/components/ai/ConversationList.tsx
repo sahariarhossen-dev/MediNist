@@ -111,8 +111,8 @@ const ConversationList = ({ onOpenChat }: Props) => {
 
   const Section = ({ label, items }: { label: string; items: Conversation[] }) =>
     items.length > 0 ? (
-      <div className="mb-3">
-        <h2 className="text-[10px] font-bold tracking-widest text-[#64748B] uppercase px-4 mb-1.5">{label}</h2>
+      <div className="mb-3 pt-[10px]">
+        <h2 className="text-[10px] font-bold tracking-widest text-[#64748B] uppercase px-4 mb-1.5 border-solid border-slate-300">{label}</h2>
         <div className="space-y-1 px-4">
           {items.map((c) => (
             <ConversationRow
@@ -142,11 +142,11 @@ const ConversationList = ({ onOpenChat }: Props) => {
             <div className="w-5" />
           </div>
         ) : (
-          <div className="flex items-center justify-between py-2">
+          <div className="flex items-center justify-between py-2 pt-[20px]">
             <button onClick={() => navigate(-1)} className="text-[#94A3B8] active:scale-90 transition-transform">
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5 text-primary-foreground ml-[10px] border" />
             </button>
-            <h1 className="text-lg font-bold text-[#F1F5F9]">MediNist Conversations</h1>
+            <h1 className="text-lg font-bold text-[#F1F5F9] ml-0 mr-[40px]">MediNist Conversations</h1>
             <button className="text-[#94A3B8]">
               <UserCircle className="w-6 h-6" />
             </button>
@@ -156,16 +156,16 @@ const ConversationList = ({ onOpenChat }: Props) => {
 
       {/* Action Row: New Chat + Search */}
       {!selectMode && (
-        <div className="px-4 flex items-center gap-3 pr-0 pl-[10px] mb-0 mr-[10px]">
+        <div className="px-4 flex items-center gap-3 pr-0 pl-[10px] mb-0 mr-0 ml-[20px]">
           <button
             onClick={handleNew}
-            className="flex-1 gap-2 rounded-full py-2.5 bg-[#1A8CFF] text-white font-semibold shadow-lg shadow-[#1A8CFF]/20 hover:bg-[#1578D9] transition-colors active:scale-[0.98] text-center flex items-center justify-center text-xs mr-[180px]"
+            className="flex-1 gap-2 rounded-full py-2.5 bg-[#1A8CFF] text-white font-semibold shadow-lg shadow-[#1A8CFF]/20 hover:bg-[#1578D9] transition-colors active:scale-[0.98] flex items-center justify-center text-xs ml-0 pl-0 pr-0 mr-[160px]"
           >
             <Plus className="w-5 h-5" />
             New Chat
           </button>
           <button className="w-10 h-10 rounded-full bg-[#111827] flex items-center justify-center text-[#94A3B8] hover:text-[#F1F5F9] transition-colors mr-[20px]">
-            <Search className="w-5 h-5 pl-0 mr-0 ml-0" />
+            <Search className="w-5 h-5 pl-0 mr-0 ml-0 text-popover" />
           </button>
         </div>
       )}
