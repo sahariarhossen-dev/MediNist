@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Bot, Loader2, ArrowLeft, Trash2, Settings, Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Send, Bot, Loader2, ArrowLeft, Settings, Plus } from "lucide-react";
 import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
+import { streamChat } from "@/lib/geminiClient";
 import {
   getConversation,
   updateMessages,
@@ -11,8 +11,6 @@ import {
   DEFAULT_FIRST_MESSAGE,
   type Msg,
 } from "./chatStore";
-
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-pharmacy`;
 
 interface Props {
   conversationId: string;
@@ -46,16 +44,10 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
   const doSend = async (text: string) => {
     if (!text.trim() || isLoading) return;
     const userMsg: Msg = { role: "user", content: text.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
     setIsLoading(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      toast.error("Please log in to use the AI assistant.");
-      setIsLoading(false);
-      return;
-    }
 
     let assistantSoFar = "";
     const upsert = (chunk: string) => {
@@ -70,74 +62,16 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
     };
 
     try {
-      const allMessages = [...messages.slice(1), userMsg].map(({ role, content }) => ({ role, content }));
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      // Send only non-system messages (skip the first welcome message)
+      const chatMessages = updatedMessages.slice(1);
+
+      await streamChat({
+        messages: chatMessages,
+        onDelta: (chunk) => upsert(chunk),
+        onDone: () => {
+          if (!assistantSoFar) upsert("I'm sorry, I couldn't generate a response. Please try again.");
         },
-        body: JSON.stringify({ messages: allMessages }),
       });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Unknown error" }));
-        const message = resp.status === 429
-          ? err.error || "Gemini is temporarily rate-limited. Please wait a few seconds and try again."
-          : err.error || `Error ${resp.status}`;
-        toast.error(message);
-        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${message}` }]);
-        return;
-      }
-
-      if (!resp.body) {
-        toast.error("No response body");
-        return;
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-
-        let idx: number;
-        while ((idx = buf.indexOf("\n")) !== -1) {
-          let line = buf.slice(0, idx);
-          buf = buf.slice(idx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || !line.trim() || !line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") break;
-          try {
-            const p = JSON.parse(json);
-            const c = p.choices?.[0]?.delta?.content as string | undefined;
-            if (c) upsert(c);
-          } catch {
-            buf = line + "\n" + buf;
-            break;
-          }
-        }
-      }
-
-      if (buf.trim()) {
-        for (let raw of buf.split("\n")) {
-          if (!raw || !raw.startsWith("data: ")) continue;
-          const json = raw.slice(6).trim();
-          if (json === "[DONE]") continue;
-          try {
-            const p = JSON.parse(json);
-            const c = p.choices?.[0]?.delta?.content as string | undefined;
-            if (c) upsert(c);
-          } catch { /* ignore */ }
-        }
-      }
-
-      if (!assistantSoFar) upsert("I'm sorry, I couldn't generate a response. Please try again.");
     } catch (e: any) {
       const message = e?.message || "Failed to get response";
       toast.error(message);
