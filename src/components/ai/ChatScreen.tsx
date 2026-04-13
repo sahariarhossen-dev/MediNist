@@ -3,7 +3,8 @@ import ReactMarkdown from "react-markdown";
 import { Send, Bot, Loader2, ArrowLeft, Settings, Plus } from "lucide-react";
 import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
-import { streamChat, checkConnection } from "@/lib/geminiClient";
+import ApiKeySetup from "./ApiKeySetup";
+import { streamChat, checkConnection, hasApiKey } from "@/lib/geminiClient";
 import {
   getConversation,
   updateMessages,
@@ -22,18 +23,18 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
   const [messages, setMessages] = useState<Msg[]>(convo?.messages || [DEFAULT_FIRST_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
+  const [needsKey, setNeedsKey] = useState(!hasApiKey());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // System check on mount
+  // System check on mount (only if key exists)
   useEffect(() => {
+    if (!hasApiKey()) return;
     checkConnection().then(({ ok, error }) => {
-      setConnectionOk(ok);
       if (!ok) toast.error(error || "AI connection failed");
       else toast.success("AI Assistant connected");
     });
-  }, []);
+  }, [needsKey]);
 
   // Persist on change
   useEffect(() => {
