@@ -15,6 +15,17 @@ const jsonResponse = (status: number, payload: Record<string, unknown>) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+const streamAssistantMessage = (message: string) => {
+  const chunk = JSON.stringify({
+    choices: [{ delta: { content: message } }],
+  });
+
+  return new Response(`data: ${chunk}\n\ndata: [DONE]\n\n`, {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
+};
+
 const getRetryDelay = (response: Response, attempt: number) => {
   const retryAfterHeader = response.headers.get("retry-after");
   const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
@@ -187,7 +198,7 @@ Rules:
     });
 
     if (!response) {
-      return jsonResponse(500, { error: "AI service error" });
+      return streamAssistantMessage("⚠️ I couldn't reach Gemini right now. Please try again shortly.");
     }
 
     if (!response.ok) {
@@ -195,13 +206,14 @@ Rules:
       console.error("Gemini API error:", response.status, errorText);
 
       if (response.status === 429) {
-        return jsonResponse(429, {
-          error: "Gemini is temporarily rate-limited. Please wait a few seconds and try again.",
-          code: "RATE_LIMITED",
-        });
+        return streamAssistantMessage("⚠️ Gemini is temporarily rate-limited. Please wait a few seconds and try again.");
       }
 
-      return jsonResponse(500, { error: "AI service error" });
+      return streamAssistantMessage("⚠️ I couldn't reach the AI service right now. Please try again shortly.");
+    }
+
+    if (!response.body) {
+      return streamAssistantMessage("⚠️ I received an empty AI response. Please try again.");
     }
 
     const transformStream = new TransformStream({
@@ -232,11 +244,11 @@ Rules:
       },
     });
 
-    return new Response(response.body?.pipeThrough(transformStream), {
+    return new Response(response.body.pipeThrough(transformStream), {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
     console.error("chat-pharmacy error:", e);
-    return jsonResponse(500, { error: e instanceof Error ? e.message : "Unknown error" });
+    return streamAssistantMessage("⚠️ I ran into a temporary problem. Please try again.");
   }
 });
