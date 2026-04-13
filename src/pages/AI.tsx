@@ -102,10 +102,22 @@ const AI = () => {
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || `Error ${resp.status}`);
+        const message =
+          resp.status === 429
+            ? err.error || "Gemini is temporarily rate-limited. Please wait a few seconds and try again."
+            : err.error || `Error ${resp.status}`;
+
+        toast.error(message);
+        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${message}` }]);
+        return;
       }
 
-      if (!resp.body) throw new Error("No response body");
+      if (!resp.body) {
+        const message = "No response body";
+        toast.error(message);
+        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${message}` }]);
+        return;
+      }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -158,12 +170,10 @@ const AI = () => {
         upsertAssistant("I'm sorry, I couldn't generate a response. Please try again.");
       }
     } catch (e: any) {
-      console.error("Chat error:", e);
-      toast.error(e.message || "Failed to get response");
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `❌ Error: ${e.message || "Something went wrong. Please try again."}` },
-      ]);
+      const message = e?.message || "Failed to get response";
+      console.warn("Chat error:", message);
+      toast.error(message);
+      setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${message}` }]);
     } finally {
       setIsLoading(false);
     }
