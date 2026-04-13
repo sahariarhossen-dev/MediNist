@@ -1,9 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Msg } from "@/components/ai/chatStore";
 
+const LS_KEY = "gemini_api_key";
+
+export function getApiKey(): string {
+  return localStorage.getItem(LS_KEY) || import.meta.env.VITE_GEMINI_API_KEY || "";
+}
+
+export function setApiKey(key: string) {
+  localStorage.setItem(LS_KEY, key.trim());
+}
+
+export function hasApiKey(): boolean {
+  return !!getApiKey();
+}
+
 function getModel() {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) throw new Error("API Key not found. Please check your settings.");
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key not found. Please add your Gemini API key.");
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
