@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import { Plus, Trash2, Pin, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Trash2, Pin, X, ArrowLeft, Search, UserCircle } from "lucide-react";
 import ConversationRow from "./ConversationRow";
 import ChatContextMenu from "./ChatContextMenu";
 import {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 const ConversationList = ({ onOpenChat }: Props) => {
+  const navigate = useNavigate();
   const [convos, setConvos] = useState<Conversation[]>(getConversations);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
@@ -111,7 +113,7 @@ const ConversationList = ({ onOpenChat }: Props) => {
     items.length > 0 ? (
       <div className="mb-3">
         <h2 className="text-[10px] font-bold tracking-widest text-[#64748B] uppercase px-4 mb-1.5">{label}</h2>
-        <div className="space-y-1">
+        <div className="space-y-1 px-4">
           {items.map((c) => (
             <ConversationRow
               key={c.id}
@@ -129,8 +131,8 @@ const ConversationList = ({ onOpenChat }: Props) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#0A0F1C] z-50">
-      {/* Header */}
-      <div className="px-4 pt-[env(safe-area-inset-top,12px)] pb-2 shrink-0">
+      {/* Header Line 1: Back | Title | Avatar */}
+      <div className="px-4 pt-[env(safe-area-inset-top,12px)] pb-1 shrink-0">
         {selectMode ? (
           <div className="flex items-center justify-between py-2">
             <button onClick={exitSelectMode} className="text-[#94A3B8]">
@@ -140,29 +142,40 @@ const ConversationList = ({ onOpenChat }: Props) => {
             <div className="w-5" />
           </div>
         ) : (
-          <h1 className="text-xl font-bold text-[#F1F5F9] py-2">MediNist Conversations</h1>
+          <div className="flex items-center justify-between py-2">
+            <button onClick={() => navigate(-1)} className="text-[#94A3B8] active:scale-90 transition-transform">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-lg font-bold text-[#F1F5F9]">MediNist Conversations</h1>
+            <button className="text-[#94A3B8]">
+              <UserCircle className="w-6 h-6" />
+            </button>
+          </div>
         )}
       </div>
 
-      {/* New Chat button */}
+      {/* Action Row: New Chat + Search */}
       {!selectMode && (
-        <div className="px-4 mb-3">
+        <div className="px-4 mb-3 flex items-center gap-3">
           <button
             onClick={handleNew}
-            className="w-full flex items-center justify-center gap-2 rounded-xl py-3 bg-[#1A8CFF] text-white
+            className="flex-1 flex items-center justify-center gap-2 rounded-full py-2.5 bg-[#1A8CFF] text-white
               font-semibold text-sm shadow-lg shadow-[#1A8CFF]/20 hover:bg-[#1578D9] transition-colors active:scale-[0.98]"
           >
             <Plus className="w-5 h-5" />
             New Chat
+          </button>
+          <button className="w-10 h-10 rounded-full bg-[#111827] flex items-center justify-center text-[#94A3B8] hover:text-[#F1F5F9] transition-colors">
+            <Search className="w-5 h-5" />
           </button>
         </div>
       )}
 
       {/* List */}
       <div className="flex-1 overflow-y-auto pb-24">
-        <Section label="Pin Chat" items={pinned} />
-        <Section label="Recent" items={recent} />
-        <Section label="All Chat" items={allOther} />
+        <Section label="PIN CHAT" items={pinned} />
+        <Section label="RECENT CHAT" items={recent} />
+        <Section label="ALL CHAT" items={allOther} />
         {convos.length === 0 && (
           <p className="text-center text-sm text-[#64748B] mt-12">No conversations yet</p>
         )}
