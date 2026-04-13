@@ -1,5 +1,7 @@
 export type Msg = { role: "user" | "assistant"; content: string };
 
+import { stripTransientAssistantMessages } from "./chatMessageUtils";
+
 export interface Conversation {
   id: string;
   title: string;
@@ -11,6 +13,29 @@ export interface Conversation {
 }
 
 const STORAGE_KEY = "medinistai_conversations";
+
+const buildPreview = (messages: Msg[]) =>
+  ([...messages].reverse().find((message) => message.role === "assistant")?.content || "").slice(0, 100);
+
+const buildTitle = (messages: Msg[], fallbackTitle: string) =>
+  [...messages].reverse().find((message) => message.role === "user")?.content.slice(0, 40) || fallbackTitle;
+
+const sanitizeConversation = (conversation: Conversation): Conversation => {
+  const sanitizedMessages = stripTransientAssistantMessages(conversation.messages || []);
+
+  if (sanitizedMessages.length === conversation.messages.length) {
+    return conversation;
+  }
+
+  return {
+    ...conversation,
+    messages: sanitizedMessages,
+    preview: buildPreview(sanitizedMessages),
+    title: buildTitle(sanitizedMessages, conversation.title),
+  };
+};
+
+const sanitizeConversations = (conversations: Conversation[]) => conversations.map(sanitizeConversation);
 
 const DUMMY_CONVERSATIONS: Conversation[] = [
   {
@@ -78,12 +103,17 @@ export function getConversations(): Conversation[] {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const sanitized = sanitizeConversations(parsed);
+        saveConversations(sanitized);
+        return sanitized;
+      }
     }
   } catch { /* ignore */ }
   // Seed dummy data
-  saveConversations(DUMMY_CONVERSATIONS);
-  return DUMMY_CONVERSATIONS;
+  const sanitizedDummies = sanitizeConversations(DUMMY_CONVERSATIONS);
+  saveConversations(sanitizedDummies);
+  return sanitizedDummies;
 }
 
 function saveConversations(convos: Conversation[]) {
@@ -135,14 +165,14 @@ export function pinMultiple(ids: string[]) {
 }
 
 export function updateMessages(id: string, messages: Msg[]) {
+  const sanitizedMessages = stripTransientAssistantMessages(messages);
   const convos = getConversations().map((c) => {
     if (c.id !== id) return c;
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const lastUser = [...sanitizedMessages].reverse().find((m) => m.role === "user");
     return {
       ...c,
-      messages,
-      preview: (lastAssistant?.content || "").slice(0, 100),
+      messages: sanitizedMessages,
+      preview: buildPreview(sanitizedMessages),
       title: lastUser ? lastUser.content.slice(0, 40) : c.title,
       updatedAt: Date.now(),
     };

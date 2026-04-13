@@ -7,10 +7,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const RATE_LIMIT_RETRY_DELAY_MS = 5000;
 const MAX_CHAT_HISTORY_MESSAGES = 6;
 const MAX_LOW_STOCK_ITEMS = 5;
+const GEMINI_MODEL = "gemini-1.5-flash";
+const RATE_LIMIT_MESSAGE = "⚠️ Gemini is temporarily rate-limited. Please wait a bit and try again.";
+const SERVICE_UNAVAILABLE_MESSAGE = "⚠️ I couldn't reach the AI service right now. Please try again shortly.";
 
 const jsonResponse = (status: number, payload: Record<string, unknown>) =>
   new Response(JSON.stringify(payload), {
@@ -27,42 +28,6 @@ const streamAssistantMessage = (message: string) => {
     status: 200,
     headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
   });
-};
-
-const getRetryDelay = (response: Response, attempt: number) => {
-  if (response.status === 429) {
-    return RATE_LIMIT_RETRY_DELAY_MS;
-  }
-
-  const retryAfterHeader = response.headers.get("retry-after");
-  const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
-  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-    return retryAfterSeconds * 1000;
-  }
-
-  return 1200 * 2 ** attempt;
-};
-
-const fetchGeminiWithRetry = async (url: string, init: RequestInit, maxAttempts = 2) => {
-  let lastResponse: Response | null = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const response = await fetch(url, init);
-
-    if (response.ok) {
-      return response;
-    }
-
-    lastResponse = response;
-    const shouldRetry = response.status === 429 || response.status === 503;
-    if (!shouldRetry || attempt === maxAttempts - 1) {
-      return response;
-    }
-
-    await sleep(getRetryDelay(response, attempt));
-  }
-
-  return lastResponse;
 };
 
 serve(async (req) => {
@@ -116,10 +81,7 @@ serve(async (req) => {
     const messages = (incomingMessages ?? [])
       .filter((message: { role?: string; content?: string }) => typeof message?.content === "string")
       .filter((message: { role?: string; content?: string }) => message.content!.trim().length > 0)
-      .filter(
-        (message: { role?: string; content?: string }) =>
-          !(message.role === "assistant" && message.content!.trim().startsWith("⚠️")),
-      )
+      .filter((message: { role?: string; content?: string }) => message.role !== "assistant")
       .slice(-MAX_CHAT_HISTORY_MESSAGES);
 
     let dataContext = "";
@@ -201,8 +163,8 @@ Rules:
           })),
         ];
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
-    const response = await fetchGeminiWithRetry(geminiUrl, {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+    const response = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -216,19 +178,15 @@ Rules:
       }),
     });
 
-    if (!response) {
-      return streamAssistantMessage("⚠️ I couldn't reach Gemini right now. Please try again shortly.");
-    }
-
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
 
       if (response.status === 429) {
-        return streamAssistantMessage("⚠️ Gemini is temporarily rate-limited. Please wait a few seconds and try again.");
+        return streamAssistantMessage(RATE_LIMIT_MESSAGE);
       }
 
-      return streamAssistantMessage("⚠️ I couldn't reach the AI service right now. Please try again shortly.");
+      return streamAssistantMessage(SERVICE_UNAVAILABLE_MESSAGE);
     }
 
     if (!response.body) {

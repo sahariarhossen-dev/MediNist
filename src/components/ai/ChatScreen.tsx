@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
 import ChatSettingsDialog from "./ChatSettingsDialog";
 import { buildChatRequestMessages } from "./chatRequestUtils";
+import { stripTransientAssistantMessages } from "./chatMessageUtils";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getConversation,
@@ -82,7 +83,9 @@ const invokeChatPharmacy = async ({
 
 const ChatScreen = ({ conversationId, onBack }: Props) => {
   const convo = getConversation(conversationId);
-  const [messages, setMessages] = useState<Msg[]>(convo?.messages || [DEFAULT_FIRST_MESSAGE]);
+  const [messages, setMessages] = useState<Msg[]>(() =>
+    stripTransientAssistantMessages(convo?.messages || [DEFAULT_FIRST_MESSAGE]),
+  );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -144,8 +147,10 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
 
   const doSend = async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    const cleanedMessages = stripTransientAssistantMessages(messages);
     const userMsg: Msg = { role: "user", content: text.trim() };
-    const updatedMessages = [...messages, userMsg];
+    const updatedMessages = [...cleanedMessages, userMsg];
     setMessages(updatedMessages);
     setInput("");
     setIsLoading(true);
@@ -181,18 +186,11 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
         upsert("I'm sorry, I couldn't generate a response. Please try again.");
       }
     } catch (e: any) {
-      const message = e?.message || "Failed to get response";
-      toast.error(message);
-      setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${message}` }]);
+      const fallbackMessage = "⚠️ I couldn't reach the AI service right now. Please try again shortly.";
+      toast.error("AI request failed. Please try again.");
+      setMessages((prev) => [...stripTransientAssistantMessages(prev), { role: "assistant", content: fallbackMessage }]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      doSend(input);
     }
   };
 
@@ -267,7 +265,14 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
       </div>
 
       {/* Suggestion chips */}
-      {messages.length <= 2 && !isLoading && <SuggestionChips onSelect={(t) => doSend(t)} />}
+      {messages.length <= 2 && !isLoading && (
+        <SuggestionChips
+          onSelect={(text) => {
+            setInput(text);
+            inputRef.current?.focus();
+          }}
+        />
+      )}
 
       {/* Input */}
       <div className="shrink-0 bg-[#0F1623] px-3 pb-[env(safe-area-inset-bottom,8px)] pt-1">
@@ -279,7 +284,6 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder="Ask me anything..."
             rows={1}
             className="flex-1 resize-none bg-transparent text-sm text-[#F1F5F9] outline-none placeholder:text-[#64748B] max-h-24"
