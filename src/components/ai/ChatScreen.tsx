@@ -3,8 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Send, Bot, Loader2, ArrowLeft, Settings, Plus } from "lucide-react";
 import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
-import ApiKeySetup from "./ApiKeySetup";
-import { streamChat, checkConnection, hasApiKey } from "@/lib/geminiClient";
+import { supabase } from "@/integrations/supabase/client";
 import {
   getConversation,
   updateMessages,
@@ -23,18 +22,8 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
   const [messages, setMessages] = useState<Msg[]>(convo?.messages || [DEFAULT_FIRST_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [needsKey, setNeedsKey] = useState(!hasApiKey());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // System check on mount (only if key exists)
-  useEffect(() => {
-    if (!hasApiKey()) return;
-    checkConnection().then(({ ok, error }) => {
-      if (!ok) toast.error(error || "AI connection failed");
-      else toast.success("AI Assistant connected");
-    });
-  }, [needsKey]);
 
   // Persist on change
   useEffect(() => {
@@ -73,16 +62,63 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
     };
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error("Please log in to use the AI assistant.");
+        setIsLoading(false);
+        return;
+      }
+
       // Send only non-system messages (skip the first welcome message)
       const chatMessages = updatedMessages.slice(1);
 
-      await streamChat({
-        messages: chatMessages,
-        onDelta: (chunk) => upsert(chunk),
-        onDone: () => {
-          if (!assistantSoFar) upsert("I'm sorry, I couldn't generate a response. Please try again.");
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-pharmacy`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
+        body: JSON.stringify({ messages: chatMessages }),
       });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(err || `Server error ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) upsert(content);
+          } catch {
+            // skip malformed chunks
+          }
+        }
+      }
+
+      if (!assistantSoFar) {
+        upsert("I'm sorry, I couldn't generate a response. Please try again.");
+      }
     } catch (e: any) {
       const message = e?.message || "Failed to get response";
       toast.error(message);
@@ -101,7 +137,6 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#0F1623] z-50">
-      {needsKey && <ApiKeySetup onSuccess={() => setNeedsKey(false)} />}
       <div className="bg-[#111827] border-b border-[#1E293B] px-2 py-2.5 flex items-center gap-2 shrink-0">
         <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 border-secondary-foreground">
           <ArrowLeft className="w-4.5 h-4.5 text-destructive-foreground" />
