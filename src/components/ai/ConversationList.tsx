@@ -144,7 +144,7 @@ const ConversationList = ({ onOpenChat }: Props) => {
         ) : (
           <div className="flex items-center justify-between py-2 pt-[20px]">
             <button onClick={() => navigate(-1)} className="text-[#94A3B8] active:scale-90 transition-transform">
-              <ArrowLeft className="w-5 h-5 text-primary-foreground ml-[10px] border" />
+              <ArrowLeft className="w-5 h-5 text-primary-foreground ml-[10px] rounded-lg border-0" />
             </button>
             <h1 className="text-lg font-bold text-[#F1F5F9] ml-0 mr-[40px]">MediNist Conversations</h1>
             <button className="text-[#94A3B8]">
