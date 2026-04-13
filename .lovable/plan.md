@@ -1,42 +1,37 @@
 
 
-## Redesign Chat List Screen to Match Sketch
+## Activate MediNist AI with Client-Side Gemini SDK
+
+### Overview
+Replace the current edge-function-based chat with a direct client-side integration using the `@google/generative-ai` npm package and `VITE_GEMINI_API_KEY`.
 
 ### What changes
 
-Rewrite `ConversationList.tsx` and `ConversationRow.tsx` to match the sketch layout exactly.
+**1. Install dependency**
+- Add `@google/generative-ai` npm package
 
-### 1. Header (Line 1)
-- **Back arrow** (left) — navigates to previous page (`useNavigate(-1)`)
-- **"MediNist Conversations"** title — bold, centered-ish
-- **User avatar icon** (right) — circular, using `UserCircle` from lucide
+**2. Create `src/lib/geminiClient.ts`**
+- Initialize `GoogleGenerativeAI` with `import.meta.env.VITE_GEMINI_API_KEY`
+- Use `gemini-1.5-flash` model
+- System instruction: *"You are a professional pharmacy assistant for Naseer Medical Hall. Help the owner manage inventory, sales, and medicine information."*
+- Export a `streamChat` function that takes message history and streams responses
 
-### 2. Action Row (Line 2)
-- **"+ New Chat"** pill button on the left — `#1A8CFF` background, rounded-full
-- **Search icon** on the far right — `Search` from lucide, placeholder for future search
+**3. Update `src/components/ai/ChatScreen.tsx`**
+- Remove the edge function fetch logic (`CHAT_URL`, auth session check, SSE parsing)
+- Replace with `streamChat()` from `geminiClient.ts` using the SDK's built-in streaming
+- Keep all existing UI, markdown rendering, suggestion chips, and localStorage persistence (already handled via `chatStore.ts`)
 
-### 3. Section Headers
-- Rename sections to: `PIN CHAT`, `RECENT CHAT`, `ALL CHAT` (currently "Pin Chat", "Recent", "All Chat")
+**4. User must set the environment variable**
+- `VITE_GEMINI_API_KEY` in the project's `.env` file — you'll need to provide the key value
 
-### 4. Chat Row Layout
-- Pill icon (left) in a rounded accent container
-- **Title** bold, truncated single line
-- **Preview** 1-2 lines, muted text
-- **Timestamp** on the far right of the title line
+### Persistent memory
+Already implemented — `chatStore.ts` saves all conversations to localStorage and `ChatScreen` calls `updateMessages()` on every change. No modifications needed.
 
-### 5. Bottom Nav Removal
-- Already handled — `/ai` route has no `AppLayout` wrapper
+### Files changed
+- `src/lib/geminiClient.ts` — new file
+- `src/components/ai/ChatScreen.tsx` — replace fetch logic with SDK calls
+- `package.json` — new dependency
 
-### 6. Long-press & multi-select
-- Keep existing logic (already implemented), no changes needed
-
-### Files to edit
-- `src/components/ai/ConversationList.tsx` — new header with back button + avatar, action row with search icon, updated section labels
-- `src/components/ai/ConversationRow.tsx` — minor tweaks to match sketch spacing if needed
-
-### Technical details
-- Import `useNavigate` from react-router-dom for back button
-- Import `Search`, `UserCircle` from lucide-react
-- Keep all existing state management, context menu, and multi-select logic intact
-- No changes to `chatStore.ts`, `ChatScreen.tsx`, `AI.tsx`, or routing
+### Important note
+Exposing `VITE_GEMINI_API_KEY` on the client side means the key is visible in the browser. This is acceptable for personal/internal use but not for production apps with public access.
 
