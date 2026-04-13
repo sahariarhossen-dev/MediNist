@@ -168,9 +168,6 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
           <h1 className="text-sm font-bold text-[#F1F5F9] truncate">Naseer Medical AI Assistant</h1>
           <p className="text-[10px] text-[#64748B]">Pharmacy Assistant • Online</p>
         </div>
-        <button onClick={handleDelete} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#1E293B] transition-colors">
-          <Trash2 className="w-4 h-4 text-[#94A3B8]" />
-        </button>
         <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#1E293B] transition-colors">
           <Settings className="w-4 h-4 text-[#94A3B8]" />
         </button>
