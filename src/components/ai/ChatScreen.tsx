@@ -101,7 +101,7 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#0F1623] z-50">
-      {/* Header */}
+      {needsKey && <ApiKeySetup onSuccess={() => setNeedsKey(false)} />}
       <div className="bg-[#111827] border-b border-[#1E293B] px-2 py-2.5 flex items-center gap-2 shrink-0">
         <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 border-secondary-foreground">
           <ArrowLeft className="w-4.5 h-4.5 text-destructive-foreground" />
