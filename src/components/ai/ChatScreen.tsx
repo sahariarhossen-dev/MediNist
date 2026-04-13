@@ -3,7 +3,8 @@ import ReactMarkdown from "react-markdown";
 import { Send, Bot, Loader2, ArrowLeft, Settings, Plus } from "lucide-react";
 import { toast } from "sonner";
 import SuggestionChips from "./SuggestionChips";
-import { streamChat, checkConnection } from "@/lib/geminiClient";
+import ApiKeySetup from "./ApiKeySetup";
+import { streamChat, checkConnection, hasApiKey } from "@/lib/geminiClient";
 import {
   getConversation,
   updateMessages,
@@ -22,18 +23,18 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
   const [messages, setMessages] = useState<Msg[]>(convo?.messages || [DEFAULT_FIRST_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionOk, setConnectionOk] = useState<boolean | null>(null);
+  const [needsKey, setNeedsKey] = useState(!hasApiKey());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // System check on mount
+  // System check on mount (only if key exists)
   useEffect(() => {
+    if (!hasApiKey()) return;
     checkConnection().then(({ ok, error }) => {
-      setConnectionOk(ok);
       if (!ok) toast.error(error || "AI connection failed");
       else toast.success("AI Assistant connected");
     });
-  }, []);
+  }, [needsKey]);
 
   // Persist on change
   useEffect(() => {
@@ -100,7 +101,7 @@ const ChatScreen = ({ conversationId, onBack }: Props) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#0F1623] z-50">
-      {/* Header */}
+      {needsKey && <ApiKeySetup onSuccess={() => setNeedsKey(false)} />}
       <div className="bg-[#111827] border-b border-[#1E293B] px-2 py-2.5 flex items-center gap-2 shrink-0">
         <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 border-secondary-foreground">
           <ArrowLeft className="w-4.5 h-4.5 text-destructive-foreground" />
