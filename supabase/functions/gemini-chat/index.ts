@@ -28,12 +28,15 @@ serve(async (req) => {
       );
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     const response = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: "You are a professional pharmacy assistant for MediNist. You help with medicine inventory and sales information. Be helpful and concise." }],
+        },
         contents: [
           {
             role: "user",
