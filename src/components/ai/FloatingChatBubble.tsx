@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, X, Bot } from "lucide-react";
+import { MessageCircle, Send, X, Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import ChatMessage from "./ChatMessage";
 
 interface Message {
@@ -22,15 +24,17 @@ const FloatingChatBubble = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isLoading) return;
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -39,15 +43,41 @@ const FloatingChatBubble = () => {
       timestamp: new Date(),
     };
 
-    const assistantMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "I'm a placeholder assistant. Backend integration coming soon!",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("gemini-chat", {
+        body: { message: text },
+      });
+
+      if (error) throw error;
+
+      const assistantMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: data?.reply ?? "Sorry, I couldn't generate a response.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err: any) {
+      console.error("Chat error:", err);
+      toast({
+        title: "AI Error",
+        description: err?.message || "Failed to get a response. Please try again.",
+        variant: "destructive",
+      });
+      const errorMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) {
@@ -80,6 +110,14 @@ const FloatingChatBubble = () => {
         {messages.map((msg) => (
           <ChatMessage key={msg.id} content={msg.content} role={msg.role} timestamp={msg.timestamp} />
         ))}
+        {isLoading && (
+          <div className="flex justify-start mb-3">
+            <div className="flex gap-2 items-center px-4 py-2.5 bg-muted rounded-2xl rounded-bl-md">
+              <Loader2 size={16} className="animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Thinking...</span>
+            </div>
+          </div>
+        )}
         <div ref={scrollRef} />
       </div>
 
@@ -91,8 +129,9 @@ const FloatingChatBubble = () => {
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Type a message..."
           className="flex-1 rounded-full bg-muted border-0 focus-visible:ring-1"
+          disabled={isLoading}
         />
-        <Button size="icon" onClick={handleSend} disabled={!input.trim()} className="rounded-full shrink-0">
+        <Button size="icon" onClick={handleSend} disabled={!input.trim() || isLoading} className="rounded-full shrink-0">
           <Send size={18} />
         </Button>
       </div>
