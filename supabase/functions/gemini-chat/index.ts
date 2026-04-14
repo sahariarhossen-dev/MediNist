@@ -34,6 +34,9 @@ serve(async (req) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: "You are a professional pharmacy assistant for MediNist. You help with medicine inventory and sales information. Be helpful and concise." }],
+        },
         contents: [
           {
             role: "user",
