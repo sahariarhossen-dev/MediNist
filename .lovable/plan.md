@@ -1,40 +1,70 @@
 
 
-## Secure Gemini API Key via Backend Edge Function
+## Floating AI Chat Assistant for MediNist
 
 ### Overview
-Move all Gemini API calls to the existing `chat-pharmacy` edge function (which already uses the `GEMINI_API_KEY` secret server-side). Remove all client-side API key logic.
+Build a floating chat bubble component that appears on all protected pages (via AppLayout). Tapping the bubble opens a full-screen mobile chat overlay with a scrollable message area, stylish input, and close button. Pure frontend — no API integration yet.
 
-### Steps
+### Architecture
 
-**1. Update the GEMINI_API_KEY secret**
-- Use the secrets tool to set `GEMINI_API_KEY` to the value you provided (`AIzaSyAiKt-9HxPvK3QaE5r7cRS2qqPMw7ls2d0`)
+- **`src/components/ai/FloatingChatBubble.tsx`** — The bubble button (bottom-right, above BottomNav) + the chat overlay panel
+- **`src/components/ai/ChatMessage.tsx`** — Individual message bubble (user vs assistant styling)
+- **`src/components/AppLayout.tsx`** — Add `<FloatingChatBubble />` alongside `<BottomNav />`
+- **`src/pages/AI.tsx`** — Redirect to `/` or show the floating chat (since chat is now a floating overlay, the `/ai` route can auto-open it)
 
-**2. Update `src/components/ai/ChatScreen.tsx`**
-- Remove imports of `ApiKeySetup`, `streamChat`, `checkConnection`, `hasApiKey` from geminiClient
-- Remove the `needsKey` state and `ApiKeySetup` modal rendering
-- Remove the connection-check `useEffect`
-- Replace `streamChat()` with an SSE fetch to the `chat-pharmacy` edge function, parsing streamed tokens the same way
-- Use `supabase.auth.getSession()` for the Authorization header
+### UI Design
 
-**3. Delete `src/components/ai/ApiKeySetup.tsx`**
-- No longer needed
+```text
+┌──────────────────────┐
+│  ✕  MediNist AI      │  ← Header with close button
+├──────────────────────┤
+│                      │
+│  🤖 Hi! How can I    │  ← Assistant bubble (left-aligned, gray bg)
+│     help you today?  │
+│                      │
+│     What's my stock? │  ← User bubble (right-aligned, blue bg)
+│                      │
+│  (scrollable area)   │
+│                      │
+├──────────────────────┤
+│ [Type a message... ▶]│  ← Input + send button
+└──────────────────────┘
 
-**4. Clean up `src/lib/geminiClient.ts`**
-- Delete or gut this file — all Gemini logic is now server-side
+          [💬]  ← Floating bubble (bottom-right, above nav)
+```
 
-**5. Edge function (`chat-pharmacy`) — no changes needed**
-- Already reads `GEMINI_API_KEY` from env, authenticates user, fetches pharmacy data, and streams Gemini responses
+### Components Detail
 
-### Files changed
-- `src/components/ai/ChatScreen.tsx` — rewrite send logic to call edge function
-- `src/components/ai/ApiKeySetup.tsx` — delete
-- `src/lib/geminiClient.ts` — delete
-- Secret `GEMINI_API_KEY` — update value
+**FloatingChatBubble.tsx**
+- State: `isOpen` toggle
+- Closed: 56px blue circular button with `MessageCircle` icon, positioned `bottom-24 right-4` (above BottomNav)
+- Open: Full-screen overlay (`fixed inset-0 z-[60]`) with white background
+- Header: gradient blue bar with app name + `X` close button
+- Message area: `flex-1 overflow-y-auto` with bottom-scroll behavior via `useRef` + `scrollIntoView`
+- Input bar: fixed bottom with `Input` + `Send` icon button
+- Local state for messages array (no persistence yet)
+- Placeholder assistant responses (echo or static welcome message)
 
-### Security result
-- API key never reaches the browser
-- No localStorage key storage
-- No API key input UI
-- All requests authenticated via Supabase JWT
+**ChatMessage.tsx**
+- Props: `content`, `role` ('user' | 'assistant'), `timestamp`
+- User: right-aligned, blue-600 bg, white text, rounded-2xl with bottom-right corner sharp
+- Assistant: left-aligned, gray-100 bg, dark text, rounded-2xl with bottom-left corner sharp
+- Small timestamp below each message
+
+### Changes Summary
+| File | Action |
+|------|--------|
+| `src/components/ai/FloatingChatBubble.tsx` | Create |
+| `src/components/ai/ChatMessage.tsx` | Create |
+| `src/components/AppLayout.tsx` | Add FloatingChatBubble |
+| `src/pages/AI.tsx` | Navigate to `/` or auto-open chat |
+| `src/App.tsx` | Wrap `/ai` route with AppLayout |
+
+### Key Details
+- Uses Tailwind CSS only, Lucide icons (`MessageCircle`, `Send`, `X`, `Bot`)
+- Mobile-first: full-screen overlay on mobile, could be a card on desktop later
+- No API calls — just local message state with a welcome message
+- Smooth open/close animation via Tailwind `transition` + `animate-in`
+- z-index above BottomNav (`z-[60]`)
+- BottomNav link to `/ai` will trigger opening the chat overlay
 
