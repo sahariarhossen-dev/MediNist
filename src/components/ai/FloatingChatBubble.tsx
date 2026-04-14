@@ -53,11 +53,15 @@ const FloatingChatBubble = () => {
       });
 
       if (error) {
-        // Extract user-friendly message from edge function response
-        const errBody = typeof error === "object" && error?.context?.body
-          ? JSON.parse(error.context.body)
-          : null;
-        throw new Error(errBody?.error || error?.message || "Failed to get a response.");
+        let msg = "Failed to get a response.";
+        try {
+          const body = error?.context?.body;
+          if (typeof body === "string") {
+            const parsed = JSON.parse(body);
+            if (parsed?.error) msg = parsed.error;
+          }
+        } catch { /* ignore parse errors */ }
+        throw new Error(msg);
       }
 
       const assistantMsg: Message = {
