@@ -49,7 +49,9 @@ serve(async (req) => {
       );
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const systemPrompt = "You are a professional pharmacy assistant for MediNist. You help with medicine inventory and sales information. Be helpful and concise.";
 
     let response: Response;
     try {
@@ -59,7 +61,7 @@ serve(async (req) => {
         signal: AbortSignal.timeout(10000),
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: "You are a professional pharmacy assistant for MediNist. You help with medicine inventory and sales information. Be helpful and concise." }],
+            parts: [{ text: systemPrompt }],
           },
           contents: [{ role: "user", parts: [{ text: message }] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
