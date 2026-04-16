@@ -203,10 +203,21 @@ Deno.serve(async (req) => {
     const context = await buildPharmacyContext(supabase);
     const systemPrompt = `${SYSTEM_BASE}\n\n${context}`;
 
-    const contents = messages.map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    }));
+    // Gemini v1 doesn't support `systemInstruction` for all models — prepend it as a user turn instead
+    const contents = [
+      {
+        role: "user",
+        parts: [{ text: `SYSTEM INSTRUCTIONS (follow strictly):\n${systemPrompt}` }],
+      },
+      {
+        role: "model",
+        parts: [{ text: "Understood. I'll act as MediNist's pharmacy assistant using the live data above." }],
+      },
+      ...messages.map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: message.content }],
+      })),
+    ];
 
     console.log(
       "ai-chat: calling Gemini",
@@ -223,7 +234,6 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents,
           generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
         }),
