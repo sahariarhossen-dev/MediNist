@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 const SYSTEM_BASE = `You are MediNist's professional pharmacy assistant. Help with medicine inventory, sales, and pharmacy operations. Be concise, helpful, and use markdown formatting (lists, bold, tables) when useful. Always answer based on the LIVE pharmacy data provided in the context. If asked about something not in the context, say so politely.`;
-const GEMINI_MODEL = "gemini-1.5-flash-latest";
-const GEMINI_TIMEOUT_MS = 30000;
+const DEEPSEEK_MODEL = "deepseek-chat";
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_TIMEOUT_MS = 30000;
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -55,30 +56,16 @@ async function buildPharmacyContext(supabase: ReturnType<typeof createClient>): 
     const sales = salesRes.data ?? [];
     const items = itemsRes.data ?? [];
 
-    console.log(
-      "ai-chat: inventory query result",
-      JSON.stringify({
-        count: medicines.length,
-        sample: medicines.slice(0, 3),
-        error: medsRes.error?.message ?? null,
-      })
-    );
-    console.log(
-      "ai-chat: sales query result",
-      JSON.stringify({
-        count: sales.length,
-        sample: sales.slice(0, 3),
-        error: salesRes.error?.message ?? null,
-      })
-    );
-    console.log(
-      "ai-chat: sale items query result",
-      JSON.stringify({
-        count: items.length,
-        sample: items.slice(0, 3),
-        error: itemsRes.error?.message ?? null,
-      })
-    );
+    console.log("ai-chat: data counts", JSON.stringify({
+      medicines: medicines.length,
+      sales: sales.length,
+      items: items.length,
+      errors: {
+        meds: medsRes.error?.message ?? null,
+        sales: salesRes.error?.message ?? null,
+        items: itemsRes.error?.message ?? null,
+      },
+    }));
 
     if (medsRes.error || salesRes.error || itemsRes.error) {
       return fallbackContextMessage(
@@ -89,7 +76,6 @@ async function buildPharmacyContext(supabase: ReturnType<typeof createClient>): 
     }
 
     if (medicines.length === 0 && sales.length === 0 && items.length === 0) {
-      console.warn("ai-chat: pharmacy context empty; using fallback context");
       return fallbackContextMessage("no medicines, sales, or sale items were returned");
     }
 
@@ -170,10 +156,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    console.log("ai-chat: GEMINI_API_KEY configured", Boolean(GEMINI_API_KEY));
-    if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
+    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
+    console.log("ai-chat: DEEPSEEK_API_KEY configured", Boolean(DEEPSEEK_API_KEY));
+    if (!DEEPSEEK_API_KEY) {
+      return new Response(JSON.stringify({ error: "DEEPSEEK_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -195,78 +181,80 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(
-      "ai-chat: authenticated request",
-      JSON.stringify({ userId: userData.user.id, messageCount: messages.length })
-    );
+    console.log("ai-chat: authenticated request", JSON.stringify({
+      userId: userData.user.id,
+      messageCount: messages.length,
+    }));
 
     const context = await buildPharmacyContext(supabase);
     const systemPrompt = `${SYSTEM_BASE}\n\n${context}`;
 
-    const contents = messages.map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
+    const openAiMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    console.log("ai-chat: calling DeepSeek", JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messageCount: openAiMessages.length,
+      timeoutMs: DEEPSEEK_TIMEOUT_MS,
     }));
 
-    console.log(
-      "ai-chat: calling Gemini",
-      JSON.stringify({ model: GEMINI_MODEL, messageCount: contents.length, timeoutMs: GEMINI_TIMEOUT_MS })
-    );
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
-        }),
-      }
-    ).catch((error) => {
-      console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
+    const dsRes = await fetch(DEEPSEEK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: DEEPSEEK_MODEL,
+        messages: openAiMessages,
+        temperature: 0.7,
+        max_tokens: 1024,
+        stream: false,
+      }),
+    }).catch((error) => {
+      console.error("ai-chat: DeepSeek fetch failed", safeErrorMessage(error));
       return null;
     });
 
     clearTimeout(timeout);
 
-    if (!geminiRes) {
+    if (!dsRes) {
       return new Response(
-        JSON.stringify({ error: `Gemini request timed out after ${GEMINI_TIMEOUT_MS / 1000} seconds.` }),
+        JSON.stringify({ error: `DeepSeek request timed out after ${DEEPSEEK_TIMEOUT_MS / 1000} seconds.` }),
         { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const geminiText = await geminiRes.text();
-    console.log(
-      "ai-chat: Gemini raw response",
-      JSON.stringify({ status: geminiRes.status, body: geminiText.slice(0, 4000) })
-    );
+    const dsText = await dsRes.text();
+    console.log("ai-chat: DeepSeek raw response", JSON.stringify({
+      status: dsRes.status,
+      body: dsText.slice(0, 4000),
+    }));
 
-    let geminiData: any = null;
+    let dsData: any = null;
     try {
-      geminiData = geminiText ? JSON.parse(geminiText) : null;
+      dsData = dsText ? JSON.parse(dsText) : null;
     } catch (error) {
-      console.error("ai-chat: failed to parse Gemini response", safeErrorMessage(error));
+      console.error("ai-chat: failed to parse DeepSeek response", safeErrorMessage(error));
     }
 
-    if (!geminiRes.ok) {
-      const geminiErrorMessage =
-        geminiData?.error?.message || geminiText || `Gemini API request failed with status ${geminiRes.status}`;
-
+    if (!dsRes.ok) {
+      const errMsg =
+        dsData?.error?.message || dsText || `DeepSeek API request failed with status ${dsRes.status}`;
       return new Response(
-        JSON.stringify({ error: geminiErrorMessage, code: geminiRes.status }),
+        JSON.stringify({ error: errMsg, code: dsRes.status }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const reply =
-      geminiData?.candidates?.[0]?.content?.parts?.map((part: any) => part.text).join("") ??
+      dsData?.choices?.[0]?.message?.content ??
       "I couldn't generate a reply. Please try again.";
 
     return new Response(JSON.stringify({ reply }), {
