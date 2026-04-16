@@ -1,9 +1,10 @@
 import { useLocation, Link } from "react-router-dom";
-import { LayoutGrid, ShoppingCart, MoreHorizontal } from "lucide-react";
+import { LayoutGrid, ShoppingCart, MoreHorizontal, Sparkles } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, path: "/" },
   { label: "Sales", icon: ShoppingCart, path: "/sales" },
+  { label: "AI", icon: Sparkles, path: "/ai" },
   { label: "More", icon: MoreHorizontal, path: "/more" },
 ];
 
