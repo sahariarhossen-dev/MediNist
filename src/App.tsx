@@ -9,7 +9,7 @@ import NotFound from "./pages/NotFound.tsx";
 import Register from "./pages/Register.tsx";
 import Login from "./pages/Login.tsx";
 import Sales from "./pages/Sales.tsx";
-import AI from "./pages/AI.tsx";
+
 import More from "./pages/More.tsx";
 import Inventory from "./pages/Inventory.tsx";
 import AddProduct from "./pages/AddProduct.tsx";
@@ -51,7 +51,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
-            <Route path="/ai" element={<ProtectedRoute><AppLayout><AI /></AppLayout></ProtectedRoute>} />
+            
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
             <Route path="/add-product" element={<ProtectedRoute><AddProduct /></ProtectedRoute>} />
