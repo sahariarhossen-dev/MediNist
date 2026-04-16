@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const SYSTEM_BASE = `You are MediNist's professional pharmacy assistant. Help with medicine inventory, sales, and pharmacy operations. Be concise, helpful, and use markdown formatting (lists, bold, tables) when useful. Always answer based on the LIVE pharmacy data provided in the context. If asked about something not in the context, say so politely.`;
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-1.5-flash-latest";
 const GEMINI_TIMEOUT_MS = 30000;
 
 interface ChatMsg {
@@ -203,21 +203,10 @@ Deno.serve(async (req) => {
     const context = await buildPharmacyContext(supabase);
     const systemPrompt = `${SYSTEM_BASE}\n\n${context}`;
 
-    // Gemini v1 doesn't support `systemInstruction` for all models — prepend it as a user turn instead
-    const contents = [
-      {
-        role: "user",
-        parts: [{ text: `SYSTEM INSTRUCTIONS (follow strictly):\n${systemPrompt}` }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "Understood. I'll act as MediNist's pharmacy assistant using the live data above." }],
-      },
-      ...messages.map((message) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: message.content }],
-      })),
-    ];
+    const contents = messages.map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    }));
 
     console.log(
       "ai-chat: calling Gemini",
@@ -228,12 +217,13 @@ Deno.serve(async (req) => {
     const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents,
           generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
         }),
