@@ -7,14 +7,31 @@ const corsHeaders = {
 };
 
 const SYSTEM_BASE = `You are MediNist's professional pharmacy assistant. Help with medicine inventory, sales, and pharmacy operations. Be concise, helpful, and use markdown formatting (lists, bold, tables) when useful. Always answer based on the LIVE pharmacy data provided in the context. If asked about something not in the context, say so politely.`;
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_TIMEOUT_MS = 30000;
 
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
 }
 
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "Unknown error";
+}
+
+function fallbackContextMessage(reason: string) {
+  return [
+    "LIVE PHARMACY DATA: unavailable for this request.",
+    `Reason: ${reason}`,
+    "If the user asks for exact live numbers, explain that live data could not be loaded and provide general pharmacy guidance instead.",
+  ].join("\n");
+}
+
 async function buildPharmacyContext(supabase: ReturnType<typeof createClient>): Promise<string> {
   try {
+    console.log("ai-chat: fetching pharmacy context");
+
     const [medsRes, salesRes, itemsRes] = await Promise.all([
       supabase
         .from("medicines")
@@ -38,27 +55,68 @@ async function buildPharmacyContext(supabase: ReturnType<typeof createClient>): 
     const sales = salesRes.data ?? [];
     const items = itemsRes.data ?? [];
 
+    console.log(
+      "ai-chat: inventory query result",
+      JSON.stringify({
+        count: medicines.length,
+        sample: medicines.slice(0, 3),
+        error: medsRes.error?.message ?? null,
+      })
+    );
+    console.log(
+      "ai-chat: sales query result",
+      JSON.stringify({
+        count: sales.length,
+        sample: sales.slice(0, 3),
+        error: salesRes.error?.message ?? null,
+      })
+    );
+    console.log(
+      "ai-chat: sale items query result",
+      JSON.stringify({
+        count: items.length,
+        sample: items.slice(0, 3),
+        error: itemsRes.error?.message ?? null,
+      })
+    );
+
+    if (medsRes.error || salesRes.error || itemsRes.error) {
+      return fallbackContextMessage(
+        [medsRes.error?.message, salesRes.error?.message, itemsRes.error?.message]
+          .filter(Boolean)
+          .join(" | ") || "database query failed"
+      );
+    }
+
+    if (medicines.length === 0 && sales.length === 0 && items.length === 0) {
+      console.warn("ai-chat: pharmacy context empty; using fallback context");
+      return fallbackContextMessage("no medicines, sales, or sale items were returned");
+    }
+
     const lowStock = medicines.filter(
       (m: any) => (m.stock_quantity ?? 0) <= (m.stock_alert ?? 0)
     );
 
-    const totalRevenue30d = sales.reduce((s: number, x: any) => s + Number(x.total ?? 0), 0);
+    const totalRevenue30d = sales.reduce((sum: number, sale: any) => sum + Number(sale.total ?? 0), 0);
     const today = new Date().toISOString().slice(0, 10);
-    const todaySales = sales.filter((s: any) => (s.created_at ?? "").startsWith(today));
-    const todayRevenue = todaySales.reduce((s: number, x: any) => s + Number(x.total ?? 0), 0);
+    const todaySales = sales.filter((sale: any) => (sale.created_at ?? "").startsWith(today));
+    const todayRevenue = todaySales.reduce(
+      (sum: number, sale: any) => sum + Number(sale.total ?? 0),
+      0
+    );
 
-    // Top selling
     const tally = new Map<string, { qty: number; revenue: number }>();
-    for (const it of items as any[]) {
-      const cur = tally.get(it.medicine_name) ?? { qty: 0, revenue: 0 };
-      cur.qty += Number(it.quantity ?? 0);
-      cur.revenue += Number(it.total_price ?? 0);
-      tally.set(it.medicine_name, cur);
+    for (const item of items as any[]) {
+      const current = tally.get(item.medicine_name) ?? { qty: 0, revenue: 0 };
+      current.qty += Number(item.quantity ?? 0);
+      current.revenue += Number(item.total_price ?? 0);
+      tally.set(item.medicine_name, current);
     }
+
     const topSelling = [...tally.entries()]
       .sort((a, b) => b[1].qty - a[1].qty)
       .slice(0, 10)
-      .map(([name, v]) => `${name} (qty: ${v.qty}, revenue: ${v.revenue.toFixed(2)})`);
+      .map(([name, value]) => `${name} (qty: ${value.qty}, revenue: ${value.revenue.toFixed(2)})`);
 
     return `
 LIVE PHARMACY DATA (read-only snapshot):
@@ -84,11 +142,11 @@ Total revenue: ${totalRevenue30d.toFixed(2)}
 Today: ${todaySales.length} sales, revenue ${todayRevenue.toFixed(2)}
 
 Top 10 selling items (30d):
-${topSelling.map((s) => `- ${s}`).join("\n") || "no sales"}
+${topSelling.map((entry) => `- ${entry}`).join("\n") || "no sales"}
 `.trim();
-  } catch (e) {
-    console.error("Context build failed:", e);
-    return "LIVE PHARMACY DATA: unavailable for this request.";
+  } catch (error) {
+    console.error("ai-chat: context build failed", safeErrorMessage(error));
+    return fallbackContextMessage(safeErrorMessage(error));
   }
 }
 
@@ -113,6 +171,7 @@ Deno.serve(async (req) => {
     }
 
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    console.log("ai-chat: GEMINI_API_KEY configured", Boolean(GEMINI_API_KEY));
     if (!GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
         status: 500,
@@ -120,38 +179,45 @@ Deno.serve(async (req) => {
       });
     }
 
-    // RLS-bound client (uses caller's JWT)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Validate token via getUser (works with ES256 signing keys)
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userErr } = await supabase.auth.getUser(token);
     if (userErr || !userData?.user) {
-      console.error("Auth validation failed:", userErr);
+      console.error("ai-chat: auth validation failed", userErr);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    console.log(
+      "ai-chat: authenticated request",
+      JSON.stringify({ userId: userData.user.id, messageCount: messages.length })
+    );
+
     const context = await buildPharmacyContext(supabase);
     const systemPrompt = `${SYSTEM_BASE}\n\n${context}`;
 
-    // Gemini 1.5 Flash payload
-    const contents = messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
+    const contents = messages.map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
     }));
 
+    console.log(
+      "ai-chat: calling Gemini",
+      JSON.stringify({ model: GEMINI_MODEL, messageCount: contents.length, timeoutMs: GEMINI_TIMEOUT_MS })
+    );
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -162,47 +228,55 @@ Deno.serve(async (req) => {
           generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
         }),
       }
-    ).catch((e) => {
-      console.error("Gemini fetch failed:", e);
+    ).catch((error) => {
+      console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
       return null;
     });
+
     clearTimeout(timeout);
 
     if (!geminiRes) {
       return new Response(
-        JSON.stringify({ error: "Request to AI timed out. Please try again." }),
+        JSON.stringify({ error: `Gemini request timed out after ${GEMINI_TIMEOUT_MS / 1000} seconds.` }),
         { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const geminiText = await geminiRes.text();
+    console.log(
+      "ai-chat: Gemini raw response",
+      JSON.stringify({ status: geminiRes.status, body: geminiText.slice(0, 4000) })
+    );
+
+    let geminiData: any = null;
+    try {
+      geminiData = geminiText ? JSON.parse(geminiText) : null;
+    } catch (error) {
+      console.error("ai-chat: failed to parse Gemini response", safeErrorMessage(error));
+    }
+
     if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini API error", geminiRes.status, errText);
-      if (geminiRes.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Busy", code: 429 }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const geminiErrorMessage =
+        geminiData?.error?.message || geminiText || `Gemini API request failed with status ${geminiRes.status}`;
+
       return new Response(
-        JSON.stringify({ error: "AI service error", code: geminiRes.status }),
+        JSON.stringify({ error: geminiErrorMessage, code: geminiRes.status }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const data = await geminiRes.json();
     const reply =
-      data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ??
+      geminiData?.candidates?.[0]?.content?.parts?.map((part: any) => part.text).join("") ??
       "I couldn't generate a reply. Please try again.";
 
     return new Response(JSON.stringify({ reply }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("ai-chat fatal:", e);
+  } catch (error) {
+    console.error("ai-chat fatal:", safeErrorMessage(error));
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: safeErrorMessage(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
