@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
+import LogoFull from "@/components/brand/LogoFull";
 
 
 function getStartDate(range: string): string {
@@ -102,7 +103,7 @@ const Index = () => {
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <span className="text-xl font-bold text-blue-600 tracking-tight">Medinist</span>
+        <LogoFull height={28} />
         <div className="flex items-center gap-3">
           <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
             <Bell size={22} className="text-gray-600" />
