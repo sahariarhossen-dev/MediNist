@@ -18,7 +18,7 @@ const LogoFull = ({ height = 28, className }: LogoFullProps) => {
         style={{
           fontSize: Math.round(height * 0.72),
           lineHeight: 1,
-          color: "#C0392B",
+          color: "#1E3A8A",
           letterSpacing: "-0.01em",
         }}
       >
