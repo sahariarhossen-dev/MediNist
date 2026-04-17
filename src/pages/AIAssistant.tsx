@@ -258,11 +258,11 @@ const AIAssistant = () => {
 
       {/* Pill Input */}
       <form onSubmit={handleSubmit} className="shrink-0 border-t border-gray-100 bg-white px-3 py-3">
-        <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md">
+        <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md pl-[20px] pb-[16px]">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isLoading ? "AI is thinking..." : "Ask anything... (Bengali / Banglish OK)"}
+            placeholder={isLoading ? "AI is thinking..." : "Ask anything..."}
             disabled={isLoading}
             className="h-9 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
