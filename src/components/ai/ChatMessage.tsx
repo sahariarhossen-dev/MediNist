@@ -15,7 +15,7 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
     <div className={cn("flex w-full gap-2.5", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
-          <Sparkles className="h-4 w-4 text-white" />
+          <Sparkles className="h-4 w-4 text-white border-4" />
         </div>
       )}
       <div
@@ -35,8 +35,8 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
         )}
       </div>
       {isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 pl-0 opacity-100">
-          <CircleUserRound className="text-secondary-foreground bg-primary-foreground w-[30px] h-[20px]" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full pl-0 opacity-100 bg-primary-foreground border-primary border-0">
+          <CircleUserRound className="text-secondary-foreground h-[20px] w-[20px] bg-primary-foreground" />
         </div>
       )}
     </div>
