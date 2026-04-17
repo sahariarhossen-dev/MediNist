@@ -1,6 +1,7 @@
-import { Sparkles, CircleUserRound } from "lucide-react";
+import { CircleUserRound } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import LogoMark from "@/components/brand/LogoMark";
 
 export type ChatRole = "user" | "assistant";
 
@@ -15,7 +16,7 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
     <div className={cn("flex w-full gap-2.5", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm border-0">
-          <Sparkles className="h-4 w-4 text-white border-0" />
+          <LogoMark size={18} primary="#FFFFFF" accent="#FFFFFF" />
         </div>
       )}
       <div
