@@ -14,8 +14,8 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
   return (
     <div className={cn("flex w-full gap-2.5", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
-          <Sparkles className="h-4 w-4 text-white border-4" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm border-0">
+          <Sparkles className="h-4 w-4 text-white border-0" />
         </div>
       )}
       <div
