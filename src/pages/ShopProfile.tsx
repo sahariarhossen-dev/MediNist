@@ -64,7 +64,7 @@ const ShopProfile = () => {
   }, [profile?.pharmacy_id, isAdmin]);
 
   const fetchPharmacy = async () => {
-    if (isAdminUser) {
+    if (isAdmin) {
       // Admins can read the full row (including license + contact fields)
       const { data } = await supabase
         .from("pharmacies")
@@ -203,7 +203,6 @@ const ShopProfile = () => {
     toast({ title: "Staff member removed" });
   };
 
-  const isAdmin = profile?.role === "admin";
 
   const infoFields = [
     { label: "Pharmacy Name", key: "name" as const },
