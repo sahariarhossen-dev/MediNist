@@ -267,10 +267,10 @@ const AIAssistant = () => {
       {/* Pill Input */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-t border-gray-100 bg-white px-3 py-3"
+        className="shrink-0 border-t bg-white px-3 py-3 pl-[5px] pr-[5px] pb-[15px] pt-[15px] shadow-sm opacity-100 border-solid border-secondary rounded-xl"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
-        <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md pl-[20px] pb-[16px]">
+        <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md pl-[20px] pr-[20px] pb-[10px] pt-[10px] mb-[10px] ml-[5px] mr-[5px]">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}

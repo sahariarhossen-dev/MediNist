@@ -1,4 +1,4 @@
-import { Sparkles, User } from "lucide-react";
+import { Sparkles, Github } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
       </div>
       {isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200">
-          <User className="h-4 w-4 text-gray-600" />
+          <Github className="h-4 w-4 text-gray-600" />
         </div>
       )}
     </div>
