@@ -13,11 +13,9 @@ const LogoFull = ({ height = 28, className }: LogoFullProps) => {
   return (
     <div className={`flex items-center ${className ?? ""}`}>
       <span
-        className="font-bold tracking-tight"
+        className="font-bold tracking-tight text-[#2463eb] text-xl"
         style={{
-          fontSize: Math.round(height * 0.72),
           lineHeight: 1,
-          color: "#1E3A8A",
           letterSpacing: "-0.01em",
         }}
       >

@@ -49,7 +49,7 @@ const BottomNav = () => {
               <div className="p-1.5 rounded-xl transition-colors">
                 <Icon
                   size={22}
-                  className={`transition-colors ${isActive ? "text-blue-600" : "text-gray-400"}`}
+                  className={`transition-colors ${isActive ? "text-blue-600" : "text-muted-foreground"}`}
                 />
               </div>
               <span className={`text-[10px] font-medium transition-colors ${isActive ? "text-blue-600" : "text-gray-400"}`}>
