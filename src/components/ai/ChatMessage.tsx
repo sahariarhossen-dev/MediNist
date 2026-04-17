@@ -1,4 +1,4 @@
-import { Sparkles, Github } from "lucide-react";
+import { Sparkles, CircleUserRound } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ const ChatMessage = ({ role, content }: ChatMessageProps) => {
       </div>
       {isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200">
-          <Github className="h-4 w-4 text-gray-600" />
+          <CircleUserRound className="h-4 w-4 text-secondary-foreground bg-muted-foreground" />
         </div>
       )}
     </div>
