@@ -54,14 +54,14 @@ const ShopProfile = () => {
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
 
-  const isAdminUser = profile?.role === "admin";
+  const isAdmin = profile?.role === "admin";
 
   useEffect(() => {
     if (profile?.pharmacy_id) {
       fetchPharmacy();
-      if (isAdminUser) fetchStaff();
+      if (isAdmin) fetchStaff();
     }
-  }, [profile?.pharmacy_id, isAdminUser]);
+  }, [profile?.pharmacy_id, isAdmin]);
 
   const fetchPharmacy = async () => {
     if (isAdminUser) {
