@@ -54,33 +54,61 @@ const ShopProfile = () => {
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
 
+  const isAdmin = profile?.role === "admin";
+
   useEffect(() => {
     if (profile?.pharmacy_id) {
       fetchPharmacy();
-      fetchStaff();
+      if (isAdmin) fetchStaff();
     }
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, isAdmin]);
 
   const fetchPharmacy = async () => {
-    const { data } = await supabase
-      .from("pharmacies")
-      .select("*")
-      .eq("id", profile!.pharmacy_id!)
-      .single();
-    if (data) {
-      const p = data as unknown as PharmacyData;
-      setPharmacy(p);
-      setEditForm({
-        name: p.name || "",
-        proprietor_name: p.proprietor_name || "",
-        address: p.address || "",
-        phone: p.phone || "",
-        email: p.email || "",
-        drug_license: p.drug_license || "",
-        trade_license: p.trade_license || "",
-      });
-      setInvoiceFooter(p.invoice_footer || "");
-      setDefaultDiscount(String(p.default_discount ?? 10));
+    if (isAdmin) {
+      // Admins can read the full row (including license + contact fields)
+      const { data } = await supabase
+        .from("pharmacies")
+        .select("*")
+        .eq("id", profile!.pharmacy_id!)
+        .single();
+      if (data) {
+        const p = data as unknown as PharmacyData;
+        setPharmacy(p);
+        setEditForm({
+          name: p.name || "",
+          proprietor_name: p.proprietor_name || "",
+          address: p.address || "",
+          phone: p.phone || "",
+          email: p.email || "",
+          drug_license: p.drug_license || "",
+          trade_license: p.trade_license || "",
+        });
+        setInvoiceFooter(p.invoice_footer || "");
+        setDefaultDiscount(String(p.default_discount ?? 10));
+      }
+    } else {
+      // Non-admins see only non-sensitive fields via security-definer RPC
+      const { data } = await supabase.rpc("get_my_pharmacy_public" as any);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        const p: PharmacyData = {
+          id: row.id,
+          name: row.name,
+          proprietor_name: null,
+          address: row.address,
+          phone: null,
+          email: null,
+          drug_license: null,
+          trade_license: null,
+          invoice_footer: row.invoice_footer,
+          logo_url: row.logo_url,
+          cover_url: row.cover_url,
+          default_discount: row.default_discount,
+        };
+        setPharmacy(p);
+        setInvoiceFooter(p.invoice_footer || "");
+        setDefaultDiscount(String(p.default_discount ?? 10));
+      }
     }
   };
 
@@ -175,7 +203,6 @@ const ShopProfile = () => {
     toast({ title: "Staff member removed" });
   };
 
-  const isAdmin = profile?.role === "admin";
 
   const infoFields = [
     { label: "Pharmacy Name", key: "name" as const },

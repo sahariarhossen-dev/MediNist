@@ -349,6 +349,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_my_pharmacy_public: {
+        Args: never
+        Returns: {
+          address: string
+          cover_url: string
+          created_at: string
+          default_discount: number
+          district: string
+          division: string
+          id: string
+          invoice_footer: string
+          logo_url: string
+          name: string
+          upazila: string
+        }[]
+      }
       get_user_pharmacy_id: { Args: never; Returns: string }
       is_pharmacy_admin: { Args: never; Returns: boolean }
     }
