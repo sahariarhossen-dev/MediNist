@@ -9,6 +9,7 @@ import ChatMessage, { type ChatRole } from "@/components/ai/ChatMessage";
 import TypingIndicator from "@/components/ai/TypingIndicator";
 import ChatHeader from "@/components/ai/ChatHeader";
 import ConversationSidebar, { type Conversation } from "@/components/ai/ConversationSidebar";
+import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 
 interface Message {
   id?: string;
@@ -38,6 +39,13 @@ const AIAssistant = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { setElement } = useScrollContainer();
+
+  // Register the chat scroll container so BottomNav can react to scroll direction here.
+  useEffect(() => {
+    setElement(scrollRef.current);
+    return () => setElement(null);
+  }, [setElement]);
 
   // Load conversations & resume most recent on mount
   useEffect(() => {
@@ -214,7 +222,7 @@ const AIAssistant = () => {
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-white pb-16">
+    <div className="fixed inset-0 flex flex-col bg-white h-[100dvh]">
       <ChatHeader
         pharmacyName={pharmacyName}
         userName={profile?.full_name ?? null}
@@ -257,7 +265,11 @@ const AIAssistant = () => {
       </div>
 
       {/* Pill Input */}
-      <form onSubmit={handleSubmit} className="shrink-0 border-t border-gray-100 bg-white px-3 py-3">
+      <form
+        onSubmit={handleSubmit}
+        className="shrink-0 border-t border-gray-100 bg-white px-3 py-3"
+        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
         <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md pl-[20px] pb-[16px]">
           <Input
             value={input}
