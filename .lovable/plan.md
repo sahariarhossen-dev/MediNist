@@ -1,52 +1,52 @@
 
-## Plan: Mobile UX optimization — auto-hide nav + keyboard handling
+## Plan: Premium MediNist logo + brand integration
 
-### Current state
-- `BottomNav` is `fixed bottom-4` always visible (floating pill, 390px mobile).
-- `AppLayout` wraps every page and renders `<BottomNav />` unconditionally.
-- `AIAssistant.tsx` uses `fixed inset-0 flex flex-col pb-16` — the `pb-16` reserves space for the nav, and the input is inside a flex column (not sticky). When the mobile keyboard opens, iOS/Android shrink the visual viewport but the `fixed` container stays at full height, pushing the input below the keyboard.
-- Dashboard (`Index.tsx`), `Sales.tsx`, `More.tsx` all add their own `pb-*` to avoid the nav.
+### Goal
+Replace plain "Medinist" text with a custom SVG logo (stylized medical cross fused with letter "M") across the app, plus update the favicon for consistent branding.
 
-### What to build
+### Logo design spec
+- **Icon**: Medical cross where the lower vertical stroke morphs into a stylized "M". Rounded corners, geometric, digital feel. Sized roughly 32×32 in header.
+- **Wordmark**: "MediNist" in bold sans-serif (Inter — already loaded by Tailwind defaults), sitting to the right of the icon.
+- **Colors**:
+  - Primary: `#C0392B` (deep red) for icon body + wordmark
+  - Accent: `#E74C3C` (lighter red) as a linear gradient highlight on the "M" transition
+- **Two variants**:
+  1. `LogoFull` — icon + "MediNist" wordmark (header, chat header)
+  2. `LogoMark` — icon-only square (favicon, app launcher, future avatars)
 
-**1. Scroll-aware `BottomNav` (auto-hide)**
-- Track `window.scrollY` + chat scroll container via a new hook `useScrollDirection()`.
-- When scrolling down >10px → translate nav down & fade out.
-- When scrolling up OR near top → translate up & show.
-- Use `transition-transform duration-300 ease-out` + `translate-y-[120%]` to hide (fully off-screen so it doesn't block taps).
-- Accept an optional `scrollContainerRef` prop so AI page can pass its own scroll element (since page scroll is locked).
+### Files to create
+1. **`src/components/brand/LogoFull.tsx`** — full logo SVG (icon + wordmark), accepts `className` and `height` props.
+2. **`src/components/brand/LogoMark.tsx`** — icon-only SVG, square viewBox, accepts `className` and `size`.
+3. **`public/favicon.svg`** — standalone SVG favicon (same artwork as `LogoMark`) so browsers render it crisp at any size.
+4. **`public/logo-mark.svg`** — same icon-only artwork, used as Apple touch icon / app launcher.
 
-**2. Keyboard-aware hiding using `visualViewport` API**
-- New hook `useKeyboardOpen()`:
-  - Listens to `window.visualViewport.resize`.
-  - Returns `true` when `visualViewport.height` is significantly less than `window.innerHeight` (>150px diff = keyboard).
-- When keyboard open → force-hide `BottomNav` regardless of scroll direction.
-- This prevents the nav from sliding up with the keyboard.
+### Files to modify
+1. **`src/pages/Index.tsx`** (Dashboard header)
+   - Replace the `<span>Medinist</span>` (line ~106) with `<LogoFull height={28} />`.
+   - Keep alignment with bell + avatar on the right.
 
-**3. Fix AI chat input staying above keyboard**
-- Change `AIAssistant.tsx` root from `fixed inset-0 ... pb-16` to `flex flex-col h-[100dvh]` (dynamic viewport height — respects keyboard on modern mobile).
-- Remove `pb-16` (nav auto-hides when keyboard open, so no reserved space needed).
-- Keep input as the last flex child with `shrink-0` — it naturally sits above the keyboard when `h-[100dvh]` is used.
-- Add a safe-area bottom padding (`pb-[env(safe-area-inset-bottom)]`) for iPhone notch.
+2. **`src/components/ai/ChatHeader.tsx`** (AI Assistant header)
+   - Replace the white `Sparkles`-in-circle block (lines ~37–39) with `<LogoMark size={36} className="rounded-full bg-white/15 p-1.5" />`.
+   - Keep "MediNist AI" title text — the title still reads as the AI sub-brand.
 
-**4. Dashboard / other pages expand when nav hides**
-- Replace fixed `pb-24` on Index/Sales/More with `pb-24` conditional — simpler: keep `pb-24` so content can scroll past; the auto-hide is purely visual so layout-reserved space is fine. Actually to truly expand, switch to `min-h-[100dvh]` on page wrappers — content fills full viewport and scrolls naturally.
-- Keep the `pb-24` on scroll content so last items aren't covered when nav IS visible.
+3. **`index.html`**
+   - Remove default `/favicon.ico` reference (currently implicit).
+   - Add `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />`.
+   - Add `<link rel="apple-touch-icon" href="/logo-mark.svg" />`.
+   - (Optional) update `<title>` to "MediNist".
 
-### Files
-- **NEW** `src/hooks/useScrollDirection.ts` — returns `'up' | 'down' | 'idle'`, accepts optional element ref.
-- **NEW** `src/hooks/useKeyboardOpen.ts` — returns boolean via `visualViewport`.
-- **EDIT** `src/components/BottomNav.tsx` — apply hide/show transform based on both hooks; accept optional scroll ref.
-- **EDIT** `src/components/AppLayout.tsx` — no structural change (still wraps children + nav).
-- **EDIT** `src/pages/AIAssistant.tsx` — switch to `h-[100dvh]`, remove `pb-16`, add safe-area, pass scroll ref to nav via context or prop drilling. Simplest: expose a `scrollElementId` the nav hook can `getElementById` on mount, OR let AI page call a small context. **Decision: use a lightweight `ScrollContainerContext`** so AI page registers its messages scroll div, and `BottomNav` subscribes. Dashboard uses window scroll (default).
-- **NEW** `src/contexts/ScrollContainerContext.tsx` — optional ref registry.
+### What stays the same
+- Login/Register pages already use text branding — out of scope unless requested.
+- Tailwind config: no theme color changes; logo carries its own brand red so it pops against the existing blue UI without clashing (red is reserved as the brand mark only).
+- BottomNav, other pages: no "Medinist" text references found there.
 
 ### Technical notes
-- `100dvh` (dynamic viewport height) is the modern fix for mobile keyboard + URL bar. Supported in all current mobile browsers.
-- `visualViewport` API is the reliable cross-browser keyboard detector (iOS Safari + Android Chrome).
-- Transform-based hide (`translate-y-[120%]`) is GPU-accelerated; `opacity` fade adds polish.
-- Threshold: ignore scroll deltas <5px to avoid jitter.
+- SVG logos are inlined as React components (no asset fetch, instant render, themeable via props).
+- The "M" gradient uses an SVG `<linearGradient>` with a unique `id` per component instance to avoid collisions.
+- `LogoMark` uses a square `viewBox="0 0 64 64"` so it scales cleanly at favicon sizes (16, 32, 180px).
+- No existing `public/favicon.ico` deletion needed — the SVG `<link>` takes precedence in modern browsers; we'll keep the `.ico` as a fallback but the SVG will win.
 
 ### Out of scope
-- No changes to auth, routing, or AI edge function.
-- No redesign of the nav pill itself — only its visibility behaviour.
+- No redesign of the header layout, bell, or avatar.
+- No PWA manifest changes (can add later if you want true installable app icon).
+- No changes to the auth pages' branding.
