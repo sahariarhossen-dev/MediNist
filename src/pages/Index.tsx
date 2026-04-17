@@ -102,7 +102,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3">
+      <div className="flex items-center justify-between px-5 pb-[10px] pt-[20px] bg-primary-foreground border border-muted-foreground rounded-lg">
         <LogoFull height={28} />
         <div className="flex items-center gap-3">
           <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
