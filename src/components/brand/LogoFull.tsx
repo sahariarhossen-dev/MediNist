@@ -11,8 +11,7 @@ interface LogoFullProps {
  */
 const LogoFull = ({ height = 28, className }: LogoFullProps) => {
   return (
-    <div className={`flex items-center gap-2 ${className ?? ""}`}>
-      <LogoMark size={height} />
+    <div className={`flex items-center ${className ?? ""}`}>
       <span
         className="font-bold tracking-tight"
         style={{
