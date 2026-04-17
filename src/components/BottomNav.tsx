@@ -1,4 +1,4 @@
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutGrid, ShoppingCart, MoreHorizontal, Sparkles } from "lucide-react";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
@@ -14,6 +14,7 @@ const navItems = [
 
 const BottomNav = () => {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { element } = useScrollContainer();
   const direction = useScrollDirection(element);
   const keyboardOpen = useKeyboardOpen();
@@ -34,9 +35,15 @@ const BottomNav = () => {
         {navItems.map(({ label, icon: Icon, path }) => {
           const isActive = pathname === path;
           return (
-            <Link
+            <button
               key={path}
-              to={path}
+              type="button"
+              onClick={() => {
+                if (isActive) return;
+                // Root-tab switches always replace, so the history stack
+                // never accumulates tab-to-tab entries.
+                navigate(path, { replace: true });
+              }}
               className="flex flex-col items-center gap-0.5 flex-1 py-1"
             >
               <div className="p-1.5 rounded-xl transition-colors">
@@ -48,7 +55,7 @@ const BottomNav = () => {
               <span className={`text-[10px] font-medium transition-colors ${isActive ? "text-blue-600" : "text-gray-400"}`}>
                 {label}
               </span>
-            </Link>
+            </button>
           );
         })}
       </div>
