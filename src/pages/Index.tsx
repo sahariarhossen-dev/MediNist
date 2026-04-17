@@ -102,7 +102,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pb-[10px] pt-[20px] border border-muted-foreground rounded-lg bg-secondary">
+      <div className="flex items-center justify-between px-5 pb-[10px] pt-[20px] border-muted-foreground rounded-lg border-0 bg-[#e9f1fb] border-solid opacity-100">
         <LogoFull height={28} />
         <div className="flex items-center gap-3">
           <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
@@ -118,7 +118,7 @@ const Index = () => {
 
       {/* Business Insights */}
       <div className="px-5 pt-3 pb-2">
-        <div className="flex items-start justify-between pt-[10px] pb-[10px]">
+        <div className="flex items-start justify-between pt-[10px] pb-[5px]">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
