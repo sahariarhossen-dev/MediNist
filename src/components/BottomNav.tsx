@@ -1,5 +1,9 @@
 import { useLocation, Link } from "react-router-dom";
 import { LayoutGrid, ShoppingCart, MoreHorizontal, Sparkles } from "lucide-react";
+import { useScrollDirection } from "@/hooks/useScrollDirection";
+import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
+import { useScrollContainer } from "@/contexts/ScrollContainerContext";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, path: "/" },
@@ -10,14 +14,25 @@ const navItems = [
 
 const BottomNav = () => {
   const { pathname } = useLocation();
+  const { element } = useScrollContainer();
+  const direction = useScrollDirection(element);
+  const keyboardOpen = useKeyboardOpen();
+
+  const hidden = keyboardOpen || direction === "down";
 
   return (
-    <nav className="fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.10)] z-50">
+    <nav
+      aria-hidden={hidden}
+      className={cn(
+        "fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.10)] z-50",
+        "transition-all duration-300 ease-out will-change-transform",
+        hidden ? "translate-y-[150%] opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+      )}
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <div className="flex items-center justify-around py-2.5 px-2">
         {navItems.map(({ label, icon: Icon, path }) => {
           const isActive = pathname === path;
-          
-
           return (
             <Link
               key={path}
