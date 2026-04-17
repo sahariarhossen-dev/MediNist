@@ -143,7 +143,7 @@ const Index = () => {
             <div className={`w-9 h-9 rounded-full flex items-center justify-center mb-3 ${card.color}`}>
               <card.icon size={18} />
             </div>
-            <p className="text-[11px] text-gray-400 font-medium">{card.title}</p>
+            <p className="text-[11px] font-medium text-muted-foreground">{card.title}</p>
             <p className="text-xl font-bold text-gray-900 mt-0.5">{card.value}</p>
           </Card>
         ))}
