@@ -49,15 +49,8 @@ const ConversationSidebar = ({
         side="left"
         className="flex w-[85vw] max-w-sm flex-col gap-0 border-0 bg-white p-0"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center border-b border-gray-100 px-4 py-3">
           <h2 className="text-base font-semibold text-gray-900">Chat history</h2>
-          <button
-            onClick={() => onOpenChange(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="px-3 py-3">
