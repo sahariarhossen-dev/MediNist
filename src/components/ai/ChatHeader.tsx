@@ -1,7 +1,8 @@
-import { Sparkles, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import LogoMark from "@/components/brand/LogoMark";
 
 interface ChatHeaderProps {
   pharmacyName: string | null;
@@ -36,8 +37,8 @@ const ChatHeader = ({ pharmacyName, userName, avatarUrl, onToggleSidebar }: Chat
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur">
-          <Sparkles className="h-5 w-5 text-white" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white p-1.5 shadow-sm">
+          <LogoMark size={28} />
         </div>
 
         <div className="min-w-0 flex-1">
