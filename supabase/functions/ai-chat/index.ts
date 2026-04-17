@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_BASE = `You are MediNist's professional pharmacy assistant. Help with medicine inventory, sales, and pharmacy operations. Be concise, helpful, and use markdown formatting (lists, bold, tables) when useful. Always answer based on the LIVE pharmacy data provided in the context. If asked about something not in the context, say so politely.`;
+const SYSTEM_BASE = `You are an expert Bangladeshi Pharmacy Assistant for MediNist. Understand and respond in Bengali and Banglish (Bengali written in English letters) naturally and concisely. Help with medicine inventory, sales, and pharmacy operations. Be concise, helpful, and use markdown formatting (lists, bold, tables) when useful. Always answer based on the LIVE pharmacy data provided in the context. If asked about something not in the context, say so politely. When the user writes in Bengali or Banglish, reply in the same style.`;
 const DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_TIMEOUT_MS = 30000;
