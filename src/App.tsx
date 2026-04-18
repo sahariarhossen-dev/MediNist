@@ -24,6 +24,7 @@ import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AIAssistant from "./pages/AIAssistant.tsx";
 import DailyTransactions from "./pages/DailyTransactions.tsx";
+import AllTransactions from "./pages/AllTransactions.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
