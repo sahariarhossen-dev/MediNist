@@ -169,6 +169,48 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_closings: {
+        Row: {
+          closed_at: string
+          closing_date: string
+          created_at: string
+          id: string
+          net_balance: number
+          pharmacy_id: string
+          starting_balance: number
+          total_cash_in: number
+          total_due: number
+          total_payments: number
+          total_sales: number
+        }
+        Insert: {
+          closed_at?: string
+          closing_date: string
+          created_at?: string
+          id?: string
+          net_balance?: number
+          pharmacy_id: string
+          starting_balance?: number
+          total_cash_in?: number
+          total_due?: number
+          total_payments?: number
+          total_sales?: number
+        }
+        Update: {
+          closed_at?: string
+          closing_date?: string
+          created_at?: string
+          id?: string
+          net_balance?: number
+          pharmacy_id?: string
+          starting_balance?: number
+          total_cash_in?: number
+          total_due?: number
+          total_payments?: number
+          total_sales?: number
+        }
+        Relationships: []
+      }
       master_medicines: {
         Row: {
           box_size: string | null

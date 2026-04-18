@@ -41,6 +41,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
 
+type PreviousClosing = {
+  closing_date: string;
+  net_balance: number;
+};
+
 const DailyTransactions = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -50,6 +55,7 @@ const DailyTransactions = () => {
   const [txs, setTxs] = useState<CashTx[]>([]);
   const [duesOpen, setDuesOpen] = useState(0);
   const [startingBalance, setStartingBalance] = useState(0);
+  const [previousClosing, setPreviousClosing] = useState<PreviousClosing | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -57,8 +63,9 @@ const DailyTransactions = () => {
     setLoading(true);
     const from = startOfDay(date).toISOString();
     const to = endOfDay(date).toISOString();
+    const dateStr = format(date, "yyyy-MM-dd");
 
-    const [salesRes, txRes, duesRes, settingsRes] = await Promise.all([
+    const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
       supabase
         .from("sales")
         .select("id,created_at,total,sale_type")
@@ -85,6 +92,14 @@ const DailyTransactions = () => {
         .select("starting_cash_balance")
         .eq("pharmacy_id", profile.pharmacy_id)
         .maybeSingle(),
+      supabase
+        .from("daily_closings")
+        .select("closing_date,net_balance")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .lt("closing_date", dateStr)
+        .order("closing_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     setSalesRows((salesRes.data ?? []) as SaleRow[]);
@@ -95,7 +110,16 @@ const DailyTransactions = () => {
         0,
       ),
     );
-    setStartingBalance(Number(settingsRes.data?.starting_cash_balance ?? 0));
+    const prev = prevClosingRes.data
+      ? {
+          closing_date: prevClosingRes.data.closing_date as string,
+          net_balance: Number(prevClosingRes.data.net_balance ?? 0),
+        }
+      : null;
+    setPreviousClosing(prev);
+    setStartingBalance(
+      prev ? prev.net_balance : Number(settingsRes.data?.starting_cash_balance ?? 0),
+    );
     setLoading(false);
   }, [profile?.pharmacy_id, date]);
 
@@ -223,15 +247,32 @@ const DailyTransactions = () => {
         </div>
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
-        ) : visibleFeedItems.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
-            <p className="text-sm text-gray-500">No manual transactions logged for this date.</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Add an investment or expense with the + button.
-            </p>
-          </div>
         ) : (
           <div className="space-y-3">
+            {previousClosing && (
+              <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+                  <Wallet size={18} className="text-blue-600" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm truncate">
+                    Closing Balance from {format(new Date(previousClosing.closing_date), "dd/MM/yyyy")}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">Carried forward · Opening</p>
+                </div>
+                <p className="font-bold text-sm whitespace-nowrap text-gray-700">
+                  ৳{formatBDT(previousClosing.net_balance)}
+                </p>
+              </div>
+            )}
+            {visibleFeedItems.length === 0 && !previousClosing ? (
+              <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
+                <p className="text-sm text-gray-500">No manual transactions logged for this date.</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Add an investment or expense with the + button.
+                </p>
+              </div>
+            ) : null}
             {visibleFeedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
@@ -266,6 +307,21 @@ const DailyTransactions = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Daily Closing Summary */}
+      <div className="bg-gray-100 rounded-2xl p-4 mt-5 mx-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Daily Closing Summary</h3>
+        <div className="space-y-2">
+          <SummaryRow label="Total Sales" value={salesTotal} sign="+" tone="green" />
+          <SummaryRow label="Total Cash In" value={manualCashIn} sign="+" tone="green" />
+          <SummaryRow label="Total Payments" value={totalPayments} sign="−" tone="red" />
+          <SummaryRow label="Today's Due" value={duesOpen} sign="" tone="neutral" />
+        </div>
+        <div className="border-t border-gray-300 mt-3 pt-3 flex items-center justify-between">
+          <span className="text-base font-bold text-blue-700">Net Cash Balance</span>
+          <span className="text-base font-bold text-blue-700">৳{formatBDT(cashInHand)}</span>
+        </div>
       </div>
 
       {/* Floating Action Button */}
@@ -312,6 +368,33 @@ const SummaryCard = ({
     <div className={cn("rounded-2xl p-4 shadow-sm", styles)}>
       <p className={cn("text-xs font-medium", labelClass)}>{label}</p>
       <p className="text-xl font-bold mt-1">৳{formatBDT(value)}</p>
+    </div>
+  );
+};
+
+const SummaryRow = ({
+  label,
+  value,
+  sign,
+  tone,
+}: {
+  label: string;
+  value: number;
+  sign: "+" | "−" | "";
+  tone: "green" | "red" | "neutral";
+}) => {
+  const toneClass =
+    tone === "green"
+      ? "text-green-600"
+      : tone === "red"
+        ? "text-red-600"
+        : "text-gray-700";
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className={cn("font-semibold", toneClass)}>
+        {sign}৳{formatBDT(value)}
+      </span>
     </div>
   );
 };
