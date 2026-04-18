@@ -131,13 +131,16 @@ const DailyTransactions = () => {
     [salesRows],
   );
 
+  // Manual entries only — sales are excluded from the feed but still counted in Cash in Hand.
   const feedItems = useMemo(
     () =>
-      [...txs, ...saleTxs].sort(
+      [...txs].sort(
         (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
       ),
-    [txs, saleTxs],
+    [txs],
   );
+
+  const visibleFeedItems = useMemo(() => feedItems.slice(0, 5), [feedItems]);
 
   const manualCashIn = useMemo(
     () =>
