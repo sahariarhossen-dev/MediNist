@@ -115,29 +115,20 @@ const DailyTransactions = () => {
     [salesTotal, duesOpen],
   );
 
-  // Build synthetic feed entries for completed sales so they appear as Cash In rows
-  const saleTxs = useMemo<CashTx[]>(
-    () =>
-      salesRows.map((s) => ({
-        id: `sale-${s.id}`,
-        occurred_at: s.created_at,
-        direction: "in" as const,
-        category: "sale_cash",
-        party_name: s.sale_type === "wholesale" ? "Wholesale Sale" : "Retail Sale",
-        amount: Number(s.total || 0),
-        note: null,
-        synthetic: true,
-      })),
-    [salesRows],
-  );
+  // Sales are intentionally NOT shown in the manual transactions feed,
+  // but their cash portion still contributes to Cash Received / Cash in Hand.
 
+
+  // Manual entries only — sales are excluded from the feed but still counted in Cash in Hand.
   const feedItems = useMemo(
     () =>
-      [...txs, ...saleTxs].sort(
+      [...txs].sort(
         (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
       ),
-    [txs, saleTxs],
+    [txs],
   );
+
+  const visibleFeedItems = useMemo(() => feedItems.slice(0, 5), [feedItems]);
 
   const manualCashIn = useMemo(
     () =>
@@ -219,19 +210,29 @@ const DailyTransactions = () => {
 
       {/* Feed */}
       <div className="px-5 mt-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Transactions</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Transactions</h3>
+          {feedItems.length > 5 && (
+            <button
+              onClick={() => navigate("/more/all-transactions")}
+              className="text-xs font-semibold text-red-600 hover:text-red-700"
+            >
+              See All
+            </button>
+          )}
+        </div>
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
-        ) : feedItems.length === 0 ? (
+        ) : visibleFeedItems.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
-            <p className="text-sm text-gray-500">No cash movements logged for this date.</p>
+            <p className="text-sm text-gray-500">No manual transactions logged for this date.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Completed sales appear here automatically. Add manual cash entries with the + button.
+              Add an investment or expense with the + button.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {feedItems.map((t) => (
+            {visibleFeedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
                   className={cn(
