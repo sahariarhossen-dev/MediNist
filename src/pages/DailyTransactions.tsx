@@ -222,16 +222,16 @@ const DailyTransactions = () => {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Transactions</h3>
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
-        ) : txs.length === 0 ? (
+        ) : feedItems.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <p className="text-sm text-gray-500">No cash movements logged for this date.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Sales totals above include all completed sales. Cash entries appear here when logged in the ledger.
+              Completed sales appear here automatically. Add manual cash entries with the + button.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {txs.map((t) => (
+            {feedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
                   className={cn(
