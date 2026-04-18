@@ -19,6 +19,14 @@ type CashTx = {
   party_name: string | null;
   amount: number;
   note: string | null;
+  synthetic?: boolean;
+};
+
+type SaleRow = {
+  id: string;
+  created_at: string;
+  total: number;
+  sale_type: string;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
