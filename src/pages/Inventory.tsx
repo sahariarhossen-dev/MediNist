@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Search, Bell, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
+import { Search, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import AppHeader from "@/components/AppHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -334,27 +335,7 @@ const Inventory = () => {
   return (
     <div className="min-h-screen bg-background pb-6">
       {/* Top Header */}
-      <div className="px-5 pt-6 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/")} className="p-2 rounded-full bg-primary text-primary-foreground">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Medinist</h1>
-            <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-full bg-muted">
-            <Bell size={18} className="text-foreground" />
-          </button>
-          <Avatar className="h-9 w-9 border-2 border-primary">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-              {getInitials(profile?.full_name ?? null)}
-            </AvatarFallback>
-          </Avatar>
-        </div>
-      </div>
+      <AppHeader />
 
       {/* Search Bar */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
