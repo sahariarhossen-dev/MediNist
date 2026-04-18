@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Package, Settings, ChevronRight, Store } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import AppHeader from "@/components/AppHeader";
 
 const menuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory", color: "text-blue-600" },
@@ -41,18 +42,7 @@ const More = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
-      {/* Header – User's profile icon */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <span className="text-xl font-bold text-blue-600 tracking-tight">Medinist</span>
-        <Avatar className="h-9 w-9 cursor-pointer" onClick={() => navigate("/profile")}>
-          {profile?.avatar_url ? (
-            <AvatarImage src={profile.avatar_url} alt="User" className="object-cover" />
-          ) : null}
-          <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold">
-            {getUserInitials(profile?.full_name ?? null)}
-          </AvatarFallback>
-        </Avatar>
-      </div>
+      <AppHeader />
 
       {/* Shop Profile Card – Shop logo, user name, email/phone */}
       <div

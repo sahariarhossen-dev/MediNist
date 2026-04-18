@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, TrendingUp, FileText, Users, AlertTriangle } from "lucide-react";
+import { TrendingUp, FileText, Users, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -13,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
-import LogoFull from "@/components/brand/LogoFull";
+import AppHeader from "@/components/AppHeader";
 
 
 function getStartDate(range: string): string {
@@ -102,19 +101,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pb-[10px] pt-[20px] border-muted-foreground rounded-lg border-0 bg-[#e9f1fb] border-solid opacity-100">
-        <LogoFull height={28} />
-        <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
-            <Bell size={22} className="text-gray-600" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
-          <Avatar className="h-9 w-9 cursor-pointer" onClick={() => navigate("/profile")}>
-            {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" /> : null}
-            <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold">{initials}</AvatarFallback>
-          </Avatar>
-        </div>
-      </div>
+      <AppHeader />
 
       {/* Business Insights */}
       <div className="px-5 pt-3 pb-2">
