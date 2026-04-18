@@ -73,6 +73,48 @@ export type Database = {
           },
         ]
       }
+      cash_transactions: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          direction: string
+          id: string
+          note: string | null
+          occurred_at: string
+          party_name: string | null
+          pharmacy_id: string
+          sale_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          category: string
+          created_at?: string
+          direction: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          party_name?: string | null
+          pharmacy_id: string
+          sale_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          direction?: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          party_name?: string | null
+          pharmacy_id?: string
+          sale_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           created_at: string | null
@@ -91,6 +133,39 @@ export type Database = {
           id?: string
           name?: string
           pharmacy_id?: string
+        }
+        Relationships: []
+      }
+      customer_dues: {
+        Row: {
+          amount_due: number
+          amount_paid: number
+          created_at: string
+          customer_name: string | null
+          id: string
+          pharmacy_id: string
+          sale_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_due?: number
+          amount_paid?: number
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          pharmacy_id: string
+          sale_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_due?: number
+          amount_paid?: number
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          pharmacy_id?: string
+          sale_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -243,6 +318,24 @@ export type Database = {
           proprietor_name?: string | null
           trade_license?: string | null
           upazila?: string | null
+        }
+        Relationships: []
+      }
+      pharmacy_settings: {
+        Row: {
+          pharmacy_id: string
+          starting_cash_balance: number
+          updated_at: string
+        }
+        Insert: {
+          pharmacy_id: string
+          starting_cash_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          pharmacy_id?: string
+          starting_cash_balance?: number
+          updated_at?: string
         }
         Relationships: []
       }
