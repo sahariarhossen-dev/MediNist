@@ -115,21 +115,9 @@ const DailyTransactions = () => {
     [salesTotal, duesOpen],
   );
 
-  // Build synthetic feed entries for completed sales so they appear as Cash In rows
-  const saleTxs = useMemo<CashTx[]>(
-    () =>
-      salesRows.map((s) => ({
-        id: `sale-${s.id}`,
-        occurred_at: s.created_at,
-        direction: "in" as const,
-        category: "sale_cash",
-        party_name: s.sale_type === "wholesale" ? "Wholesale Sale" : "Retail Sale",
-        amount: Number(s.total || 0),
-        note: null,
-        synthetic: true,
-      })),
-    [salesRows],
-  );
+  // Sales are intentionally NOT shown in the manual transactions feed,
+  // but their cash portion still contributes to Cash Received / Cash in Hand.
+
 
   // Manual entries only — sales are excluded from the feed but still counted in Cash in Hand.
   const feedItems = useMemo(
