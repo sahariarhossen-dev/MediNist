@@ -41,6 +41,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
 
+type PreviousClosing = {
+  closing_date: string;
+  net_balance: number;
+};
+
 const DailyTransactions = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -50,6 +55,7 @@ const DailyTransactions = () => {
   const [txs, setTxs] = useState<CashTx[]>([]);
   const [duesOpen, setDuesOpen] = useState(0);
   const [startingBalance, setStartingBalance] = useState(0);
+  const [previousClosing, setPreviousClosing] = useState<PreviousClosing | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -57,8 +63,9 @@ const DailyTransactions = () => {
     setLoading(true);
     const from = startOfDay(date).toISOString();
     const to = endOfDay(date).toISOString();
+    const dateStr = format(date, "yyyy-MM-dd");
 
-    const [salesRes, txRes, duesRes, settingsRes] = await Promise.all([
+    const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
       supabase
         .from("sales")
         .select("id,created_at,total,sale_type")
@@ -85,6 +92,14 @@ const DailyTransactions = () => {
         .select("starting_cash_balance")
         .eq("pharmacy_id", profile.pharmacy_id)
         .maybeSingle(),
+      supabase
+        .from("daily_closings")
+        .select("closing_date,net_balance")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .lt("closing_date", dateStr)
+        .order("closing_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     setSalesRows((salesRes.data ?? []) as SaleRow[]);
@@ -95,7 +110,16 @@ const DailyTransactions = () => {
         0,
       ),
     );
-    setStartingBalance(Number(settingsRes.data?.starting_cash_balance ?? 0));
+    const prev = prevClosingRes.data
+      ? {
+          closing_date: prevClosingRes.data.closing_date as string,
+          net_balance: Number(prevClosingRes.data.net_balance ?? 0),
+        }
+      : null;
+    setPreviousClosing(prev);
+    setStartingBalance(
+      prev ? prev.net_balance : Number(settingsRes.data?.starting_cash_balance ?? 0),
+    );
     setLoading(false);
   }, [profile?.pharmacy_id, date]);
 
