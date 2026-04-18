@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Search, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import AppHeader from "@/components/AppHeader";
 import { Skeleton } from "@/components/ui/skeleton";
