@@ -19,6 +19,14 @@ type CashTx = {
   party_name: string | null;
   amount: number;
   note: string | null;
+  synthetic?: boolean;
+};
+
+type SaleRow = {
+  id: string;
+  created_at: string;
+  total: number;
+  sale_type: string;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -38,7 +46,7 @@ const DailyTransactions = () => {
   const { profile } = useAuth();
   const [date, setDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
-  const [salesTotal, setSalesTotal] = useState(0);
+  const [salesRows, setSalesRows] = useState<SaleRow[]>([]);
   const [txs, setTxs] = useState<CashTx[]>([]);
   const [duesOpen, setDuesOpen] = useState(0);
   const [startingBalance, setStartingBalance] = useState(0);
@@ -53,11 +61,12 @@ const DailyTransactions = () => {
     const [salesRes, txRes, duesRes, settingsRes] = await Promise.all([
       supabase
         .from("sales")
-        .select("total")
+        .select("id,created_at,total,sale_type")
         .eq("pharmacy_id", profile.pharmacy_id)
         .eq("status", "completed")
         .gte("created_at", from)
-        .lte("created_at", to),
+        .lte("created_at", to)
+        .order("created_at", { ascending: false }),
       supabase
         .from("cash_transactions")
         .select("id,occurred_at,direction,category,party_name,amount,note")
@@ -78,7 +87,7 @@ const DailyTransactions = () => {
         .maybeSingle(),
     ]);
 
-    setSalesTotal((salesRes.data ?? []).reduce((s, r: any) => s + Number(r.total || 0), 0));
+    setSalesRows((salesRes.data ?? []) as SaleRow[]);
     setTxs((txRes.data ?? []) as CashTx[]);
     setDuesOpen(
       (duesRes.data ?? []).reduce(
@@ -94,7 +103,43 @@ const DailyTransactions = () => {
     loadData();
   }, [loadData]);
 
-  const cashReceived = useMemo(
+  const salesTotal = useMemo(
+    () => salesRows.reduce((s, r) => s + Number(r.total || 0), 0),
+    [salesRows],
+  );
+
+  // Cash sales: completed sales not tied to an open due. Approximation:
+  // subtract any open dues from sales total to get the cash portion.
+  const cashSalesTotal = useMemo(
+    () => Math.max(0, salesTotal - duesOpen),
+    [salesTotal, duesOpen],
+  );
+
+  // Build synthetic feed entries for completed sales so they appear as Cash In rows
+  const saleTxs = useMemo<CashTx[]>(
+    () =>
+      salesRows.map((s) => ({
+        id: `sale-${s.id}`,
+        occurred_at: s.created_at,
+        direction: "in" as const,
+        category: "sale_cash",
+        party_name: s.sale_type === "wholesale" ? "Wholesale Sale" : "Retail Sale",
+        amount: Number(s.total || 0),
+        note: null,
+        synthetic: true,
+      })),
+    [salesRows],
+  );
+
+  const feedItems = useMemo(
+    () =>
+      [...txs, ...saleTxs].sort(
+        (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
+      ),
+    [txs, saleTxs],
+  );
+
+  const manualCashIn = useMemo(
     () =>
       txs
         .filter(
@@ -107,6 +152,8 @@ const DailyTransactions = () => {
         .reduce((s, t) => s + Number(t.amount), 0),
     [txs],
   );
+
+  const cashReceived = manualCashIn + cashSalesTotal;
 
   const totalPayments = useMemo(
     () => txs.filter((t) => t.direction === "out").reduce((s, t) => s + Number(t.amount), 0),
@@ -175,16 +222,16 @@ const DailyTransactions = () => {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Transactions</h3>
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
-        ) : txs.length === 0 ? (
+        ) : feedItems.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
             <p className="text-sm text-gray-500">No cash movements logged for this date.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Sales totals above include all completed sales. Cash entries appear here when logged in the ledger.
+              Completed sales appear here automatically. Add manual cash entries with the + button.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {txs.map((t) => (
+            {feedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
                   className={cn(
