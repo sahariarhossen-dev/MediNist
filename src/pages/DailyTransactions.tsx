@@ -371,4 +371,31 @@ const SummaryCard = ({
   );
 };
 
+const SummaryRow = ({
+  label,
+  value,
+  sign,
+  tone,
+}: {
+  label: string;
+  value: number;
+  sign: "+" | "−" | "";
+  tone: "green" | "red" | "neutral";
+}) => {
+  const toneClass =
+    tone === "green"
+      ? "text-green-600"
+      : tone === "red"
+        ? "text-red-600"
+        : "text-gray-700";
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className={cn("font-semibold", toneClass)}>
+        {sign}৳{formatBDT(value)}
+      </span>
+    </div>
+  );
+};
+
 export default DailyTransactions;
