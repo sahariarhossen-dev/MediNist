@@ -193,9 +193,9 @@ const DailyTransactions = () => {
                   )}
                 >
                   {t.direction === "in" ? (
-                    <ArrowDownLeft size={18} className="text-green-600" />
+                    <Plus size={18} className="text-green-600" strokeWidth={3} />
                   ) : (
-                    <ArrowUpRight size={18} className="text-red-600" />
+                    <Minus size={18} className="text-red-600" strokeWidth={3} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -219,6 +219,27 @@ const DailyTransactions = () => {
           </div>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      {profile?.pharmacy_id && profile?.id && (
+        <>
+          <button
+            onClick={() => setSheetOpen(true)}
+            aria-label="Log transaction"
+            className="fixed bottom-6 right-1/2 translate-x-[calc(min(50vw,224px)-1.25rem)] h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white transition-colors z-40"
+          >
+            <Plus size={26} strokeWidth={2.5} />
+          </button>
+          <LogTransactionSheet
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            date={date}
+            pharmacyId={profile.pharmacy_id}
+            userId={profile.id}
+            onSaved={loadData}
+          />
+        </>
+      )}
     </div>
   );
 };
