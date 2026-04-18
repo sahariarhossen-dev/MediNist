@@ -379,7 +379,16 @@ const Inventory = () => {
           </div>
         ) : (
           <>
-            <h2 className="text-lg font-bold text-foreground">Add Inventory</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate(-1)}
+                aria-label="Back"
+                className="p-2 rounded-full hover:bg-muted transition"
+              >
+                <ArrowLeft size={20} className="text-foreground" />
+              </button>
+              <h2 className="text-lg font-bold text-foreground">Add Inventory</h2>
+            </div>
             <button onClick={() => setSearchOpen(true)} className="p-2 rounded-full bg-muted">
               <Search size={18} className="text-foreground" />
             </button>
