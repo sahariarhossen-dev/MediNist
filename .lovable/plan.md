@@ -1,51 +1,88 @@
 
 
-## Plan: Restore Blue branding and integrate clean "M" logo
+## Daily Transactions Page
 
-### What's actually wrong
-The app's design tokens (`index.css`) and Tailwind utilities are still blue — only the new logo SVGs introduced red. Nothing else needs "reverting" color-wise; the blue UI is intact (BottomNav active state, AI gradient header, primary buttons, summary cards all use `blue-*` classes already).
+A new `/more/daily-transactions` page for daily cash tallying, linked from the More menu.
 
-### Changes
+### 1. Database (new migration)
 
-**1. Redesign `LogoMark.tsx`** — drop the medical cross, use a clean ribbon-style "M" matching the reference image, recolored brand blue.
-- New artwork: a single stylized "M" path (two outer legs + center V), 64×64 viewBox.
-- Default colors: primary `#2563EB` (blue-600), accent `#3B82F6` (blue-500) for a subtle gradient on the right leg — gives the "premium SaaS" depth without losing the flat, modern feel.
-- Same `size` / `className` / `primary` / `accent` props — drop-in compatible.
+Create three new tables (multi-tenant via `pharmacy_id`, RLS scoped to user's pharmacy):
 
-**2. Update `LogoFull.tsx`** — wordmark color from `#C0392B` → `#1E3A8A` (blue-900) for a deep, corporate "MediNist" look that pairs with the blue-600 mark. Keep the same Inter bold + tight letter-spacing.
+- **`cash_transactions`** — unified ledger of every cash movement
+  - `id`, `pharmacy_id`, `user_id`, `created_at`, `occurred_at` (timestamptz)
+  - `direction` (`'in' | 'out'`)
+  - `category` (`'sale_cash' | 'due_collection' | 'supplier_payment' | 'expense' | 'other_in' | 'other_out'`)
+  - `party_name` (customer/supplier/vendor)
+  - `amount` (numeric), `note` (text), `sale_id` (uuid, nullable — links to `sales` for cash sales)
+- **`customer_dues`** — open dues from credit sales
+  - `id`, `pharmacy_id`, `sale_id`, `customer_name`, `amount_due`, `amount_paid`, `created_at`
+- **`pharmacy_settings`** — one row per pharmacy
+  - `pharmacy_id` (PK), `starting_cash_balance` (numeric, default 0), `updated_at`
 
-**3. Replace `public/favicon.svg`** — same new blue "M" artwork as `LogoMark`, standalone SVG. Browsers will render it crisp at 16/32/180px.
+RLS: `ALL` policies using `pharmacy_id = get_user_pharmacy_id()` (matches existing patterns). `cash_transactions` insert also requires `user_id = auth.uid()`.
 
-**4. Replace `public/logo-mark.svg`** — same blue "M" artwork at 180×180 for Apple touch icon.
+### 2. Route & navigation
 
-**5. `src/pages/Index.tsx` (Dashboard header)** — no structural change. `<LogoFull height={28} />` is already in place; it'll automatically pick up the new blue colors. Already vertically centered with the bell + avatar via `flex items-center`.
+- Add route `/more/daily-transactions` in `src/App.tsx` (protected, no `AppLayout` since it's a sub-page like Inventory).
+- Add a new "Daily Transactions" menu item in `src/pages/More.tsx` (icon: `Wallet`, teal accent) above "Shop Profile".
 
-**6. `src/components/ai/ChatHeader.tsx` (AI Chat)** — already uses `<LogoMark size={28} />` inside a white circle. With the blue recolor, the "M" will now read as the brand mark on the indigo-blue gradient header. No structural change needed.
+### 3. Page layout (`src/pages/DailyTransactions.tsx`)
 
-**7. `src/components/ai/ChatMessage.tsx` (AI assistant avatar)** — currently shows a `Sparkles` icon in a blue gradient circle next to AI messages. Replace with `<LogoMark size={18} primary="#FFFFFF" accent="#FFFFFF" />` so the "M" appears in white on the blue gradient bubble — unifies the avatar with the brand mark across the chat.
-
-### What stays the same
-- All theme tokens in `index.css` (already blue/neutral).
-- All `bg-blue-*`, `from-blue-600`, `to-indigo-600` utility classes app-wide.
-- BottomNav active states, buttons, cards, charts.
-- `index.html` favicon links (file paths unchanged, only contents updated).
-- Login/Register branding (out of scope as before).
-
-### Logo artwork (ribbon "M")
-Single closed path forming the silhouette of an "M":
+```text
+┌─────────────────────────────────┐
+│ AppHeader (shared, identical)   │
+├─────────────────────────────────┤
+│ ← Daily Transactions   📅 18Apr │  ← back arrow + title + date picker (Popover+Calendar)
+├─────────────────────────────────┤
+│ ┌─────────┐ ┌─────────┐         │
+│ │TotSales │ │CashRecvd│  blue   │
+│ └─────────┘ └─────────┘         │
+│ ┌─────────┐ ┌─────────┐         │
+│ │TotPaymts│ │TodayDue │  teal   │
+│ └─────────┘ └─────────┘         │
+├─────────────────────────────────┤
+│ Cash in Hand: ৳X,XXX  (subtle)  │
+├─────────────────────────────────┤
+│ Transaction Feed                │
+│ ⬆🟢 Customer A  Medicine Sale   │
+│       10:24 AM        +৳1,200   │
+│ ⬇🔴 Supplier X  Supplier Pay    │
+│       11:10 AM        −৳5,000   │
+│   ...scrollable list...         │
+└─────────────────────────────────┘
 ```
-outer legs slightly wider at the base, inner V dipping ~60% down,
-rounded outer corners, sharp inner notch — matches the reference.
-```
-Geometry sketch (64×64):
-```
-(8,56)─(8,12)─(20,12)─(32,40)─(44,12)─(56,12)─(56,56)
-       ─(46,56)─(46,30)─(34,52)─(30,52)─(18,30)─(18,56)─close
-```
 
-### Out of scope
-- No theme token rewrites (already blue).
-- No PWA manifest.
-- No auth-page branding.
-- No teal accent additions (existing palette is blue + indigo + neutral; adding teal would be a new design decision — flag if you want it).
+Back arrow uses `navigate("/more")`. Date picker uses existing shadcn `Calendar` + `Popover` (per project's datepicker pattern with `pointer-events-auto`).
+
+### 4. Data logic
+
+For the selected date (default: today), fetch in parallel:
+- All `sales` rows where `status='completed'` (for Total Sales and Cash Received from sales).
+- All `cash_transactions` rows for the date (drives the feed and aggregates).
+- All `customer_dues` rows created on that date (for Today's Due).
+- `pharmacy_settings.starting_cash_balance`.
+
+Calculations:
+- **Total Sales** = sum of `sales.total` (all completed sales — cash + credit)
+- **Cash Received** = sum of `cash_transactions` where `direction='in'` AND category in (`sale_cash`, `due_collection`)
+- **Total Payments** = sum of `cash_transactions` where `direction='out'`
+- **Today's Due** = sum of `customer_dues.amount_due − amount_paid` for that date
+- **Cash in Hand** = `starting_cash_balance + cashReceived − totalPayments`
+
+Feed: merge `cash_transactions` (sorted by `occurred_at desc`), display per spec — green up arrow for `in`, red down arrow for `out`, party name, category label, formatted time, amount in bold with ৳.
+
+Note: cash sales created via the existing `CreateSale` flow don't yet auto-write to `cash_transactions`. For now this page will read whatever is in `cash_transactions`; wiring sales to auto-create a `sale_cash` ledger entry is a follow-up step (the user can flag it next). Until then, sales totals show correctly but Cash Received only reflects manually-logged entries — I'll surface this clearly with an empty-state hint and we can add the auto-link in a follow-up.
+
+### 5. UI/UX
+
+- Brand-consistent: blue (`#2463eb` / `bg-blue-100 text-blue-600`) and teal (`bg-teal-100 text-teal-600`) cards matching existing dashboard cards.
+- White cards, `rounded-2xl`, generous `space-y-3` between feed items, `max-w-md mx-auto` mobile-first.
+- Header is the shared `<AppHeader />` — identical to Dashboard.
+- No print/export FAB (per your answer — history persists in DB and can be downloaded later, same pattern as Sales page).
+
+### Files
+
+- **New migration**: `cash_transactions`, `customer_dues`, `pharmacy_settings` + RLS
+- **New**: `src/pages/DailyTransactions.tsx`
+- **Edit**: `src/App.tsx` (route), `src/pages/More.tsx` (menu item)
 
