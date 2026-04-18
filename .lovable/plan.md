@@ -1,88 +1,44 @@
 
 
-## Daily Transactions Page
+## Add Cash In / Cash Out entry form to Daily Transactions
 
-A new `/more/daily-transactions` page for daily cash tallying, linked from the More menu.
+A floating "+" button on `/more/daily-transactions` opens a sheet with a form to log either an investment/cash-in or a payment/expense. New entries write to the existing `cash_transactions` table and the page reloads so summary cards and the feed update immediately.
 
-### 1. Database (new migration)
+### 1. New component: `LogTransactionSheet.tsx`
 
-Create three new tables (multi-tenant via `pharmacy_id`, RLS scoped to user's pharmacy):
+A bottom sheet (shadcn `Sheet` with `side="bottom"`) containing a `react-hook-form` + zod-validated form:
 
-- **`cash_transactions`** — unified ledger of every cash movement
-  - `id`, `pharmacy_id`, `user_id`, `created_at`, `occurred_at` (timestamptz)
-  - `direction` (`'in' | 'out'`)
-  - `category` (`'sale_cash' | 'due_collection' | 'supplier_payment' | 'expense' | 'other_in' | 'other_out'`)
-  - `party_name` (customer/supplier/vendor)
-  - `amount` (numeric), `note` (text), `sale_id` (uuid, nullable — links to `sales` for cash sales)
-- **`customer_dues`** — open dues from credit sales
-  - `id`, `pharmacy_id`, `sale_id`, `customer_name`, `amount_due`, `amount_paid`, `created_at`
-- **`pharmacy_settings`** — one row per pharmacy
-  - `pharmacy_id` (PK), `starting_cash_balance` (numeric, default 0), `updated_at`
+- **Description / Source** — text input (`party_name`), required, trimmed, max 100 chars
+- **Transaction Type** — shadcn `Select` with two options:
+  - `Cash In / Investment` → maps to `direction: "in"`, `category: "other_in"`
+  - `Payment / Expense` → maps to `direction: "out"`, `category: "expense"`
+- **Amount (৳)** — number input with leading "৳" prefix, required, > 0, max 10,000,000
+- **Save** button — full-width, `bg-blue-600 hover:bg-blue-700`, shows loading spinner while saving
+- **Cancel** button — ghost variant
 
-RLS: `ALL` policies using `pharmacy_id = get_user_pharmacy_id()` (matches existing patterns). `cash_transactions` insert also requires `user_id = auth.uid()`.
+On submit:
+- Insert into `cash_transactions` with `pharmacy_id`, `user_id`, `occurred_at = selectedDate`, plus the form values
+- Toast success/error and close the sheet
+- Call `onSaved()` so the page refetches
 
-### 2. Route & navigation
+### 2. Edits to `src/pages/DailyTransactions.tsx`
 
-- Add route `/more/daily-transactions` in `src/App.tsx` (protected, no `AppLayout` since it's a sub-page like Inventory).
-- Add a new "Daily Transactions" menu item in `src/pages/More.tsx` (icon: `Wallet`, teal accent) above "Shop Profile".
+- Extract the data-loading logic into a `loadData()` function and a `refreshKey` so we can refetch after a save.
+- Add a floating "+" FAB at `bottom-6 right-5` (above bottom safe area), `h-14 w-14 rounded-full bg-blue-600 shadow-lg`, `Plus` icon. Mobile-friendly tap target.
+- Render `<LogTransactionSheet date={date} pharmacyId={profile.pharmacy_id} userId={profile.id} open={open} onOpenChange={setOpen} onSaved={loadData} />`
+- Visual indicators in the feed already use `ArrowDownLeft` (green) for `in` and `ArrowUpRight` (red) for `out`. To match the request more literally, switch to `Plus` (green) and `Minus` (red) inside the colored circle so it reads as "+ / −" at a glance. Keep the existing `+৳` / `−৳` amount prefix.
+- Cards already update from `cash_transactions`: `Cash Received` includes `direction='in'` with categories `sale_cash` or `due_collection` — extend it to include `other_in` so investments count toward Cash Received and Cash in Hand. `Total Payments` already sums all `direction='out'`, so expenses flow in automatically.
 
-### 3. Page layout (`src/pages/DailyTransactions.tsx`)
+### 3. Branding & responsiveness
 
-```text
-┌─────────────────────────────────┐
-│ AppHeader (shared, identical)   │
-├─────────────────────────────────┤
-│ ← Daily Transactions   📅 18Apr │  ← back arrow + title + date picker (Popover+Calendar)
-├─────────────────────────────────┤
-│ ┌─────────┐ ┌─────────┐         │
-│ │TotSales │ │CashRecvd│  blue   │
-│ └─────────┘ └─────────┘         │
-│ ┌─────────┐ ┌─────────┐         │
-│ │TotPaymts│ │TodayDue │  teal   │
-│ └─────────┘ └─────────┘         │
-├─────────────────────────────────┤
-│ Cash in Hand: ৳X,XXX  (subtle)  │
-├─────────────────────────────────┤
-│ Transaction Feed                │
-│ ⬆🟢 Customer A  Medicine Sale   │
-│       10:24 AM        +৳1,200   │
-│ ⬇🔴 Supplier X  Supplier Pay    │
-│       11:10 AM        −৳5,000   │
-│   ...scrollable list...         │
-└─────────────────────────────────┘
-```
-
-Back arrow uses `navigate("/more")`. Date picker uses existing shadcn `Calendar` + `Popover` (per project's datepicker pattern with `pointer-events-auto`).
-
-### 4. Data logic
-
-For the selected date (default: today), fetch in parallel:
-- All `sales` rows where `status='completed'` (for Total Sales and Cash Received from sales).
-- All `cash_transactions` rows for the date (drives the feed and aggregates).
-- All `customer_dues` rows created on that date (for Today's Due).
-- `pharmacy_settings.starting_cash_balance`.
-
-Calculations:
-- **Total Sales** = sum of `sales.total` (all completed sales — cash + credit)
-- **Cash Received** = sum of `cash_transactions` where `direction='in'` AND category in (`sale_cash`, `due_collection`)
-- **Total Payments** = sum of `cash_transactions` where `direction='out'`
-- **Today's Due** = sum of `customer_dues.amount_due − amount_paid` for that date
-- **Cash in Hand** = `starting_cash_balance + cashReceived − totalPayments`
-
-Feed: merge `cash_transactions` (sorted by `occurred_at desc`), display per spec — green up arrow for `in`, red down arrow for `out`, party name, category label, formatted time, amount in bold with ৳.
-
-Note: cash sales created via the existing `CreateSale` flow don't yet auto-write to `cash_transactions`. For now this page will read whatever is in `cash_transactions`; wiring sales to auto-create a `sale_cash` ledger entry is a follow-up step (the user can flag it next). Until then, sales totals show correctly but Cash Received only reflects manually-logged entries — I'll surface this clearly with an empty-state hint and we can add the auto-link in a follow-up.
-
-### 5. UI/UX
-
-- Brand-consistent: blue (`#2463eb` / `bg-blue-100 text-blue-600`) and teal (`bg-teal-100 text-teal-600`) cards matching existing dashboard cards.
-- White cards, `rounded-2xl`, generous `space-y-3` between feed items, `max-w-md mx-auto` mobile-first.
-- Header is the shared `<AppHeader />` — identical to Dashboard.
-- No print/export FAB (per your answer — history persists in DB and can be downloaded later, same pattern as Sales page).
+- Inputs use existing shadcn `Input` / `Select` styling — already neutral; we'll add `focus-visible:ring-blue-500` overrides on the trigger for the brand blue.
+- Sheet is `max-w-md mx-auto` so it stays narrow on desktop and edge-to-edge on mobile.
+- AppHeader is unchanged (already shared across pages).
 
 ### Files
 
-- **New migration**: `cash_transactions`, `customer_dues`, `pharmacy_settings` + RLS
-- **New**: `src/pages/DailyTransactions.tsx`
-- **Edit**: `src/App.tsx` (route), `src/pages/More.tsx` (menu item)
+- **New**: `src/components/transactions/LogTransactionSheet.tsx`
+- **Edit**: `src/pages/DailyTransactions.tsx` (FAB, refresh wiring, include `other_in` in Cash Received, swap feed icons to Plus/Minus)
+
+No DB migration needed — `cash_transactions` already supports `other_in` and `expense` categories.
 
