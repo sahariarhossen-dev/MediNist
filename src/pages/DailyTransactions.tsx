@@ -256,6 +256,22 @@ const DailyTransactions = () => {
           </div>
         ) : (
           <div className="space-y-3">
+            {previousClosing && (
+              <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+                  <Wallet size={18} className="text-blue-600" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm truncate">
+                    Closing Balance from {format(new Date(previousClosing.closing_date), "dd/MM/yyyy")}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">Carried forward · Opening</p>
+                </div>
+                <p className="font-bold text-sm whitespace-nowrap text-gray-700">
+                  ৳{formatBDT(previousClosing.net_balance)}
+                </p>
+              </div>
+            )}
             {visibleFeedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
@@ -290,6 +306,21 @@ const DailyTransactions = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Daily Closing Summary */}
+      <div className="bg-gray-100 rounded-2xl p-4 mt-5 mx-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Daily Closing Summary</h3>
+        <div className="space-y-2">
+          <SummaryRow label="Total Sales" value={salesTotal} sign="+" tone="green" />
+          <SummaryRow label="Total Cash In" value={manualCashIn} sign="+" tone="green" />
+          <SummaryRow label="Total Payments" value={totalPayments} sign="−" tone="red" />
+          <SummaryRow label="Today's Due" value={duesOpen} sign="" tone="neutral" />
+        </div>
+        <div className="border-t border-gray-300 mt-3 pt-3 flex items-center justify-between">
+          <span className="text-base font-bold text-blue-700">Net Cash Balance</span>
+          <span className="text-base font-bold text-blue-700">৳{formatBDT(cashInHand)}</span>
+        </div>
       </div>
 
       {/* Floating Action Button */}
