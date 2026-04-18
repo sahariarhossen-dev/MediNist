@@ -222,19 +222,29 @@ const DailyTransactions = () => {
 
       {/* Feed */}
       <div className="px-5 mt-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Transactions</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Transactions</h3>
+          {feedItems.length > 5 && (
+            <button
+              onClick={() => navigate("/more/all-transactions")}
+              className="text-xs font-semibold text-red-600 hover:text-red-700"
+            >
+              See All
+            </button>
+          )}
+        </div>
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
-        ) : feedItems.length === 0 ? (
+        ) : visibleFeedItems.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
-            <p className="text-sm text-gray-500">No cash movements logged for this date.</p>
+            <p className="text-sm text-gray-500">No manual transactions logged for this date.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Completed sales appear here automatically. Add manual cash entries with the + button.
+              Add an investment or expense with the + button.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {feedItems.map((t) => (
+            {visibleFeedItems.map((t) => (
               <div key={t.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div
                   className={cn(
