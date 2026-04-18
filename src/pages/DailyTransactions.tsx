@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay } from "date-fns";
-import { ArrowLeft, ArrowDownLeft, ArrowUpRight, CalendarIcon, Wallet } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import LogTransactionSheet from "@/components/transactions/LogTransactionSheet";
 
 type CashTx = {
   id: string;
@@ -41,60 +42,68 @@ const DailyTransactions = () => {
   const [txs, setTxs] = useState<CashTx[]>([]);
   const [duesOpen, setDuesOpen] = useState(0);
   const [startingBalance, setStartingBalance] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!profile?.pharmacy_id) return;
+    setLoading(true);
+    const from = startOfDay(date).toISOString();
+    const to = endOfDay(date).toISOString();
+
+    const [salesRes, txRes, duesRes, settingsRes] = await Promise.all([
+      supabase
+        .from("sales")
+        .select("total")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("status", "completed")
+        .gte("created_at", from)
+        .lte("created_at", to),
+      supabase
+        .from("cash_transactions")
+        .select("id,occurred_at,direction,category,party_name,amount,note")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .gte("occurred_at", from)
+        .lte("occurred_at", to)
+        .order("occurred_at", { ascending: false }),
+      supabase
+        .from("customer_dues")
+        .select("amount_due,amount_paid")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .gte("created_at", from)
+        .lte("created_at", to),
+      supabase
+        .from("pharmacy_settings")
+        .select("starting_cash_balance")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .maybeSingle(),
+    ]);
+
+    setSalesTotal((salesRes.data ?? []).reduce((s, r: any) => s + Number(r.total || 0), 0));
+    setTxs((txRes.data ?? []) as CashTx[]);
+    setDuesOpen(
+      (duesRes.data ?? []).reduce(
+        (s, r: any) => s + (Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
+        0,
+      ),
+    );
+    setStartingBalance(Number(settingsRes.data?.starting_cash_balance ?? 0));
+    setLoading(false);
+  }, [profile?.pharmacy_id, date]);
 
   useEffect(() => {
-    const load = async () => {
-      if (!profile?.pharmacy_id) return;
-      setLoading(true);
-      const from = startOfDay(date).toISOString();
-      const to = endOfDay(date).toISOString();
-
-      const [salesRes, txRes, duesRes, settingsRes] = await Promise.all([
-        supabase
-          .from("sales")
-          .select("total")
-          .eq("pharmacy_id", profile.pharmacy_id)
-          .eq("status", "completed")
-          .gte("created_at", from)
-          .lte("created_at", to),
-        supabase
-          .from("cash_transactions")
-          .select("id,occurred_at,direction,category,party_name,amount,note")
-          .eq("pharmacy_id", profile.pharmacy_id)
-          .gte("occurred_at", from)
-          .lte("occurred_at", to)
-          .order("occurred_at", { ascending: false }),
-        supabase
-          .from("customer_dues")
-          .select("amount_due,amount_paid")
-          .eq("pharmacy_id", profile.pharmacy_id)
-          .gte("created_at", from)
-          .lte("created_at", to),
-        supabase
-          .from("pharmacy_settings")
-          .select("starting_cash_balance")
-          .eq("pharmacy_id", profile.pharmacy_id)
-          .maybeSingle(),
-      ]);
-
-      setSalesTotal((salesRes.data ?? []).reduce((s, r: any) => s + Number(r.total || 0), 0));
-      setTxs((txRes.data ?? []) as CashTx[]);
-      setDuesOpen(
-        (duesRes.data ?? []).reduce(
-          (s, r: any) => s + (Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
-          0,
-        ),
-      );
-      setStartingBalance(Number(settingsRes.data?.starting_cash_balance ?? 0));
-      setLoading(false);
-    };
-    load();
-  }, [profile?.pharmacy_id, date]);
+    loadData();
+  }, [loadData]);
 
   const cashReceived = useMemo(
     () =>
       txs
-        .filter((t) => t.direction === "in" && (t.category === "sale_cash" || t.category === "due_collection"))
+        .filter(
+          (t) =>
+            t.direction === "in" &&
+            (t.category === "sale_cash" ||
+              t.category === "due_collection" ||
+              t.category === "other_in"),
+        )
         .reduce((s, t) => s + Number(t.amount), 0),
     [txs],
   );
