@@ -330,7 +330,7 @@ const DailyTransactions = () => {
           <button
             onClick={() => setSheetOpen(true)}
             aria-label="Log transaction"
-            className="fixed bottom-6 right-1/2 translate-x-[calc(min(50vw,224px)-1.25rem)] h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white transition-colors z-40"
+            className="fixed bottom-6 right-1/2 translate-x-[calc(min(50vw,224px)-1.25rem)] h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white transition-colors z-40 mb-[40px]"
           >
             <Plus size={26} strokeWidth={2.5} />
           </button>
