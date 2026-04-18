@@ -23,6 +23,7 @@ import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AIAssistant from "./pages/AIAssistant.tsx";
+import DailyTransactions from "./pages/DailyTransactions.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/catalog-search" element={<ProtectedRoute><CatalogSearch /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
+            <Route path="/more/daily-transactions" element={<ProtectedRoute><DailyTransactions /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
