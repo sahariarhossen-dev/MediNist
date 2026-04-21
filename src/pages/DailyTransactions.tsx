@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet } from "lucide-react";
+import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
+import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -177,6 +177,8 @@ const DailyTransactions = () => {
 
   const cashInHand = startingBalance + cashReceived - totalPayments;
 
+  const isToday = isSameDay(date, new Date());
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-10">
       <AppHeader />
@@ -209,6 +211,15 @@ const DailyTransactions = () => {
           </PopoverContent>
         </Popover>
       </div>
+
+      {!isToday && (
+        <div className="px-5 mt-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-medium px-2.5 py-1">
+            <Lock size={12} />
+            Read-only · Closed day
+          </span>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="px-5 grid grid-cols-2 gap-3 mt-2">
@@ -325,7 +336,7 @@ const DailyTransactions = () => {
       </div>
 
       {/* Floating Action Button */}
-      {profile?.pharmacy_id && profile?.id && (
+      {profile?.pharmacy_id && profile?.id && isToday && (
         <>
           <button
             onClick={() => setSheetOpen(true)}
