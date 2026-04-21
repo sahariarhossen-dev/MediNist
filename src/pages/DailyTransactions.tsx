@@ -336,7 +336,7 @@ const DailyTransactions = () => {
       </div>
 
       {/* Floating Action Button */}
-      {profile?.pharmacy_id && profile?.id && (
+      {profile?.pharmacy_id && profile?.id && isToday && (
         <>
           <button
             onClick={() => setSheetOpen(true)}
