@@ -42,12 +42,12 @@ const More = () => {
   const contactInfo = user?.email || profile?.phone || "—";
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
+    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
       <AppHeader />
 
       {/* Shop Profile Card – Shop logo, user name, email/phone */}
       <div
-        className="mx-5 mt-2 bg-white rounded-2xl p-4 shadow-sm cursor-pointer"
+        className="mx-page mt-2 bg-white rounded-2xl p-4 shadow-sm cursor-pointer"
         onClick={() => navigate("/shop-profile")}
       >
         <div className="flex items-center gap-4">
@@ -60,16 +60,16 @@ const More = () => {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-gray-900 text-base truncate">{profile?.full_name || "User"}</p>
-            <p className="text-sm text-gray-500 truncate">{contactInfo}</p>
-            <p className="text-xs text-gray-400 truncate mt-0.5">{pharmacyName || "Your Pharmacy"}</p>
+            <p className="font-bold text-gray-900 text-fluid-base truncate">{profile?.full_name || "User"}</p>
+            <p className="text-fluid-sm text-gray-500 truncate">{contactInfo}</p>
+            <p className="text-fluid-xs text-gray-400 truncate mt-0.5">{pharmacyName || "Your Pharmacy"}</p>
           </div>
           <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />
         </div>
       </div>
 
       {/* Menu Items */}
-      <div className="px-5 pt-5 space-y-2">
+      <div className="px-page pt-5 space-y-2">
         {menuItems.map(({ label, icon: Icon, path, color }) => (
           <button
             key={label}
@@ -77,7 +77,7 @@ const More = () => {
             className="w-full flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm text-left"
           >
             <Icon size={20} className={color} />
-            <span className="flex-1 font-medium text-gray-800 text-sm">{label}</span>
+            <span className="flex-1 font-medium text-gray-800 text-fluid-sm">{label}</span>
             <ChevronRight size={16} className="text-gray-300" />
           </button>
         ))}
