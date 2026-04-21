@@ -1,65 +1,40 @@
 
 
-## Daily closing + cash carry-forward
+## Read-only past dates + Cash in Hand on Dashboard
 
-Goal: when the day ends, lock in the day's net cash and use it as the starting balance for the next day. Show a clean summary card at the bottom of `/more/daily-transactions`, and surface a "Closing Balance from [prev date]" entry as the first row of the new day's feed.
+### 1. Daily Transactions — hide FAB on past dates, mark as read-only
 
-### 1. Database — store per-day closings (migration)
+In `src/pages/DailyTransactions.tsx`:
 
-New table `daily_closings` keyed by pharmacy + date so values persist across devices/refreshes:
+- Add a derived flag `isToday = isSameDay(date, new Date())` (using `date-fns`).
+- Wrap the floating `+` button + `LogTransactionSheet` so it only renders when `isToday` is true. (Currently the page only allows past or today via `disabled={(d) => d > new Date()}`, so "not today" = past.)
+- Show a small read-only indicator near the date popover when `!isToday`: a grey pill `Read-only · Closed day` (lock icon) so users understand why the `+` is gone.
+- Transactions are already non-editable in the UI (no edit/delete affordances exist on the cards), so "read-only state" is already true visually. The only mutation entry point is the FAB → hiding it satisfies the requirement. No changes to `LogTransactionSheet`.
 
-```
-daily_closings (
-  id uuid pk,
-  pharmacy_id uuid not null,
-  closing_date date not null,
-  starting_balance numeric not null default 0,
-  total_sales numeric not null default 0,
-  total_cash_in numeric not null default 0,
-  total_payments numeric not null default 0,
-  total_due numeric not null default 0,
-  net_balance numeric not null default 0,        -- carries forward
-  closed_at timestamptz not null default now(),
-  created_at timestamptz not null default now(),
-  unique (pharmacy_id, closing_date)
-)
-```
+### 2. Dashboard — replace "Total Bills" with "Cash in Hand"
 
-RLS: members of the pharmacy can SELECT; INSERT/UPDATE allowed for members (the auto-close edge function will use service role anyway). Indexed on `(pharmacy_id, closing_date desc)`.
+In `src/pages/Index.tsx`:
 
-We will keep `pharmacy_settings.starting_cash_balance` as the **initial seed** only (used when no prior closing exists). Day-to-day starting balance comes from the previous day's `net_balance`.
+- Remove the `Total Bills` card. Replace it with a `Cash in Hand` card using the `Wallet` icon (lucide-react) and the same blue icon styling as the others.
+- The Cash in Hand value must always reflect **today's** net cash, independent of the dashboard's time-range selector (the range filter still drives Total Sales / Active Staff / Short Items as it does today). We'll add a separate fetch for today's cash box that mirrors the formula used on `DailyTransactions`:
+  - `startingBalance` = most recent `daily_closings.net_balance` strictly before today, else `pharmacy_settings.starting_cash_balance`, else 0.
+  - `salesToday` = sum of `sales.total` where `status='completed'` and `created_at` between today's start/end.
+  - `duesToday` = sum of `(amount_due - amount_paid)` from `customer_dues` created today.
+  - `cashSalesToday` = `max(0, salesToday - duesToday)`.
+  - `manualCashIn` = sum of today's `cash_transactions` where `direction='in'` and category in `('sale_cash','due_collection','other_in')`.
+  - `paymentsToday` = sum of today's `cash_transactions` where `direction='out'`.
+  - `cashInHand = startingBalance + manualCashIn + cashSalesToday − paymentsToday`.
+- Display formatted as `৳<amount>` using the same `Intl.NumberFormat("en-IN")` rounding helper as the Daily Transactions page.
+- Make the card clickable → navigates to `/more/daily-transactions`.
 
-### 2. Edge function — `close-daily-transactions` (runs at midnight)
+### 3. Consistency
 
-A scheduled function (pg_cron + pg_net hitting the function URL every day at 00:05 local) that, for each pharmacy with activity on the previous date:
+Both pages will use the same formula and the same data sources, so the Dashboard "Cash in Hand" card and the Daily Transactions "Cash in Hand" / "Net Cash Balance" rows show the **same value when the Daily Transactions page is viewing today**. (For past dates the Daily Transactions page shows that day's snapshot, which is expected.)
 
-1. Computes `total_sales` (sum of completed sales), `total_cash_in` (manual `direction='in'` of `other_in` + `due_collection`), `total_payments` (`direction='out'`), `total_due` (open dues created that day), and the day's starting balance (= previous closing's `net_balance`, or `pharmacy_settings.starting_cash_balance`, or 0).
-2. `net_balance = starting + (total_sales - total_due) + total_cash_in - total_payments`.
-3. Upserts a row into `daily_closings` for that pharmacy + date.
+### 4. Files
 
-Cron will be scheduled via `pg_cron` + `pg_net` SQL (insert tool, not migration, since URL/anon key are project-specific).
+- **Edit** `src/pages/DailyTransactions.tsx` — `isToday` flag, conditional FAB + sheet, "Read-only" pill on past dates.
+- **Edit** `src/pages/Index.tsx` — remove `Total Bills` card, add `Cash in Hand` card with `Wallet` icon, add a today-only cash box fetch (parallel `Promise.all` alongside existing stats), navigate-to handler.
 
-### 3. Page changes — `src/pages/DailyTransactions.tsx`
-
-- **Starting balance lookup**: replace `pharmacy_settings.starting_cash_balance` reading with a query for the most recent `daily_closings` row before the selected date. Fallback chain: previous closing → `pharmacy_settings.starting_cash_balance` → 0.
-- **First-row "Closing Balance from …" pill**: when a previous closing exists, prepend a synthetic neutral entry to `visibleFeedItems` with a blue Wallet icon, label `Closing Balance from DD/MM/YYYY`, amount = carried `net_balance`. Not counted in totals (it's already baked into starting balance).
-- **Daily Closing Summary card** at the bottom of the page (below the feed, above the FAB area):
-  - Light grey (`bg-gray-100`) rounded card, title `Daily Closing Summary`.
-  - Rows: Total Sales `+`, Total Cash In `+`, Total Payments `−`, Today's Due (neutral), divider, **Net Cash Balance** in bold blue.
-- The summary uses the same values already calculated in the page (`salesTotal`, `manualCashIn`, `totalPayments`, `duesOpen`, `cashInHand`).
-
-### 4. Visual / branding
-
-- AppHeader (M logo + MediNist) untouched.
-- Summary card: `bg-gray-100 rounded-2xl p-4 mt-5 mx-5`, rows `flex justify-between text-sm`, net row `text-blue-700 font-bold text-base`, top border separator.
-- Closing-balance feed row: blue circle with `Wallet` icon, neutral grey amount text.
-
-### 5. Files
-
-- **New migration**: `daily_closings` table + RLS + index.
-- **New edge function**: `supabase/functions/close-daily-transactions/index.ts` (uses service role; computes + upserts closings for yesterday).
-- **Insert SQL (via insert tool)**: enable `pg_cron`/`pg_net`, schedule daily 00:05 UTC POST to the function.
-- **Edit `src/pages/DailyTransactions.tsx`**: new starting-balance source, new synthetic "Closing Balance from …" row, new bottom summary card.
-
-No changes needed to `LogTransactionSheet.tsx` or `AllTransactions.tsx`.
+No DB, RLS, or edge function changes required.
 
