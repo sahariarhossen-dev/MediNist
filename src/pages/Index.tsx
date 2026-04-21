@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, FileText, Users, AlertTriangle } from "lucide-react";
+import { startOfDay, endOfDay, format } from "date-fns";
+import { TrendingUp, Wallet, Users, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -40,13 +41,17 @@ const rangeLabels: Record<string, string> = {
   "30days": "Last 30 Days",
 };
 
+const formatBDT = (n: number) =>
+  new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
+
 const Index = () => {
   const navigate = useNavigate();
   const { profile, pharmacyName, signOut } = useAuth();
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
   const [timeRange, setTimeRange] = useState("today");
-  const [stats, setStats] = useState({ totalSales: 0, totalBills: 0, activeStaff: 0, stockAlerts: 0 });
+  const [stats, setStats] = useState({ totalSales: 0, activeStaff: 0, stockAlerts: 0 });
+  const [cashInHand, setCashInHand] = useState(0);
 
   const fetchStats = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
