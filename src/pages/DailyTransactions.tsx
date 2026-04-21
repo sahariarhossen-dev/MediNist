@@ -212,6 +212,15 @@ const DailyTransactions = () => {
         </Popover>
       </div>
 
+      {!isToday && (
+        <div className="px-5 mt-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-medium px-2.5 py-1">
+            <Lock size={12} />
+            Read-only · Closed day
+          </span>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="px-5 grid grid-cols-2 gap-3 mt-2">
         <SummaryCard label="Total Sales" value={salesTotal} tone="blue" />
