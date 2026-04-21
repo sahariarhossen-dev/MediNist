@@ -79,7 +79,6 @@ const Index = () => {
 
     const sales = salesRes.data ?? [];
     const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
-    const totalBills = sales.length;
 
     const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
     const activeStaff = staffIds.size;
@@ -89,16 +88,89 @@ const Index = () => {
       return (m.stock_quantity ?? 0) < threshold;
     }).length;
 
-    setStats({ totalSales, totalBills, activeStaff, stockAlerts });
+    setStats({ totalSales, activeStaff, stockAlerts });
   }, [profile?.pharmacy_id, timeRange]);
+
+  const fetchCashInHand = useCallback(async () => {
+    const pharmacyId = profile?.pharmacy_id;
+    if (!pharmacyId) return;
+    const today = new Date();
+    const from = startOfDay(today).toISOString();
+    const to = endOfDay(today).toISOString();
+    const dateStr = format(today, "yyyy-MM-dd");
+
+    const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
+      supabase
+        .from("sales")
+        .select("total")
+        .eq("pharmacy_id", pharmacyId)
+        .eq("status", "completed")
+        .gte("created_at", from)
+        .lte("created_at", to),
+      supabase
+        .from("cash_transactions")
+        .select("direction,category,amount")
+        .eq("pharmacy_id", pharmacyId)
+        .gte("occurred_at", from)
+        .lte("occurred_at", to),
+      supabase
+        .from("customer_dues")
+        .select("amount_due,amount_paid")
+        .eq("pharmacy_id", pharmacyId)
+        .gte("created_at", from)
+        .lte("created_at", to),
+      supabase
+        .from("pharmacy_settings")
+        .select("starting_cash_balance")
+        .eq("pharmacy_id", pharmacyId)
+        .maybeSingle(),
+      supabase
+        .from("daily_closings")
+        .select("net_balance")
+        .eq("pharmacy_id", pharmacyId)
+        .lt("closing_date", dateStr)
+        .order("closing_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const salesToday = (salesRes.data ?? []).reduce((s, r) => s + Number(r.total || 0), 0);
+    const duesToday = (duesRes.data ?? []).reduce(
+      (s, r: any) => s + (Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
+      0,
+    );
+    const cashSalesToday = Math.max(0, salesToday - duesToday);
+    const txs = txRes.data ?? [];
+    const manualCashIn = txs
+      .filter(
+        (t: any) =>
+          t.direction === "in" &&
+          (t.category === "sale_cash" ||
+            t.category === "due_collection" ||
+            t.category === "other_in"),
+      )
+      .reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const paymentsToday = txs
+      .filter((t: any) => t.direction === "out")
+      .reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const startingBalance = prevClosingRes.data
+      ? Number(prevClosingRes.data.net_balance ?? 0)
+      : Number(settingsRes.data?.starting_cash_balance ?? 0);
+
+    setCashInHand(startingBalance + manualCashIn + cashSalesToday - paymentsToday);
+  }, [profile?.pharmacy_id]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
+  useEffect(() => {
+    fetchCashInHand();
+  }, [fetchCashInHand]);
+
   const summaryCards = [
     { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
-    { title: "Total Bills", value: String(stats.totalBills), icon: FileText, color: "bg-blue-100 text-blue-600" },
+    { title: "Cash in Hand", value: `৳${formatBDT(cashInHand)}`, icon: Wallet, color: "bg-blue-100 text-blue-600", onClick: () => navigate("/more/daily-transactions") },
     { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
     { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
   ];
