@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet } from "lucide-react";
+import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
+import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
