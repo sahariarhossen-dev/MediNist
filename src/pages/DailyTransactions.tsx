@@ -177,6 +177,8 @@ const DailyTransactions = () => {
 
   const cashInHand = startingBalance + cashReceived - totalPayments;
 
+  const isToday = isSameDay(date, new Date());
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-10">
       <AppHeader />
