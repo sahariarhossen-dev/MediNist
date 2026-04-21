@@ -63,6 +63,17 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      fontSize: {
+        "fluid-xs": "var(--fs-xs)",
+        "fluid-sm": "var(--fs-sm)",
+        "fluid-base": "var(--fs-base)",
+        "fluid-lg": "var(--fs-lg)",
+        "fluid-xl": "var(--fs-xl)",
+        "fluid-2xl": "var(--fs-2xl)",
+      },
+      spacing: {
+        page: "var(--pad-page)",
+      },
       keyframes: {
         "accordion-down": {
           from: {

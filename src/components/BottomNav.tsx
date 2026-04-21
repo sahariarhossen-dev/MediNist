@@ -31,7 +31,7 @@ const BottomNav = () => {
       )}
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="flex items-center justify-around py-2.5 px-2">
+      <div className="flex items-center justify-around py-2.5 px-1">
         {navItems.map(({ label, icon: Icon, path }) => {
           const isActive = pathname === path;
           return (
@@ -52,7 +52,7 @@ const BottomNav = () => {
                   className={`transition-colors ${isActive ? "text-blue-600" : "text-muted-foreground"}`}
                 />
               </div>
-              <span className={`text-[10px] font-medium transition-colors ${isActive ? "text-blue-600" : "text-gray-400"}`}>
+              <span className={`text-fluid-xs font-medium transition-colors ${isActive ? "text-blue-600" : "text-gray-400"}`}>
                 {label}
               </span>
             </button>

@@ -81,19 +81,19 @@ const ShortItems = () => {
     qty === 0 ? "text-red-600 font-bold" : "text-orange-500 font-semibold";
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-8">
+    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-8">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 pt-5 pb-4">
+      <div className="flex items-center gap-2 sm:gap-3 px-page pt-5 pb-4">
         <button
           onClick={() => navigate("/")}
           className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition"
         >
           <ArrowLeft size={22} className="text-gray-700" />
         </button>
-        <h1 className="text-lg font-bold text-gray-900">Short Items</h1>
+        <h1 className="text-fluid-lg font-bold text-gray-900">Short Items</h1>
         <div className="ml-auto">
           <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-            <SelectTrigger className="w-auto max-w-[40vw] h-9 text-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
+            <SelectTrigger className="w-auto max-w-[45vw] sm:max-w-[14rem] h-9 text-fluid-xs bg-white shadow-sm rounded-lg border-gray-200 focus:ring-emerald-500 focus:ring-offset-0">
               <SelectValue placeholder="All Companies" />
             </SelectTrigger>
             <SelectContent>
@@ -109,56 +109,60 @@ const ShortItems = () => {
       </div>
 
       {/* Table */}
-      <div className="px-4">
+      <div className="px-page">
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full table-fixed text-[13px]">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="w-[40%] text-left px-2 py-3 text-xs font-semibold text-gray-400">Product</th>
-                <th className="w-[20%] text-left px-1.5 py-3 text-xs font-semibold text-gray-400">Category</th>
-                <th className="w-[18%] text-center px-1.5 py-3 text-xs font-semibold text-gray-400">STK</th>
-                <th className="w-[22%] text-right px-2 py-3 text-xs font-semibold text-gray-400">Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-8 text-gray-400">Loading...</td>
+          <div className="w-full overflow-x-auto no-scrollbar">
+            <table className="w-full min-w-[20rem] text-fluid-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-2 py-3 text-fluid-xs font-semibold text-gray-400 whitespace-nowrap">Product</th>
+                  <th className="text-left px-1.5 py-3 text-fluid-xs font-semibold text-gray-400 whitespace-nowrap">Category</th>
+                  <th className="text-center px-1.5 py-3 text-fluid-xs font-semibold text-gray-400 whitespace-nowrap">STK</th>
+                  <th className="text-right px-2 py-3 text-fluid-xs font-semibold text-gray-400 whitespace-nowrap">Price</th>
                 </tr>
-              ) : displayedItems.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-12">
-                    <PackageX size={36} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-400 text-sm">
-                      {selectedCompany === "all"
-                        ? "No short items found"
-                        : "No short items for this company"}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                displayedItems.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-50 last:border-0">
-                    <td className="px-2 py-3 font-medium text-gray-900 truncate max-w-0">
-                      <span className="flex items-center gap-1">
-                        <span className="truncate">{truncateName(item.name)}</span>
-                        {item.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.product_size)}</span>}
-                      </span>
-                    </td>
-                    <td className="px-1.5 py-3 text-gray-500 truncate max-w-0">{item.product_type ?? "—"}</td>
-                    <td className={`px-1.5 py-3 font-mono text-left text-xs pt-0 pb-0 pl-0 pr-0 ${stockColor(item.stock_quantity)}`}>
-                      {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
-                    </td>
-                    <td className="px-2 py-3 text-right text-gray-700">
-                      ৳{Number(item.price ?? 0).toLocaleString()}
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-gray-400">Loading...</td>
+                  </tr>
+                ) : displayedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-12">
+                      <PackageX size={36} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-gray-400 text-fluid-sm">
+                        {selectedCompany === "all"
+                          ? "No short items found"
+                          : "No short items for this company"}
+                      </p>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  displayedItems.map((item) => (
+                    <tr key={item.id} className="border-b border-gray-50 last:border-0">
+                      <td className="px-2 py-3 font-medium text-gray-900">
+                        <span className="flex items-center gap-1">
+                          <span className="truncate">{truncateName(item.name)}</span>
+                          {item.product_size && <span className="text-fluid-xs text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.product_size)}</span>}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-3 text-gray-500">{item.product_type ?? "—"}</td>
+                      <td className={`px-1.5 py-3 font-mono text-left whitespace-nowrap tabular-nums ${stockColor(item.stock_quantity)}`}>
+                        <span className="whitespace-nowrap tabular-nums">
+                          {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-right text-gray-700 whitespace-nowrap tabular-nums">
+                        ৳{Number(item.price ?? 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <p className="text-[11px] text-gray-400 mt-3 px-1">
+        <p className="text-fluid-xs text-gray-400 mt-3 px-1">
           Showing products with stock at or below their alert threshold.
         </p>
       </div>

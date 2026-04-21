@@ -76,14 +76,14 @@ const Sales = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-md mx-auto pb-28">
+    <div className="min-h-screen bg-gray-50 w-full max-w-md mx-auto pb-28">
       <AppHeader />
-      <div className="px-5 pt-6 pb-2">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Manage your daily transactions</p>
+      <div className="px-page pt-6 pb-2">
+        <h1 className="text-fluid-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
+        <p className="text-fluid-sm text-gray-400 mt-0.5">Manage your daily transactions</p>
       </div>
 
-      <div className="px-5 space-y-5 mt-2">
+      <div className="px-page space-y-5 mt-2">
         <button
           onClick={() => navigate("/create-sale")}
           className="w-full relative overflow-hidden rounded-3xl border border-white/30 bg-gradient-to-br from-emerald-500/90 via-emerald-600/85 to-emerald-700/90 backdrop-blur-xl shadow-xl shadow-emerald-500/20 p-6 text-left transition-transform active:scale-[0.98]"
@@ -93,31 +93,31 @@ const Sales = () => {
           <div className="relative flex items-center gap-5">
             <div className="relative">
               <div className="absolute inset-0 rounded-2xl bg-white/20 animate-ping" style={{ animationDuration: "2.5s" }} />
-              <div className="relative w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
+              <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
                 <Plus className="w-8 h-8 text-white" strokeWidth={2.5} />
               </div>
             </div>
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-widest text-emerald-100/80">New Transaction</span>
-              <h2 className="text-xl font-bold text-white mt-0.5 tracking-tight">CREATE NEW SALE</h2>
+            <div className="min-w-0">
+              <span className="text-fluid-xs font-semibold uppercase tracking-widest text-emerald-100/80">New Transaction</span>
+              <h2 className="text-fluid-xl font-bold text-white mt-0.5 tracking-tight">CREATE NEW SALE</h2>
             </div>
           </div>
         </button>
 
         <div className="rounded-2xl bg-white shadow-lg shadow-gray-200/60 border border-gray-100 p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Today's Total Sale</p>
-              <p className="text-3xl font-extrabold text-emerald-600 mt-1.5 tracking-tight">৳{todayTotal.toLocaleString()}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-fluid-xs font-medium text-gray-400 uppercase tracking-wide">Today's Total Sale</p>
+              <p className="text-fluid-2xl font-extrabold text-emerald-600 mt-1.5 tracking-tight tabular-nums truncate">৳{todayTotal.toLocaleString()}</p>
               <div className="flex items-center gap-1.5 mt-2">
-                <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-0.5 text-fluid-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <ArrowUp className="w-3 h-3" />
                   {completedCount} sales
                 </span>
-                <span className="text-xs text-gray-400">today</span>
+                <span className="text-fluid-xs text-gray-400">today</span>
               </div>
             </div>
-            <div className="w-28 h-16 mt-1">
+            <div className="w-24 sm:w-28 h-16 mt-1 flex-shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={sparklineData}>
                   <defs>

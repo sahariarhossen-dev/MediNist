@@ -181,19 +181,19 @@ const Index = () => {
       <AppHeader />
 
       {/* Business Insights */}
-      <div className="px-5 pt-3 pb-2">
+      <div className="px-page pt-3 pb-2">
         <div className="flex items-start justify-between pt-[10px] pb-[5px]">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Business Insights</h1>
-            <p className="text-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
+            <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
+            <p className="text-fluid-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
+            <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-fluid-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {Object.entries(rangeLabels).map(([value, label]) => (
-                <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
+                <SelectItem key={value} value={value} className="text-fluid-xs">{label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -201,14 +201,14 @@ const Index = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 px-5 py-3">
+      <div className="grid grid-cols-2 gap-3 px-page py-3">
         {summaryCards.map((card) => (
           <Card key={card.title} className={`p-4 border-0 shadow-sm rounded-xl bg-white ${card.onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`} onClick={card.onClick}>
             <div className={`w-9 h-9 rounded-full flex items-center justify-center mb-3 ${card.color}`}>
               <card.icon size={18} />
             </div>
-            <p className="text-[11px] font-medium text-muted-foreground">{card.title}</p>
-            <p className="text-xl font-bold text-gray-900 mt-0.5">{card.value}</p>
+            <p className="text-fluid-xs font-medium text-muted-foreground">{card.title}</p>
+            <p className="text-fluid-xl font-bold text-gray-900 mt-0.5 tabular-nums truncate">{card.value}</p>
           </Card>
         ))}
       </div>

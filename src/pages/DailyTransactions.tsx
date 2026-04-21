@@ -180,23 +180,23 @@ const DailyTransactions = () => {
   const isToday = isSameDay(date, new Date());
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-10">
+    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
       <AppHeader />
 
       {/* Title row */}
-      <div className="flex items-center justify-between px-5 pt-3 pb-2">
+      <div className="flex items-center justify-between px-page pt-3 pb-2">
         <button
           onClick={() => navigate("/more")}
           className="flex items-center gap-2 text-gray-800"
         >
           <ArrowLeft size={20} />
-          <span className="font-semibold text-base">Daily Transactions</span>
+          <span className="font-semibold text-fluid-base">Daily Transactions</span>
         </button>
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2 h-9 rounded-xl bg-white">
               <CalendarIcon size={16} className="text-blue-600" />
-              <span className="text-xs font-medium">{format(date, "d MMM")}</span>
+              <span className="text-fluid-xs font-medium">{format(date, "d MMM")}</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">
@@ -213,8 +213,8 @@ const DailyTransactions = () => {
       </div>
 
       {!isToday && (
-        <div className="px-5 mt-1">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-medium px-2.5 py-1">
+        <div className="px-page mt-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-200 text-gray-600 text-fluid-xs font-medium px-2.5 py-1">
             <Lock size={12} />
             Read-only · Closed day
           </span>
@@ -222,7 +222,7 @@ const DailyTransactions = () => {
       )}
 
       {/* Summary cards */}
-      <div className="px-5 grid grid-cols-2 gap-3 mt-2">
+      <div className="px-page grid grid-cols-2 gap-3 mt-2">
         <SummaryCard label="Total Sales" value={salesTotal} tone="blue" />
         <SummaryCard label="Cash Received" value={cashReceived} tone="blue-soft" />
         <SummaryCard label="Total Payments" value={totalPayments} tone="teal" />
@@ -230,27 +230,27 @@ const DailyTransactions = () => {
       </div>
 
       {/* Cash in Hand */}
-      <div className="mx-5 mt-4 bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+      <div className="mx-page mt-4 bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
         <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
           <Wallet size={20} className="text-blue-600" />
         </div>
-        <div className="flex-1">
-          <p className="text-xs text-gray-500">Cash in Hand</p>
-          <p className="text-lg font-bold text-gray-900">৳{formatBDT(cashInHand)}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-fluid-xs text-gray-500">Cash in Hand</p>
+          <p className="text-fluid-lg font-bold text-gray-900 tabular-nums truncate">৳{formatBDT(cashInHand)}</p>
         </div>
-        <p className="text-[11px] text-gray-400 text-right leading-tight">
+        <p className="text-fluid-xs text-gray-400 text-right leading-tight whitespace-nowrap">
           Starting<br />৳{formatBDT(startingBalance)}
         </p>
       </div>
 
       {/* Feed */}
-      <div className="px-5 mt-5">
+      <div className="px-page mt-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700">Transactions</h3>
+          <h3 className="text-fluid-sm font-semibold text-gray-700">Transactions</h3>
           {feedItems.length > 5 && (
             <button
               onClick={() => navigate("/more/all-transactions")}
-              className="text-xs font-semibold text-red-600 hover:text-red-700"
+              className="text-fluid-xs font-semibold text-red-600 hover:text-red-700"
             >
               See All
             </button>
@@ -299,16 +299,16 @@ const DailyTransactions = () => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm truncate">
+                  <p className="font-semibold text-gray-900 text-fluid-sm truncate">
                     {t.party_name || "—"}
                   </p>
-                  <p className="text-xs text-gray-500 truncate">
+                  <p className="text-fluid-xs text-gray-500 truncate">
                     {CATEGORY_LABELS[t.category] || t.category} · {format(new Date(t.occurred_at), "h:mm a")}
                   </p>
                 </div>
                 <p
                   className={cn(
-                    "font-bold text-sm whitespace-nowrap",
+                    "font-bold text-fluid-sm whitespace-nowrap tabular-nums",
                     t.direction === "in" ? "text-green-600" : "text-red-600",
                   )}
                 >
@@ -321,8 +321,8 @@ const DailyTransactions = () => {
       </div>
 
       {/* Daily Closing Summary */}
-      <div className="bg-gray-100 rounded-2xl p-4 mt-5 mx-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Daily Closing Summary</h3>
+      <div className="bg-gray-100 rounded-2xl p-4 mt-5 mx-page">
+        <h3 className="text-fluid-sm font-semibold text-gray-700 mb-3">Daily Closing Summary</h3>
         <div className="space-y-2">
           <SummaryRow label="Total Sales" value={salesTotal} sign="+" tone="green" />
           <SummaryRow label="Total Cash In" value={manualCashIn} sign="+" tone="green" />
@@ -330,8 +330,8 @@ const DailyTransactions = () => {
           <SummaryRow label="Today's Due" value={duesOpen} sign="" tone="neutral" />
         </div>
         <div className="border-t border-gray-300 mt-3 pt-3 flex items-center justify-between">
-          <span className="text-base font-bold text-blue-700">Net Cash Balance</span>
-          <span className="text-base font-bold text-blue-700">৳{formatBDT(cashInHand)}</span>
+          <span className="text-fluid-base font-bold text-blue-700">Net Cash Balance</span>
+          <span className="text-fluid-base font-bold text-blue-700 tabular-nums">৳{formatBDT(cashInHand)}</span>
         </div>
       </div>
 
@@ -376,9 +376,9 @@ const SummaryCard = ({
   }[tone];
   const labelClass = tone.endsWith("soft") ? "opacity-70" : "opacity-90";
   return (
-    <div className={cn("rounded-2xl p-4 shadow-sm", styles)}>
-      <p className={cn("text-xs font-medium", labelClass)}>{label}</p>
-      <p className="text-xl font-bold mt-1">৳{formatBDT(value)}</p>
+    <div className={cn("rounded-2xl p-4 shadow-sm min-w-0", styles)}>
+      <p className={cn("text-fluid-xs font-medium", labelClass)}>{label}</p>
+      <p className="text-fluid-xl font-bold mt-1 tabular-nums truncate">৳{formatBDT(value)}</p>
     </div>
   );
 };
@@ -401,9 +401,9 @@ const SummaryRow = ({
         ? "text-red-600"
         : "text-gray-700";
   return (
-    <div className="flex items-center justify-between text-sm">
+    <div className="flex items-center justify-between text-fluid-sm gap-2">
       <span className="text-gray-600">{label}</span>
-      <span className={cn("font-semibold", toneClass)}>
+      <span className={cn("font-semibold tabular-nums whitespace-nowrap", toneClass)}>
         {sign}৳{formatBDT(value)}
       </span>
     </div>
