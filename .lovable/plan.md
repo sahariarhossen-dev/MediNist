@@ -1,63 +1,75 @@
 
 
-## Squircle adaptive icon redesign
+## New heartbeat icon — bold scaling + cache-bust
 
-Replace the current icon (M with a thin circular outline) with a clean, full-bleed white squircle holding the blue M centered with a soft drop shadow. The OS provides the final shape mask (Android adaptive, iOS squircle), so our PNG ships as a **full-bleed white square** — no border, no built-in rounded corners — and the maskable variant carries extra safe-zone padding so Android's adaptive crop never clips the M.
+Replace the current 'M' icon set with the new heartbeat-pulse + cross logo from `image_19.png`. Crop out the dark background, keep only the white squircle + grey border, then scale the inner blue artwork up so it fills the squircle with just ~10% safe padding. Append a version query string to every icon URL so browsers fetch fresh assets immediately.
 
-### 1. Regenerate the icon set
+### 1. Master + crop
 
-Source: `public/icons/icon-master.png` (already saved). Use ImageMagick to:
+- Copy `user-uploads://Untitled_1080_x_1080_px_4.png` → `public/icons/icon-master.png` (overwrites current master).
+- The uploaded image already has a white background (no dark surround visible in the file itself), so the work is **safe-trim + tight crop** to the squircle plate, then build a clean asset:
+  1. Trim outer whitespace around the squircle.
+  2. Save the trimmed squircle plate as `/tmp/squircle-plate.png` (this preserves the subtle grey border).
+  3. Mask out the inner blue artwork (heartbeat circle + cross) by color-keying everything that isn't near-white/grey, save as `/tmp/glyph-only.png` with transparent background.
 
-1. **Extract a clean M** from the master:
-   - Trim the existing white background, then remove the thin black circular outline by flood-filling the outer ring with white and re-trimming to the M's bounding box.
-   - Result saved as `/tmp/m-only.png` (transparent or white background, tight crop on the blue M).
+### 2. Compose the new icon (1024×1024 base)
 
-2. **Compose the new app icon** (`/tmp/icon-base-1024.png`, 1024×1024):
-   - Solid white canvas (`#FFFFFF`), full-bleed (fills the entire square — no rounded corners baked in).
-   - Place `m-only.png` centered, scaled so it occupies **60% of the canvas width** (→ 20% padding on each side, satisfying the safe-zone requirement).
-   - Soft drop shadow on the M: offset `0px / +6px`, gaussian blur ~14px, opacity ~18%, color `#0B5FFF` tinted toward neutral (`rgba(11,40,90,0.18)`) so it reads as premium depth, not a hard shadow.
+Build `/tmp/icon-base-1024.png`:
+- Solid white canvas `#FFFFFF`, full-bleed (no baked rounded corners — OS handles masking).
+- Composite `glyph-only.png` centered at **80% of canvas width** (= **10% safe padding** on each side) so the heartbeat + cross fill the square boldly instead of looking small/cramped.
+- Subtle premium shadow on the glyph: offset `0 / +6px`, blur ~14px, `rgba(11,40,90,0.16)`.
 
-3. **Export the standard set** from the 1024 base (downscaled with Lanczos):
-   - `public/icons/icon-192.png` (192×192, full-bleed white, M at 60%)
-   - `public/icons/icon-512.png` (512×512, full-bleed white, M at 60%)
+### 3. Export the icon set (overwrite in `public/icons/`)
 
-4. **Export the maskable variant** (`public/icons/icon-512-maskable.png`, 512×512):
-   - Same composition but the M scaled to **40% of canvas width** (extra safe zone). Android's adaptive icon spec crops ~10% on every edge — the larger padding guarantees the M survives any squircle / circle / teardrop mask the launcher applies.
-   - Background remains solid white, full-bleed.
+From the 1024 base, downscale (Lanczos):
+- `favicon-16.png` (16×16)
+- `favicon-32.png` (32×32)
+- `favicon-48.png` (48×48)
+- `icon-192.png` (192×192)  ← also used by `apple-touch-icon`
+- `icon-512.png` (512×512)
+- `icon-512-maskable.png` (512×512, glyph re-rendered at **60% width** → ~20% safe zone so Android's adaptive crop doesn't clip the pulse/cross)
+- Regenerate `public/favicon.ico` (multi-res 16/32/48) from the same base.
 
-5. **Regenerate `public/favicon.ico`** as a multi-resolution ICO (16/32/48) from the same full-bleed white-squircle source so browser tabs match.
-   - Also overwrite `public/icons/favicon-16.png`, `favicon-32.png`, `favicon-48.png` from the same source.
+### 4. Cache-bust everything (`?v=…`)
 
-6. **Delete the stray top-level duplicates** (`favicon-32.png`, `favicon-48.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png` at repo root — leftovers from the previous run) so only `public/icons/*` is referenced.
+Pick one shared version token (e.g. `v=20260422`) and append it to every icon URL in:
 
-### 2. Manifest — declare adaptive behavior
+**`index.html`**
+```html
+<link rel="icon" href="/favicon.ico?v=20260422" sizes="any" />
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png?v=20260422" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=20260422" />
+<link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png?v=20260422" />
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png?v=20260422" />
+<link rel="manifest" href="/manifest.json?v=20260422" />
+```
 
-`public/manifest.json`:
-- Keep `icon-192.png` and `icon-512.png` with `purpose: "any"` (used as-is on iOS / desktop).
-- Keep `icon-512-maskable.png` with `purpose: "maskable"` — this is what tells Android "crop me to your native shape, I have safe-zone padding". Result: on Android the launcher applies its own squircle/circle mask to our white background → no double border, no extra outline.
-- `background_color: "#FFFFFF"` already matches the icon background, so the splash and the icon read as one continuous surface.
+**`public/manifest.json`** — append `?v=20260422` to each icon `src`:
+```json
+{ "src": "/icons/icon-192.png?v=20260422", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+{ "src": "/icons/icon-512.png?v=20260422", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+{ "src": "/icons/icon-512-maskable.png?v=20260422", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+```
+Other manifest fields (name, theme_color `#0B5FFF`, background `#FFFFFF`, display `standalone`) stay unchanged.
 
-### 3. HTML — no change needed
+### 5. App-page constraint
 
-`index.html` already references `/favicon.ico`, the three favicon PNG sizes, `apple-touch-icon` → `/icons/icon-192.png`, and `/manifest.json`. Regenerating the files in place picks up automatically. iOS uses `icon-192.png` (full-bleed white) and applies its own squircle mask → matches Google Keep / Canva look natively.
+No changes to any React component, page, header, dashboard, `LogoMark`, or `LogoFull`. The new heartbeat artwork lives **only** at `/favicon.ico`, `/icons/*`, and inside `manifest.json` — never referenced from app UI.
 
-### 4. App-page constraint preserved
+### 6. QA
 
-No changes to any React component, page, header, or `LogoMark`/`LogoFull`. The new icon lives only at `/favicon.ico`, `/icons/*`, and `/manifest.json` — it never enters the app UI.
-
-### 5. QA
-
-- `identify` each generated PNG to confirm dimensions + that backgrounds are solid white edge-to-edge (no transparency, no baked-in rounded corners).
+- `identify` each output to confirm correct dimensions and full-bleed white background.
 - Render `icon-512.png` and `icon-512-maskable.png` to preview images and visually verify:
-  - Full-bleed white square (no circular outline, no border).
-  - M perfectly centered.
-  - 20% padding on `icon-512.png`, ~30% padding on the maskable variant.
-  - Soft shadow visible but subtle — premium, not heavy.
-- Simulate Android adaptive crop by overlaying a circle and squircle mask on `icon-512-maskable.png` to confirm the M stays fully inside both safe zones.
+  - Heartbeat + cross are large and bold (≈80% of canvas), not tiny.
+  - 10% padding on standard, ~20% padding on maskable.
+  - White background edge-to-edge, no leftover dark surround.
+  - Subtle shadow visible, premium not heavy.
+- Overlay a circle + squircle mask on `icon-512-maskable.png` to confirm nothing critical is clipped.
+- Hard-refresh preview, confirm browser tab shows the new heartbeat favicon (cache-bust query proves it).
 
 ### Files
 
-- **Regenerate** (overwrite): `public/icons/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `favicon-16.png`, `favicon-32.png`, `favicon-48.png`; `public/favicon.ico`.
-- **Delete**: stray repo-root duplicates `favicon-32.png`, `favicon-48.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`.
-- **Unchanged**: `index.html`, `public/manifest.json` (already correct), all `src/**`.
+- **Replace** (overwrite): `public/icons/icon-master.png`, `favicon-16.png`, `favicon-32.png`, `favicon-48.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `public/favicon.ico`.
+- **Edit**: `index.html` (append `?v=…` to all icon + manifest links), `public/manifest.json` (append `?v=…` to each icon `src`).
+- **Unchanged**: all `src/**`, every page, every component.
 
