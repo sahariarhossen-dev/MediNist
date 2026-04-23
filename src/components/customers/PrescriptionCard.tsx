@@ -1,19 +1,35 @@
-import { MoreVertical, Plus, Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import type { Prescription } from "./AddPrescriptionSheet";
 
 interface Props {
   prescription: Prescription;
-  onAddToSale: () => void;
+  selected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-const PrescriptionCard = ({ prescription: p, onAddToSale, onEdit, onDelete }: Props) => {
+const PrescriptionCard = ({ prescription: p, selected, onToggleSelect, onEdit, onDelete }: Props) => {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border-l-4 border-blue-500 flex items-start gap-3">
+    <div
+      onClick={onToggleSelect}
+      className={cn(
+        "bg-white rounded-2xl p-4 shadow-sm border-l-4 border-blue-500 flex items-start gap-3 cursor-pointer transition",
+        selected && "ring-2 ring-blue-500 bg-blue-50/40",
+      )}
+    >
+      <div className="pt-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onToggleSelect}
+          aria-label={`Select ${p.medicine_name}`}
+        />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <p className="text-fluid-base font-bold text-gray-900">{p.medicine_name}</p>
@@ -31,14 +47,7 @@ const PrescriptionCard = ({ prescription: p, onAddToSale, onEdit, onDelete }: Pr
         </div>
         {p.notes && <p className="text-[11px] text-gray-500 mt-1.5">{p.notes}</p>}
       </div>
-      <div className="flex flex-col items-end gap-1.5">
-        <button
-          onClick={onAddToSale}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold whitespace-nowrap"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add to Sale
-        </button>
+      <div className="flex flex-col items-end gap-1.5" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button className="p-1 rounded-md hover:bg-gray-100">
