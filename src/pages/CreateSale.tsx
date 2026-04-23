@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
+import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
 interface Medicine {
   id: string;
@@ -44,6 +46,13 @@ const CreateSale = () => {
   const [editingDiscount, setEditingDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("10");
   const [defaultDiscount, setDefaultDiscount] = useState(10);
+
+  // Customer & payment method
+  const [selectedCustomer, setSelectedCustomer] = useState<PickedCustomer | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "due" | "split">("cash");
+  const [paidNow, setPaidNow] = useState<string>("");
+  const [prescriptions, setPrescriptions] = useState<Array<{ id: string; medicine_id: string | null; medicine_name: string; dosage_frequency: string }>>([]);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   // Fetch global default discount from pharmacy settings
   useEffect(() => {
@@ -134,6 +143,84 @@ const CreateSale = () => {
     };
     loadDraft();
   }, [searchParams, profile?.pharmacy_id]);
+
+  // Pre-select customer from URL, load prescriptions, optionally auto-add one
+  useEffect(() => {
+    const customerId = searchParams.get("customer");
+    const prescribeId = searchParams.get("prescribe");
+    if (!customerId || !profile?.pharmacy_id) return;
+    let cancelled = false;
+    (async () => {
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("id, name, phone, total_due")
+        .eq("id", customerId)
+        .maybeSingle();
+      if (cancelled || !cust) return;
+      setSelectedCustomer(cust as PickedCustomer);
+
+      const { data: presc } = await supabase
+        .from("customer_prescriptions")
+        .select("id, medicine_id, medicine_name, dosage_frequency")
+        .eq("customer_id", customerId);
+      if (cancelled) return;
+      setPrescriptions(presc || []);
+
+      if (prescribeId) {
+        const target = (presc || []).find((p) => p.id === prescribeId);
+        if (target) await addPrescriptionToCart(target);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, profile?.pharmacy_id]);
+
+  // Load prescriptions whenever customer changes via picker
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setPrescriptions([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("customer_prescriptions")
+        .select("id, medicine_id, medicine_name, dosage_frequency")
+        .eq("customer_id", selectedCustomer.id);
+      setPrescriptions(data || []);
+    })();
+  }, [selectedCustomer]);
+
+  const addPrescriptionToCart = useCallback(async (presc: { medicine_id: string | null; medicine_name: string }) => {
+    if (!profile?.pharmacy_id) return;
+    let med: Medicine | null = null;
+    if (presc.medicine_id) {
+      const { data } = await supabase
+        .from("medicines")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .eq("id", presc.medicine_id)
+        .maybeSingle();
+      med = (data as Medicine | null) ?? null;
+    }
+    if (!med) {
+      const { data } = await supabase
+        .from("medicines")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .ilike("name", presc.medicine_name)
+        .limit(1)
+        .maybeSingle();
+      med = (data as Medicine | null) ?? null;
+    }
+    if (!med) {
+      toast.error(`"${presc.medicine_name}" not in inventory`);
+      return;
+    }
+    setCartItems((prev) => {
+      if (prev.find((c) => c.medicine.id === med!.id)) return prev;
+      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+    });
+    setExpandedId(med.id);
+  }, [profile?.pharmacy_id, saleType, defaultDiscount]);
 
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
@@ -299,6 +386,35 @@ const CreateSale = () => {
             .update({ stock_quantity: newStock })
             .eq("id", c.medicine.id);
         }
+
+        // Customer ledger posting (due/split)
+        if (selectedCustomer && (paymentMethod === "due" || paymentMethod === "split")) {
+          const paid = paymentMethod === "split" ? Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0)) : 0;
+          const dueAmt = Math.max(0, netTotal - paid);
+          if (dueAmt > 0) {
+            const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
+              customer_id: selectedCustomer.id,
+              pharmacy_id: profile.pharmacy_id,
+              user_id: profile.id,
+              entry_type: "due",
+              amount: dueAmt,
+              description: `Sale #${saleId.slice(0, 8)}`,
+              sale_id: saleId,
+            });
+            if (ledgerErr) throw ledgerErr;
+          }
+          if (paymentMethod === "split" && paid > 0) {
+            await supabase.from("cash_transactions").insert({
+              pharmacy_id: profile.pharmacy_id,
+              user_id: profile.id,
+              direction: "in",
+              category: "sale_cash",
+              party_name: selectedCustomer.name,
+              amount: paid,
+              sale_id: saleId,
+            });
+          }
+        }
       }
 
       toast.success(status === "draft" ? "Sale saved as draft" : "Sale completed!");
@@ -433,6 +549,38 @@ const CreateSale = () => {
         )}
         {searching && (
           <p className="text-xs text-gray-400 mt-2 text-center">Searching...</p>
+        )}
+
+        {/* Customer picker */}
+        {profile?.pharmacy_id && (
+          <div className="mt-3">
+            <CustomerPickerPopover
+              pharmacyId={profile.pharmacy_id}
+              selected={selectedCustomer}
+              onSelect={setSelectedCustomer}
+              onQuickAdd={() => setQuickAddOpen(true)}
+            />
+          </div>
+        )}
+
+        {/* Prescription suggestions strip */}
+        {selectedCustomer && prescriptions.length > 0 && cartItems.length === 0 && !searchQuery && (
+          <div className="mt-3">
+            <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Saved for {selectedCustomer.name}</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {prescriptions.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => addPrescriptionToCart(p)}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
+                >
+                  <Pill className="w-3 h-3" />
+                  <span className="truncate max-w-[110px]">{p.medicine_name}</span>
+                  <span className="font-mono text-[10px] text-blue-500">{p.dosage_frequency}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -658,7 +806,51 @@ const CreateSale = () => {
       </div>
 
       {/* Footer Actions */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 px-4 py-3 flex gap-3 z-50">
+      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 px-4 py-3 z-50">
+        {selectedCustomer && cartItems.length > 0 && (
+          <div className="mb-2">
+            <div className="grid grid-cols-3 gap-1 bg-gray-100 rounded-xl p-1">
+              {(["cash", "due", "split"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setPaymentMethod(m)}
+                  className={`py-1.5 rounded-lg text-xs font-bold capitalize transition ${
+                    paymentMethod === m ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            {paymentMethod === "split" && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-gray-500">Paid now</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-semibold">৳</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max={netTotal}
+                    value={paidNow}
+                    onChange={(e) => setPaidNow(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-8 pl-6 pr-2 text-xs rounded-lg border border-gray-200 bg-white outline-none"
+                  />
+                </div>
+                <span className="text-xs font-semibold text-red-600 whitespace-nowrap">
+                  Due ৳{Math.max(0, netTotal - (parseFloat(paidNow) || 0))}
+                </span>
+              </div>
+            )}
+            {paymentMethod === "due" && (
+              <p className="mt-1.5 text-[11px] text-red-600 font-semibold">
+                ৳{netTotal} will be added to {selectedCustomer.name}'s ledger
+              </p>
+            )}
+          </div>
+        )}
+        <div className="flex gap-3">
         <button
           onClick={() => saveSale("draft")}
           disabled={saving || cartItems.length === 0}
@@ -673,7 +865,17 @@ const CreateSale = () => {
         >
           {saving ? "Saving..." : <><Sparkles className="w-4 h-4 inline mr-1" />Complete Sale</>}
         </button>
+        </div>
       </div>
+
+      {profile?.pharmacy_id && (
+        <QuickAddCustomerSheet
+          open={quickAddOpen}
+          onOpenChange={setQuickAddOpen}
+          pharmacyId={profile.pharmacy_id}
+          onSaved={(c) => setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone, total_due: 0 })}
+        />
+      )}
     </div>
   );
 };

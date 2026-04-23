@@ -82,11 +82,12 @@ const DailyTransactions = () => {
         .lte("occurred_at", to)
         .order("occurred_at", { ascending: false }),
       supabase
-        .from("customer_dues")
-        .select("amount_due,amount_paid")
+        .from("customer_ledger")
+        .select("amount,entry_type")
         .eq("pharmacy_id", profile.pharmacy_id)
-        .gte("created_at", from)
-        .lte("created_at", to),
+        .eq("entry_type", "due")
+        .gte("occurred_at", from)
+        .lte("occurred_at", to),
       supabase
         .from("pharmacy_settings")
         .select("starting_cash_balance")
@@ -106,7 +107,7 @@ const DailyTransactions = () => {
     setTxs((txRes.data ?? []) as CashTx[]);
     setDuesOpen(
       (duesRes.data ?? []).reduce(
-        (s, r: any) => s + (Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
+        (s, r: any) => s + Number(r.amount || 0),
         0,
       ),
     );
