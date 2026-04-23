@@ -550,6 +550,38 @@ const CreateSale = () => {
         {searching && (
           <p className="text-xs text-gray-400 mt-2 text-center">Searching...</p>
         )}
+
+        {/* Customer picker */}
+        {profile?.pharmacy_id && (
+          <div className="mt-3">
+            <CustomerPickerPopover
+              pharmacyId={profile.pharmacy_id}
+              selected={selectedCustomer}
+              onSelect={setSelectedCustomer}
+              onQuickAdd={() => setQuickAddOpen(true)}
+            />
+          </div>
+        )}
+
+        {/* Prescription suggestions strip */}
+        {selectedCustomer && prescriptions.length > 0 && cartItems.length === 0 && !searchQuery && (
+          <div className="mt-3">
+            <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Saved for {selectedCustomer.name}</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {prescriptions.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => addPrescriptionToCart(p)}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
+                >
+                  <Pill className="w-3 h-3" />
+                  <span className="truncate max-w-[110px]">{p.medicine_name}</span>
+                  <span className="font-mono text-[10px] text-blue-500">{p.dosage_frequency}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Cart */}
