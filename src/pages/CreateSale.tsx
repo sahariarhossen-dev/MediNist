@@ -269,36 +269,6 @@ const CreateSale = () => {
     setSearchResults([]);
   }, [saleType, defaultDiscount]);
 
-  const togglePendingMed = useCallback((med: Medicine) => {
-    setPendingSelection((prev) => {
-      const next = new Map(prev);
-      if (next.has(med.id)) next.delete(med.id);
-      else next.set(med.id, med);
-      return next;
-    });
-  }, []);
-
-  const confirmPendingSelection = useCallback(() => {
-    if (pendingSelection.size === 0) return;
-    const meds = Array.from(pendingSelection.values());
-    let firstAddedId: string | null = null;
-    setCartItems((prev) => {
-      const existingIds = new Set(prev.map((c) => c.medicine.id));
-      const additions: CartItem[] = [];
-      for (const med of meds) {
-        if (existingIds.has(med.id)) continue;
-        additions.push({ medicine: med, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 });
-        if (!firstAddedId) firstAddedId = med.id;
-      }
-      if (additions.length === 0) return prev;
-      return [...additions, ...prev];
-    });
-    if (firstAddedId) setExpandedId(firstAddedId);
-    setPendingSelection(new Map());
-    setSearchQuery("");
-    setSearchResults([]);
-  }, [pendingSelection, saleType, defaultDiscount]);
-
   const removeFromCart = useCallback((id: string) => {
     setCartItems((prev) => prev.filter((c) => c.medicine.id !== id));
   }, []);
