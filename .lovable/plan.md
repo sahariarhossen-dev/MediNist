@@ -1,75 +1,137 @@
 
 
-## New heartbeat icon — bold scaling + cache-bust
+## Smart Customer Vault — CRM, Credit Ledger & Prescription Vault
 
-Replace the current 'M' icon set with the new heartbeat-pulse + cross logo from `image_19.png`. Crop out the dark background, keep only the white squircle + grey border, then scale the inner blue artwork up so it fills the squircle with just ~10% safe padding. Append a version query string to every icon URL so browsers fetch fresh assets immediately.
+A new "Customers" hub inside More: searchable directory, profile with **Ledger** + **Prescription Vault** tabs, and full sync with the Sales/Checkout flow so credit sales auto-post to the customer's ledger and saved prescriptions auto-suggest during billing.
 
-### 1. Master + crop
+### 1. Database (Supabase migration)
 
-- Copy `user-uploads://Untitled_1080_x_1080_px_4.png` → `public/icons/icon-master.png` (overwrites current master).
-- The uploaded image already has a white background (no dark surround visible in the file itself), so the work is **safe-trim + tight crop** to the squircle plate, then build a clean asset:
-  1. Trim outer whitespace around the squircle.
-  2. Save the trimmed squircle plate as `/tmp/squircle-plate.png` (this preserves the subtle grey border).
-  3. Mask out the inner blue artwork (heartbeat circle + cross) by color-keying everything that isn't near-white/grey, save as `/tmp/glyph-only.png` with transparent background.
+Three new tables, all scoped to `pharmacy_id` with RLS following the existing `cash_transactions` pattern (members can read/write within their pharmacy, admins can delete).
 
-### 2. Compose the new icon (1024×1024 base)
+**`customers`**
+- `id uuid pk`, `pharmacy_id uuid not null`, `name text not null`, `phone text`, `address text`
+- `total_due numeric not null default 0` (denormalized running balance for fast list display)
+- `notes text`, `created_at`, `updated_at`
+- Index: `(pharmacy_id, name)`, `(pharmacy_id, phone)`
+- Unique partial index on `(pharmacy_id, phone)` where phone is not null (prevents dupes; "Quick Add" reuses if phone matches)
 
-Build `/tmp/icon-base-1024.png`:
-- Solid white canvas `#FFFFFF`, full-bleed (no baked rounded corners — OS handles masking).
-- Composite `glyph-only.png` centered at **80% of canvas width** (= **10% safe padding** on each side) so the heartbeat + cross fill the square boldly instead of looking small/cramped.
-- Subtle premium shadow on the glyph: offset `0 / +6px`, blur ~14px, `rgba(11,40,90,0.16)`.
+**`customer_ledger`**
+- `id`, `customer_id uuid not null`, `pharmacy_id uuid not null`, `user_id uuid not null`
+- `entry_type text not null check in ('due','payment')` — 'due' = credit sale (red, increases balance), 'payment' = customer paid (green, decreases balance)
+- `amount numeric not null` (always positive, sign comes from `entry_type`)
+- `description text`, `sale_id uuid` (nullable, links to `sales.id` when posted from checkout)
+- `occurred_at timestamptz default now()`, `created_at`
 
-### 3. Export the icon set (overwrite in `public/icons/`)
+**`customer_prescriptions`**
+- `id`, `customer_id`, `pharmacy_id`
+- `medicine_id uuid` (nullable — falls back to free-text), `medicine_name text not null`, `strength text`
+- `dosage_frequency text not null` (e.g. `1+0+1`), `dosage_timing text` (e.g. "after meal"), `notes text`
+- `created_at`
 
-From the 1024 base, downscale (Lanczos):
-- `favicon-16.png` (16×16)
-- `favicon-32.png` (32×32)
-- `favicon-48.png` (48×48)
-- `icon-192.png` (192×192)  ← also used by `apple-touch-icon`
-- `icon-512.png` (512×512)
-- `icon-512-maskable.png` (512×512, glyph re-rendered at **60% width** → ~20% safe zone so Android's adaptive crop doesn't clip the pulse/cross)
-- Regenerate `public/favicon.ico` (multi-res 16/32/48) from the same base.
+**Trigger `customer_ledger_recalc_total`** (after insert/update/delete on `customer_ledger`):
+recompute `customers.total_due = SUM(due) - SUM(payment)` for the affected `customer_id`. Keeps the directory list fast and accurate.
 
-### 4. Cache-bust everything (`?v=…`)
+**Note on existing `customer_dues`**: that table stays as-is (legacy invoice-level dues used by `DailyTransactions`) — not deleted, not modified. The new `customer_ledger` is the source of truth for the CRM. The Daily Transactions "Today's Due" card will switch to summing `customer_ledger` entries with `entry_type='due'` for the day so old and new flows stay consistent. (No data migration needed since `customer_dues` is empty.)
 
-Pick one shared version token (e.g. `v=20260422`) and append it to every icon URL in:
+### 2. Routes & navigation
 
-**`index.html`**
-```html
-<link rel="icon" href="/favicon.ico?v=20260422" sizes="any" />
-<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png?v=20260422" />
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=20260422" />
-<link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png?v=20260422" />
-<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png?v=20260422" />
-<link rel="manifest" href="/manifest.json?v=20260422" />
-```
+- New route `/more/customers` → `CustomersList` page
+- New route `/more/customers/:id` → `CustomerProfile` page (with internal Tabs)
+- Add "Customers" entry to the menu in `src/pages/More.tsx` (icon: `Users`, color `text-purple-600`), placed above "Daily Transactions"
 
-**`public/manifest.json`** — append `?v=20260422` to each icon `src`:
-```json
-{ "src": "/icons/icon-192.png?v=20260422", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-{ "src": "/icons/icon-512.png?v=20260422", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-{ "src": "/icons/icon-512-maskable.png?v=20260422", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-```
-Other manifest fields (name, theme_color `#0B5FFF`, background `#FFFFFF`, display `standalone`) stay unchanged.
+### 3. Customer Directory (`src/pages/Customers.tsx`)
 
-### 5. App-page constraint
+Mobile-first list (matching `More`/`DailyTransactions` style):
+- AppHeader + back chevron + title "Customers"
+- Sticky search input — debounced, queries `customers` filtered by `ilike name` OR `ilike phone` within pharmacy
+- "Quick Add" floating + button (bottom-right, same FAB style as DailyTransactions)
+- Each row card: avatar initials, name, phone, and right-aligned `Total Due` chip
+  - Due > 0 → red background pill (`bg-red-50 text-red-600`)
+  - Due == 0 → muted "Settled" pill
+  - Due < 0 (advance) → green pill (`bg-green-50 text-green-700`)
+- Tap row → navigate to `/more/customers/:id`
 
-No changes to any React component, page, header, dashboard, `LogoMark`, or `LogoFull`. The new heartbeat artwork lives **only** at `/favicon.ico`, `/icons/*`, and inside `manifest.json` — never referenced from app UI.
+**Quick Add sheet** (reuses `Sheet` like `LogTransactionSheet`): name (required), phone, address. On save, insert into `customers`. If phone collides with existing customer in same pharmacy, reuse it and navigate to that profile.
 
-### 6. QA
+### 4. Customer Profile (`src/pages/CustomerProfile.tsx`)
 
-- `identify` each output to confirm correct dimensions and full-bleed white background.
-- Render `icon-512.png` and `icon-512-maskable.png` to preview images and visually verify:
-  - Heartbeat + cross are large and bold (≈80% of canvas), not tiny.
-  - 10% padding on standard, ~20% padding on maskable.
-  - White background edge-to-edge, no leftover dark surround.
-  - Subtle shadow visible, premium not heavy.
-- Overlay a circle + squircle mask on `icon-512-maskable.png` to confirm nothing critical is clipped.
-- Hard-refresh preview, confirm browser tab shows the new heartbeat favicon (cache-bust query proves it).
+Header: back arrow + customer name + phone, plus an edit pencil opening the same Quick Add sheet in edit mode.
 
-### Files
+**Balance Card** (top, full-width):
+- Big "Total Due" amount, colored red if > 0, green if customer is in advance, gray if settled
+- Sub-row: small `Sales (due)` total in red + `Payments` total in green
+- Right side: "Receive Payment" primary button → opens a sheet to log a `payment` ledger entry (amount + optional note). On save, also writes a matching `cash_transactions` row with `direction='in'`, `category='due_collection'`, `party_name=<customer name>` so it shows up in Daily Transactions exactly like today.
 
-- **Replace** (overwrite): `public/icons/icon-master.png`, `favicon-16.png`, `favicon-32.png`, `favicon-48.png`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`; `public/favicon.ico`.
-- **Edit**: `index.html` (append `?v=…` to all icon + manifest links), `public/manifest.json` (append `?v=…` to each icon `src`).
-- **Unchanged**: all `src/**`, every page, every component.
+**Tabs** (`@/components/ui/tabs`): `Ledger` | `Prescription Vault`
+
+**Ledger tab — vertical timeline**
+- Reverse-chronological list of `customer_ledger` rows
+- Each item: left-side colored dot on a vertical line (red for `due`, green for `payment`), date/time, description, sale link chevron if `sale_id` present (tap → `/invoice/:saleId`)
+- Right-side amount: red `+৳X` for due, green `−৳X` for payment
+- Empty state: "No transactions yet"
+
+**Prescription Vault tab**
+- "Add Prescription" button at top → sheet with: medicine search (reuses the same `medicines` typeahead from `CreateSale`), strength (auto-filled from `product_size` if found, editable), dosage frequency (text input with helper text "e.g. 1+0+1"), dosage timing (select: Before meal / After meal / With meal / As needed), free-text notes
+- List of cards, large-text and high-contrast for quick reading at the counter:
+  - Bold medicine name + strength badge
+  - Big monospaced `1+0+1` chip + timing label
+  - Right side: "Add to Sale" button → navigates to `/create-sale?customer=<id>&prescribe=<presId>` (CreateSale picks it up, see §5)
+  - Trailing kebab menu: Edit / Delete
+
+### 5. Sales / Checkout integration (`src/pages/CreateSale.tsx`)
+
+**Customer picker** — new compact selector at the top of the cart area (under the search bar, above the cart):
+- Pill button "Walk-in customer" (default) → opens a popover with: search field over `customers`, "+ Quick Add" inline link, and a clear "Walk-in" option
+- Selected state shows name + phone in the pill, with an `X` to clear
+- URL `?customer=<id>` pre-selects on load (used by the "Add to Sale" deep-link from the Prescription Vault)
+
+**Prescription suggestions** — when a customer is selected and the cart search is empty, render a "Saved for {name}" strip above the empty-cart hint:
+- Horizontal scroll row of small chips, each = one prescription (medicine name + dosage)
+- Tap chip → adds that medicine to the cart at qty 1 (resolves by `medicine_id` if set, else by name lookup in current pharmacy's `medicines`)
+- Deep-link `?prescribe=<presId>` auto-adds that single prescription on load
+
+**Payment method on Complete** — replace the single "Complete Sale" button with a small payment-method choice that appears only when a customer is selected:
+- Segmented control: `Cash` (default) | `Due` | `Split`
+- `Cash`: existing flow unchanged
+- `Due`: on save, after creating the `sales` row, also insert a `customer_ledger` row `{customer_id, entry_type:'due', amount: netTotal, sale_id, description: 'Sale #<short id>'}`. Trigger updates `customers.total_due`. No `cash_transactions` row is written for the due portion (it's not cash).
+- `Split`: numeric input for "Paid now" (≤ netTotal). Writes both: a `customer_ledger` 'due' row for the remainder + the existing cash flow for the paid portion.
+- Walk-in customers: payment-method UI is hidden, behavior is exactly today.
+
+**Daily Transactions reconciliation**: in `DailyTransactions.tsx`, swap the `customer_dues` query for `customer_ledger` filtered by today and `entry_type='due'`, so "Today's Due" reflects the new flow. "Cash Received" / "Cash in Hand" remain driven by `cash_transactions` (unchanged), so the "Receive Payment" action still feeds in correctly via the `due_collection` row it writes.
+
+### 6. Visual language
+
+- Reuses existing tokens (`bg-[#F4F6FB]`, `mx-page`, `px-page`, `text-fluid-*`, `rounded-2xl shadow-sm` cards) — no new design system
+- Color rules: **due/credit = red** (`text-red-600` / `bg-red-50`), **payment/advance = green** (`text-green-600` / `bg-green-50`), neutral = `text-gray-700`
+- Prescription cards use larger fluid text (`text-fluid-base` for medicine, `text-fluid-lg` mono for `1+0+1`) and a left accent border in `border-l-4 border-blue-500` so a busy pharmacist can scan at a glance
+- Mobile-first widths via `w-full max-w-md mx-auto`, FAB matches DailyTransactions positioning
+
+### 7. Files
+
+**Migration**: tables `customers`, `customer_ledger`, `customer_prescriptions` + RLS + recalc trigger.
+
+**New pages/components**:
+- `src/pages/Customers.tsx`
+- `src/pages/CustomerProfile.tsx`
+- `src/components/customers/QuickAddCustomerSheet.tsx`
+- `src/components/customers/ReceivePaymentSheet.tsx`
+- `src/components/customers/AddPrescriptionSheet.tsx`
+- `src/components/customers/CustomerPickerPopover.tsx`
+- `src/components/customers/LedgerTimeline.tsx`
+- `src/components/customers/PrescriptionCard.tsx`
+
+**Edited**:
+- `src/App.tsx` — register two new routes
+- `src/pages/More.tsx` — add "Customers" menu item
+- `src/pages/CreateSale.tsx` — customer picker, prescription strip, payment-method segmented control, due/split posting logic, deep-link handling
+- `src/pages/DailyTransactions.tsx` — switch "Today's Due" source to `customer_ledger`
+
+**Unchanged**: every other page, all existing components, auth, RLS for unrelated tables, icons/manifest.
+
+### 8. Constraints honored
+
+- Roles & RLS use the existing `get_user_pharmacy_id()` / `is_pharmacy_admin()` security-definer functions — no new roles, no role storage on `profiles`
+- All inserts include `pharmacy_id = get_user_pharmacy_id()` and `user_id = auth.uid()` to satisfy RLS
+- No client-side validation of admin status; payment-collection write-back uses the same `cash_transactions` policies already in place
+- No changes to icons, manifest, or app branding
 
