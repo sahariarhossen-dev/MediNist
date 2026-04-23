@@ -47,6 +47,13 @@ const CreateSale = () => {
   const [discountInput, setDiscountInput] = useState("10");
   const [defaultDiscount, setDefaultDiscount] = useState(10);
 
+  // Customer & payment method
+  const [selectedCustomer, setSelectedCustomer] = useState<PickedCustomer | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "due" | "split">("cash");
+  const [paidNow, setPaidNow] = useState<string>("");
+  const [prescriptions, setPrescriptions] = useState<Array<{ id: string; medicine_id: string | null; medicine_name: string; dosage_frequency: string }>>([]);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+
   // Fetch global default discount from pharmacy settings
   useEffect(() => {
     if (!profile?.pharmacy_id) return;
