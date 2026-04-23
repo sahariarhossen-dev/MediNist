@@ -386,6 +386,35 @@ const CreateSale = () => {
             .update({ stock_quantity: newStock })
             .eq("id", c.medicine.id);
         }
+
+        // Customer ledger posting (due/split)
+        if (selectedCustomer && (paymentMethod === "due" || paymentMethod === "split")) {
+          const paid = paymentMethod === "split" ? Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0)) : 0;
+          const dueAmt = Math.max(0, netTotal - paid);
+          if (dueAmt > 0) {
+            const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
+              customer_id: selectedCustomer.id,
+              pharmacy_id: profile.pharmacy_id,
+              user_id: profile.id,
+              entry_type: "due",
+              amount: dueAmt,
+              description: `Sale #${saleId.slice(0, 8)}`,
+              sale_id: saleId,
+            });
+            if (ledgerErr) throw ledgerErr;
+          }
+          if (paymentMethod === "split" && paid > 0) {
+            await supabase.from("cash_transactions").insert({
+              pharmacy_id: profile.pharmacy_id,
+              user_id: profile.id,
+              direction: "in",
+              category: "sale_cash",
+              party_name: selectedCustomer.name,
+              amount: paid,
+              sale_id: saleId,
+            });
+          }
+        }
       }
 
       toast.success(status === "draft" ? "Sale saved as draft" : "Sale completed!");
