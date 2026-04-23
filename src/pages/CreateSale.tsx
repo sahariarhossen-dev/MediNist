@@ -806,7 +806,51 @@ const CreateSale = () => {
       </div>
 
       {/* Footer Actions */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 px-4 py-3 flex gap-3 z-50">
+      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 px-4 py-3 z-50">
+        {selectedCustomer && cartItems.length > 0 && (
+          <div className="mb-2">
+            <div className="grid grid-cols-3 gap-1 bg-gray-100 rounded-xl p-1">
+              {(["cash", "due", "split"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setPaymentMethod(m)}
+                  className={`py-1.5 rounded-lg text-xs font-bold capitalize transition ${
+                    paymentMethod === m ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            {paymentMethod === "split" && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-gray-500">Paid now</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-semibold">৳</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max={netTotal}
+                    value={paidNow}
+                    onChange={(e) => setPaidNow(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-8 pl-6 pr-2 text-xs rounded-lg border border-gray-200 bg-white outline-none"
+                  />
+                </div>
+                <span className="text-xs font-semibold text-red-600 whitespace-nowrap">
+                  Due ৳{Math.max(0, netTotal - (parseFloat(paidNow) || 0))}
+                </span>
+              </div>
+            )}
+            {paymentMethod === "due" && (
+              <p className="mt-1.5 text-[11px] text-red-600 font-semibold">
+                ৳{netTotal} will be added to {selectedCustomer.name}'s ledger
+              </p>
+            )}
+          </div>
+        )}
+        <div className="flex gap-3">
         <button
           onClick={() => saveSale("draft")}
           disabled={saving || cartItems.length === 0}
@@ -821,7 +865,17 @@ const CreateSale = () => {
         >
           {saving ? "Saving..." : <><Sparkles className="w-4 h-4 inline mr-1" />Complete Sale</>}
         </button>
+        </div>
       </div>
+
+      {profile?.pharmacy_id && (
+        <QuickAddCustomerSheet
+          open={quickAddOpen}
+          onOpenChange={setQuickAddOpen}
+          pharmacyId={profile.pharmacy_id}
+          onSaved={(c) => setSelectedCustomer({ id: c.id, name: c.name, phone: c.phone, total_due: 0 })}
+        />
+      )}
     </div>
   );
 };
