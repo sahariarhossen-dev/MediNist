@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Sparkles, Pencil, Check } from "lucide-react";
+import { Sparkles, Pencil, Check, CheckCircle2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,6 +53,9 @@ const CreateSale = () => {
   const [paidNow, setPaidNow] = useState<string>("");
   const [prescriptions, setPrescriptions] = useState<Array<{ id: string; medicine_id: string | null; medicine_name: string; dosage_frequency: string }>>([]);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  // Multi-select pending picks from search dropdown
+  const [pendingSelection, setPendingSelection] = useState<Map<string, Medicine>>(new Map());
 
   // Fetch global default discount from pharmacy settings
   useEffect(() => {
