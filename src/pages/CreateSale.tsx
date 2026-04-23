@@ -144,6 +144,84 @@ const CreateSale = () => {
     loadDraft();
   }, [searchParams, profile?.pharmacy_id]);
 
+  // Pre-select customer from URL, load prescriptions, optionally auto-add one
+  useEffect(() => {
+    const customerId = searchParams.get("customer");
+    const prescribeId = searchParams.get("prescribe");
+    if (!customerId || !profile?.pharmacy_id) return;
+    let cancelled = false;
+    (async () => {
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("id, name, phone, total_due")
+        .eq("id", customerId)
+        .maybeSingle();
+      if (cancelled || !cust) return;
+      setSelectedCustomer(cust as PickedCustomer);
+
+      const { data: presc } = await supabase
+        .from("customer_prescriptions")
+        .select("id, medicine_id, medicine_name, dosage_frequency")
+        .eq("customer_id", customerId);
+      if (cancelled) return;
+      setPrescriptions(presc || []);
+
+      if (prescribeId) {
+        const target = (presc || []).find((p) => p.id === prescribeId);
+        if (target) await addPrescriptionToCart(target);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, profile?.pharmacy_id]);
+
+  // Load prescriptions whenever customer changes via picker
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setPrescriptions([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("customer_prescriptions")
+        .select("id, medicine_id, medicine_name, dosage_frequency")
+        .eq("customer_id", selectedCustomer.id);
+      setPrescriptions(data || []);
+    })();
+  }, [selectedCustomer]);
+
+  const addPrescriptionToCart = useCallback(async (presc: { medicine_id: string | null; medicine_name: string }) => {
+    if (!profile?.pharmacy_id) return;
+    let med: Medicine | null = null;
+    if (presc.medicine_id) {
+      const { data } = await supabase
+        .from("medicines")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .eq("id", presc.medicine_id)
+        .maybeSingle();
+      med = (data as Medicine | null) ?? null;
+    }
+    if (!med) {
+      const { data } = await supabase
+        .from("medicines")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .ilike("name", presc.medicine_name)
+        .limit(1)
+        .maybeSingle();
+      med = (data as Medicine | null) ?? null;
+    }
+    if (!med) {
+      toast.error(`"${presc.medicine_name}" not in inventory`);
+      return;
+    }
+    setCartItems((prev) => {
+      if (prev.find((c) => c.medicine.id === med!.id)) return prev;
+      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+    });
+    setExpandedId(med.id);
+  }, [profile?.pharmacy_id, saleType, defaultDiscount]);
+
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
       setSearchResults([]);
