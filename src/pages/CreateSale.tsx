@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
+import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
 interface Medicine {
   id: string;
