@@ -540,7 +540,7 @@ const CreateSale = () => {
           />
           {searchQuery && (
             <button
-              onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+              onClick={() => { setSearchQuery(""); setSearchResults([]); setPendingSelection(new Map()); }}
               className="px-2 py-1"
             >
               <X className="w-4 h-4 text-gray-400 hover:text-gray-700 transition" />
