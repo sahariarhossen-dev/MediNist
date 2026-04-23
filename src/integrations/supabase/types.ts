@@ -169,6 +169,136 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          description: string | null
+          entry_type: string
+          id: string
+          occurred_at: string
+          pharmacy_id: string
+          sale_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          description?: string | null
+          entry_type: string
+          id?: string
+          occurred_at?: string
+          pharmacy_id: string
+          sale_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          occurred_at?: string
+          pharmacy_id?: string
+          sale_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_ledger_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_prescriptions: {
+        Row: {
+          created_at: string
+          customer_id: string
+          dosage_frequency: string
+          dosage_timing: string | null
+          id: string
+          medicine_id: string | null
+          medicine_name: string
+          notes: string | null
+          pharmacy_id: string
+          strength: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          dosage_frequency: string
+          dosage_timing?: string | null
+          id?: string
+          medicine_id?: string | null
+          medicine_name: string
+          notes?: string | null
+          pharmacy_id: string
+          strength?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          dosage_frequency?: string
+          dosage_timing?: string | null
+          id?: string
+          medicine_id?: string | null
+          medicine_name?: string
+          notes?: string | null
+          pharmacy_id?: string
+          strength?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_prescriptions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          pharmacy_id: string
+          phone: string | null
+          total_due: number
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          pharmacy_id: string
+          phone?: string | null
+          total_due?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          pharmacy_id?: string
+          phone?: string | null
+          total_due?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_closings: {
         Row: {
           closed_at: string
