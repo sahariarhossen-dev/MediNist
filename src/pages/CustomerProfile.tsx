@@ -196,19 +196,46 @@ const CustomerProfile = () => {
                 <p className="text-xs text-gray-400 mt-1">Save recurring meds for one-tap re-billing.</p>
               </div>
             ) : (
-              prescriptions.map((p) => (
-                <PrescriptionCard
-                  key={p.id}
-                  prescription={p}
-                  onAddToSale={() => navigate(`/create-sale?customer=${customer.id}&prescribe=${p.id}`)}
-                  onEdit={() => { setEditingPresc(p); setPrescOpen(true); }}
-                  onDelete={() => handleDeletePresc(p)}
-                />
-              ))
+              <>
+                <label className="flex items-center gap-2 px-1 py-1 cursor-pointer select-none">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all prescriptions"
+                  />
+                  <span className="text-xs font-semibold text-gray-600">
+                    {selectedPrescIds.size > 0 ? `${selectedPrescIds.size} selected` : "Select all"}
+                  </span>
+                </label>
+                {prescriptions.map((p) => (
+                  <PrescriptionCard
+                    key={p.id}
+                    prescription={p}
+                    selected={selectedPrescIds.has(p.id)}
+                    onToggleSelect={() => togglePresc(p.id)}
+                    onEdit={() => { setEditingPresc(p); setPrescOpen(true); }}
+                    onDelete={() => handleDeletePresc(p)}
+                  />
+                ))}
+              </>
             )}
           </TabsContent>
         </Tabs>
       </div>
+
+      {selectedPrescIds.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-40 px-page pointer-events-none">
+          <div className="max-w-md mx-auto pointer-events-auto">
+            <button
+              onClick={handleAddSelectedToSale}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-fluid-sm font-semibold shadow-lg"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              Add Selected ({selectedPrescIds.size}) to Sale
+            </button>
+          </div>
+        </div>
+      )}
 
       {profile?.pharmacy_id && (
         <>
