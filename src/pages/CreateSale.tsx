@@ -170,8 +170,11 @@ const CreateSale = () => {
       setPrescriptions(presc || []);
 
       if (prescribeId) {
-        const target = (presc || []).find((p) => p.id === prescribeId);
-        if (target) await addPrescriptionToCart(target);
+        const ids = prescribeId.split(",").map((s) => s.trim()).filter(Boolean);
+        for (const pid of ids) {
+          const target = (presc || []).find((p) => p.id === pid);
+          if (target) await addPrescriptionToCart(target);
+        }
       }
     })();
     return () => { cancelled = true; };
