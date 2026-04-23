@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus } from "lucide-react";
+import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus, ShoppingCart } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ const CustomerProfile = () => {
   const [payOpen, setPayOpen] = useState(false);
   const [prescOpen, setPrescOpen] = useState(false);
   const [editingPresc, setEditingPresc] = useState<Prescription | null>(null);
+  const [selectedPrescIds, setSelectedPrescIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -45,6 +47,39 @@ const CustomerProfile = () => {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset selection when the prescription list changes
+  useEffect(() => {
+    setSelectedPrescIds((prev) => {
+      const valid = new Set(prescriptions.map((p) => p.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (valid.has(id)) next.add(id); });
+      return next;
+    });
+  }, [prescriptions]);
+
+  const togglePresc = (pid: string) => {
+    setSelectedPrescIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+  };
+
+  const allSelected = prescriptions.length > 0 && selectedPrescIds.size === prescriptions.length;
+  const someSelected = selectedPrescIds.size > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedPrescIds(new Set());
+    else setSelectedPrescIds(new Set(prescriptions.map((p) => p.id)));
+  };
+
+  const handleAddSelectedToSale = () => {
+    if (!customer || selectedPrescIds.size === 0) return;
+    const ids = Array.from(selectedPrescIds).join(",");
+    navigate(`/create-sale?customer=${customer.id}&prescribe=${ids}`);
+  };
 
   const totals = ledger.reduce(
     (acc, e) => {
@@ -161,19 +196,46 @@ const CustomerProfile = () => {
                 <p className="text-xs text-gray-400 mt-1">Save recurring meds for one-tap re-billing.</p>
               </div>
             ) : (
-              prescriptions.map((p) => (
-                <PrescriptionCard
-                  key={p.id}
-                  prescription={p}
-                  onAddToSale={() => navigate(`/create-sale?customer=${customer.id}&prescribe=${p.id}`)}
-                  onEdit={() => { setEditingPresc(p); setPrescOpen(true); }}
-                  onDelete={() => handleDeletePresc(p)}
-                />
-              ))
+              <>
+                <label className="flex items-center gap-2 px-1 py-1 cursor-pointer select-none">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all prescriptions"
+                  />
+                  <span className="text-xs font-semibold text-gray-600">
+                    {selectedPrescIds.size > 0 ? `${selectedPrescIds.size} selected` : "Select all"}
+                  </span>
+                </label>
+                {prescriptions.map((p) => (
+                  <PrescriptionCard
+                    key={p.id}
+                    prescription={p}
+                    selected={selectedPrescIds.has(p.id)}
+                    onToggleSelect={() => togglePresc(p.id)}
+                    onEdit={() => { setEditingPresc(p); setPrescOpen(true); }}
+                    onDelete={() => handleDeletePresc(p)}
+                  />
+                ))}
+              </>
             )}
           </TabsContent>
         </Tabs>
       </div>
+
+      {selectedPrescIds.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-40 px-page pointer-events-none">
+          <div className="max-w-md mx-auto pointer-events-auto">
+            <button
+              onClick={handleAddSelectedToSale}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-fluid-sm font-semibold shadow-lg"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              Add Selected ({selectedPrescIds.size}) to Sale
+            </button>
+          </div>
+        </div>
+      )}
 
       {profile?.pharmacy_id && (
         <>
