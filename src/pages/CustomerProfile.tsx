@@ -228,7 +228,7 @@ const CustomerProfile = () => {
           <div className="max-w-md mx-auto pointer-events-auto">
             <button
               onClick={handleAddSelectedToSale}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-fluid-sm font-semibold shadow-lg"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-fluid-sm font-semibold shadow-lg"
             >
               <ShoppingCart className="w-4 h-4" />
               Add Selected ({selectedPrescIds.size}) to Sale
