@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus } from "lucide-react";
+import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus, ShoppingCart } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ const CustomerProfile = () => {
   const [payOpen, setPayOpen] = useState(false);
   const [prescOpen, setPrescOpen] = useState(false);
   const [editingPresc, setEditingPresc] = useState<Prescription | null>(null);
+  const [selectedPrescIds, setSelectedPrescIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -45,6 +47,39 @@ const CustomerProfile = () => {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset selection when the prescription list changes
+  useEffect(() => {
+    setSelectedPrescIds((prev) => {
+      const valid = new Set(prescriptions.map((p) => p.id));
+      const next = new Set<string>();
+      prev.forEach((id) => { if (valid.has(id)) next.add(id); });
+      return next;
+    });
+  }, [prescriptions]);
+
+  const togglePresc = (pid: string) => {
+    setSelectedPrescIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+  };
+
+  const allSelected = prescriptions.length > 0 && selectedPrescIds.size === prescriptions.length;
+  const someSelected = selectedPrescIds.size > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedPrescIds(new Set());
+    else setSelectedPrescIds(new Set(prescriptions.map((p) => p.id)));
+  };
+
+  const handleAddSelectedToSale = () => {
+    if (!customer || selectedPrescIds.size === 0) return;
+    const ids = Array.from(selectedPrescIds).join(",");
+    navigate(`/create-sale?customer=${customer.id}&prescribe=${ids}`);
+  };
 
   const totals = ledger.reduce(
     (acc, e) => {
