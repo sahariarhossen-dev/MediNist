@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
-import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock, Inbox } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -231,22 +231,6 @@ const DailyTransactions = () => {
         <SummaryCard label="Cash Sales" value={cashSalesTotal} tone="blue-soft" />
         <SummaryCard label="Total Payments" value={totalPayments} tone="teal" />
         <SummaryCard label="Today's Due" value={duesOpen} tone="teal-soft" />
-      </div>
-
-      {/* Due Payment Received (separate from operational summaries) */}
-      <div className="mx-page mt-3 bg-green-50 border border-green-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-          <Inbox size={20} className="text-green-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-fluid-xs font-medium text-green-700/80">Due Payment Received</p>
-          <p className="text-fluid-lg font-bold text-green-700 tabular-nums truncate">
-            ৳{formatBDT(dueReceived)}
-          </p>
-        </div>
-        <p className="text-fluid-xs text-green-600/70 text-right leading-tight whitespace-nowrap">
-          Collected<br />today
-        </p>
       </div>
 
       {/* Cash in Hand */}
