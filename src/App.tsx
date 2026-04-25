@@ -27,6 +27,8 @@ import DailyTransactions from "./pages/DailyTransactions.tsx";
 import AllTransactions from "./pages/AllTransactions.tsx";
 import Customers from "./pages/Customers.tsx";
 import CustomerProfile from "./pages/CustomerProfile.tsx";
+import Notes from "./pages/Notes.tsx";
+import NoteEditor from "./pages/NoteEditor.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -71,6 +73,8 @@ const App = () => (
             <Route path="/more/all-transactions" element={<ProtectedRoute><AllTransactions /></ProtectedRoute>} />
             <Route path="/more/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/more/customers/:id" element={<ProtectedRoute><CustomerProfile /></ProtectedRoute>} />
+            <Route path="/more/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
+            <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
