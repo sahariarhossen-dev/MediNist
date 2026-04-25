@@ -14,6 +14,23 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authenticate the caller. This endpoint is intended for the scheduled
+    // cron job and authorized admins only — it must never be invoked
+    // anonymously since it uses the service role key and rewrites
+    // pharmacy-wide financial records.
+    const cronSecret = Deno.env.get("CRON_SECRET");
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const providedSecret =
+      req.headers.get("x-cron-secret") ??
+      (authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "");
+
+    if (!cronSecret || providedSecret !== cronSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,

@@ -211,6 +211,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Server-side validation to prevent prompt-injection via crafted roles
+    // or excessively long payloads from direct API callers.
+    const MAX_MESSAGES = 40;
+    const MAX_CONTENT_LEN = 4000;
+    const ALLOWED_ROLES = new Set(["user", "assistant"]);
+    if (messages.length > MAX_MESSAGES) {
+      return new Response(
+        JSON.stringify({ error: `Too many messages (max ${MAX_MESSAGES}).` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    for (const m of messages) {
+      if (
+        !m ||
+        typeof m.role !== "string" ||
+        !ALLOWED_ROLES.has(m.role) ||
+        typeof m.content !== "string" ||
+        m.content.length === 0 ||
+        m.content.length > MAX_CONTENT_LEN
+      ) {
+        return new Response(
+          JSON.stringify({ error: "Invalid message format." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
     console.log("ai-chat: DEEPSEEK_API_KEY configured", Boolean(DEEPSEEK_API_KEY));
     if (!DEEPSEEK_API_KEY) {
