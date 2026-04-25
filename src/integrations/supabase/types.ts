@@ -436,6 +436,54 @@ export type Database = {
           },
         ]
       }
+      notes: {
+        Row: {
+          color: string
+          contact_numbers: string[]
+          content: Json
+          created_at: string
+          creator_id: string
+          id: string
+          image_metadata: Json
+          is_pinned: boolean
+          is_public: boolean
+          pharmacy_id: string
+          tags: string[]
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          contact_numbers?: string[]
+          content?: Json
+          created_at?: string
+          creator_id: string
+          id?: string
+          image_metadata?: Json
+          is_pinned?: boolean
+          is_public?: boolean
+          pharmacy_id: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          contact_numbers?: string[]
+          content?: Json
+          created_at?: string
+          creator_id?: string
+          id?: string
+          image_metadata?: Json
+          is_pinned?: boolean
+          is_public?: boolean
+          pharmacy_id?: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pharmacies: {
         Row: {
           address: string | null
@@ -687,6 +735,13 @@ export type Database = {
           logo_url: string
           name: string
           upazila: string
+        }[]
+      }
+      get_pharmacy_member_names: {
+        Args: never
+        Returns: {
+          full_name: string
+          user_id: string
         }[]
       }
       get_user_pharmacy_id: { Args: never; Returns: string }
