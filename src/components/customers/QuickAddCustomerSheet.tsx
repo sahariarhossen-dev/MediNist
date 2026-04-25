@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useScrollFocusedInput } from "@/hooks/useScrollFocusedInput";
 
 export type CustomerLite = {
   id: string;
@@ -30,6 +31,8 @@ const QuickAddCustomerSheet = ({ open, onOpenChange, pharmacyId, editing, onSave
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  useScrollFocusedInput(formRef);
 
   useEffect(() => {
     if (open) {
@@ -114,7 +117,7 @@ const QuickAddCustomerSheet = ({ open, onOpenChange, pharmacyId, editing, onSave
           <p className="text-xs text-gray-500">Quickly add a customer to track dues and prescriptions.</p>
         </SheetHeader>
 
-        <div className="px-6 pb-6 pt-4 space-y-4">
+        <div ref={formRef} className="px-6 pb-6 pt-4 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="cust-name" className="text-sm text-gray-700">Name *</Label>
             <Input
