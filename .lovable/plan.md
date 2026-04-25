@@ -1,56 +1,126 @@
-## Refine Daily Transactions Accounting & Summary
+## Smart Notepad for MediNist
 
-Recompute the day's accounting so cash and credit are tracked separately, hide due-collection rows from the operational feed, and surface a dedicated "Due Payment Received" summary.
+A new "Notepad" section accessible from the More page, with a Google Keep-style masonry grid, multi-format note editor, pin/color coding, search, and per-note privacy (private by default, optional Shared with Team).
 
-### 1. New accounting model (`src/pages/DailyTransactions.tsx`)
+### 1. Database (Supabase migration)
 
-Compute these from the existing data sources (no schema change):
+Create two tables in the `public` schema:
 
-- **Total Sales** = sum of every completed `sales.total` for the day (cash sales + due sales together).
-- **Today's Due** = sum of `customer_ledger.amount` where `entry_type = 'due'` for the day. Already loaded via `duesOpen`.
-- **Cash Sales (today)** = `Total Sales − Today's Due` (clamped at 0). The current variable `cashSalesTotal` already does this.
-- **Due Received (today)** = sum of `cash_transactions.amount` where `direction='in'` and `category='due_collection'`. New derived value.
-- **Cash In / Investments (today)** = sum of `cash_transactions.amount` where `direction='in'` and `category='other_in'` (drop `sale_cash` and `due_collection` from this bucket).
-- **Total Payments (today)** = sum of `cash_transactions.amount` where `direction='out'` (unchanged).
-- **Cash in Hand** = `startingBalance + cashSalesTotal + dueReceived + cashInInvestments − totalPayments`. This matches the requested formula and avoids double-counting due sales.
+**`notes`**
+- `id` uuid PK
+- `pharmacy_id` uuid (NOT NULL) — used as `shop_id` for sharing
+- `creator_id` uuid (NOT NULL) — references `auth.uid()`
+- `title` text
+- `content` jsonb NOT NULL DEFAULT `'[]'` — array of typed blocks (see schema below)
+- `contact_numbers` text[] DEFAULT `'{}'` — clickable phones
+- `tags` text[] DEFAULT `'{}'`
+- `color` text DEFAULT `'default'` — one of: default, red, yellow, green, blue, purple, pink
+- `is_pinned` boolean DEFAULT false
+- `is_public` boolean DEFAULT false — the Shared-with-Team toggle
+- `image_metadata` jsonb DEFAULT `'{}'` — AI-friendly summary of attached images (urls, type: invoice/prescription/photo, ocr_text placeholder)
+- `created_at` / `updated_at` timestamptz with `touch_updated_at` trigger
 
-### 2. Summary cards (top grid)
+**`note_blocks` content shape (stored in `content` jsonb):**
+```
+[
+  { "id": "...", "type": "text",      "html": "..." },
+  { "id": "...", "type": "checklist", "items": [{ "text": "...", "checked": false }] },
+  { "id": "...", "type": "image",     "url": "...", "caption": "...", "category": "invoice|prescription|photo" }
+]
+```
 
-Keep the 2×2 grid, recolored as today, but with this content:
+**RLS policies on `notes`:**
+- SELECT: `creator_id = auth.uid() OR (pharmacy_id = get_user_pharmacy_id() AND is_public = true)`
+- INSERT: `creator_id = auth.uid() AND pharmacy_id = get_user_pharmacy_id()`
+- UPDATE: `creator_id = auth.uid()` (only creator edits)
+- DELETE: `creator_id = auth.uid() OR is_pharmacy_admin()`
 
-- Total Sales (cash + due) — blue
-- Cash Sales — blue-soft (replaces "Cash Received", which conflated dues + sales + collections)
-- Today's Due — teal-soft
-- Total Payments — teal
+**Storage bucket `note-attachments`** (public read, authenticated write). Path layout: `{pharmacy_id}/{note_id}/{uuid}.{ext}`. Storage RLS:
+- INSERT/UPDATE/DELETE: only when first folder = user's `pharmacy_id` AND user is authenticated
+- SELECT: public (so shared notes render images cross-user)
 
-Below the grid, add a **new full-width "Due Payment Received" card** (green accent, `bg-green-50 text-green-700`, wallet/inbox icon) showing the day's `dueReceived` total. Sits between the summary grid and the existing "Cash in Hand" card so it's visually distinct from operational summaries.
+**View for search-by-creator:** add a security-definer SQL function `get_pharmacy_member_names()` returning `{user_id, full_name}` for current user's pharmacy so we can filter notes by creator name without exposing full profiles.
 
-The "Cash in Hand" card stays in place and uses the new formula.
+### 2. Routes & Navigation
 
-### 3. Transactions feed filtering
+- New route `/more/notes` → `Notes.tsx` (list/grid view)
+- New route `/more/notes/:id` → `NoteEditor.tsx` (open existing or `new` for creation)
+- Add "Smart Notepad" entry in `src/pages/More.tsx` menu (StickyNote icon, brand blue)
+- Add "Notes" route registrations in `src/App.tsx`
 
-The "Transactions" list currently shows every `cash_transactions` row. Change `feedItems` to exclude `category='due_collection'` rows so the feed shows only operational entries: `other_in` (Cash In / Investment) and `direction='out'` (Payments / Expenses). The "See All" link continues to navigate to `/more/all-transactions`, which keeps the unfiltered history.
+### 3. Pages & Components
 
-The "Closing Balance from … (Carried Forward · Opening)" row at the top of the feed stays unchanged.
+**`src/pages/Notes.tsx`** — Keep-style grid
+- AppHeader + sticky search bar (filters: text, tag, creator name)
+- Filter chips: All / Pinned / Mine / Shared / by color
+- Masonry grid: 1 col on mobile (<480px), 2 cols on sm, 3 cols on md+ — using CSS columns for true masonry
+- Each card: title, content preview (text + checklist progress + image thumbs + contact chips), pin indicator, color background, "Shared" badge if public, creator avatar (only for shared notes from others)
+- Floating "+" FAB (brand `#2563eb`) → navigates to `/more/notes/new`
 
-### 4. Daily Closing Summary (bottom card)
+**`src/pages/NoteEditor.tsx`** — full-screen editor
+- Top bar: back, pin toggle, color picker popover, Shared-with-Team Switch, delete (creator only), save state indicator (autosave on blur + debounce)
+- Title input
+- Block list (re-orderable later, MVP additive):
+  - Add block toolbar: Text, Checklist, Image, Invoice photo (image with category=invoice), Prescription photo (image with category=prescription)
+  - Text block: contentEditable rich text (bold/italic/list via simple toolbar)
+  - Checklist block: list of items with checkbox + text + add/remove
+  - Image block: shows uploaded image + caption + category badge; tap to view full-screen
+- Contact Numbers section: chips of phone numbers, each with `<a href="tel:...">` to call; add/remove input
+- Tags input (comma-separated chips)
+- KeyboardAvoidingScroll wrapper (existing) so editor stays usable with keyboard open
+- Read-only mode when current user is not the creator (shared note)
 
-Replace the four rows with:
+**Reusable components in `src/components/notes/`:**
+- `NoteCard.tsx` — grid card
+- `BlockText.tsx`, `BlockChecklist.tsx`, `BlockImage.tsx`
+- `ColorPicker.tsx` — 7 swatches mapped to Tailwind classes
+- `ContactChips.tsx`
+- `NoteSearchBar.tsx`
 
-- Total Sales (cash + due) — green `+`
-- Total Cash In (investments only, i.e. `other_in`) — green `+`
-- Total Payments (expenses only) — red `−`
-- **Total Due Received** (new) — green `+`
+### 4. Visibility & Privacy Logic
 
-Net Cash Balance line at the bottom continues to show `cashInHand` using the new formula.
+- `is_public` defaults to `false` (Private). Toggle in editor flips it.
+- Backend enforcement via the RLS SELECT policy described above. Frontend simply queries `notes` and Supabase returns the union of own + shared.
+- Shared notes from other users are visually marked with a "Shared by {name}" footer and are read-only.
 
-### 5. Visual consistency
+### 5. AI-Ready Data Shape
 
-- Greens for in/received, reds for out/payments — already the convention.
-- Reuse existing `SummaryCard` / `SummaryRow` components; add a `green` / `green-soft` tone variant to `SummaryCard` for the new "Due Payment Received" card.
-- No changes to `LogTransactionSheet`, `ReceivePaymentSheet`, schema, RLS, or `close-daily-transactions` edge function — those continue to record data exactly as today; only the read-side aggregation on this page changes.
+- `content` is structured JSON (block types) → easy for an agent to walk and summarise.
+- `image_metadata` stores `{ urls: [...], categories: [...], ocr_text: null }` so a future Edge Function can populate OCR/insights without schema changes.
+- A future `ai-chat` tool can read `notes` rows directly; no migration needed later.
 
-### 6. Files
+### 6. UI / Styling
 
-- **Edit only**: `src/pages/DailyTransactions.tsx` (recompute aggregates, filter feed, add new summary card + closing row, add green tone to `SummaryCard`).
-- **Unchanged**: every other page, every component, the database, RLS, and the nightly closing job (which already accounts for `due_collection` as cash-in inside its `totalCashIn` and uses `Math.max(0, totalSales − totalDue)` for the cash portion — semantically equivalent to the new on-screen formula).
+- Brand colour `#2563eb` for primary actions, FAB, active filter chips, links.
+- Note card colour palette uses soft pastel backgrounds (Tailwind: `bg-red-50`, `bg-amber-50`, `bg-emerald-50`, `bg-sky-50`, `bg-violet-50`, `bg-pink-50`, `bg-white`) with matching border accents.
+- 100% mobile-responsive — uses existing `max-w-md` mobile container on small screens, expands to wider grid on `sm:` and `md:` breakpoints by removing the max-width on `/more/notes` only.
+- Reuses `KeyboardAvoidingScroll`, `Sheet`, `Switch`, `Input`, `Textarea`, `Button` from existing UI kit.
+
+### 7. Files to create
+
+```
+supabase migration: create notes table, RLS, storage bucket + policies, helper function
+src/pages/Notes.tsx
+src/pages/NoteEditor.tsx
+src/components/notes/NoteCard.tsx
+src/components/notes/NoteSearchBar.tsx
+src/components/notes/ColorPicker.tsx
+src/components/notes/ContactChips.tsx
+src/components/notes/blocks/BlockText.tsx
+src/components/notes/blocks/BlockChecklist.tsx
+src/components/notes/blocks/BlockImage.tsx
+src/hooks/useNotes.ts          (React Query: list/get/create/update/delete + search filters)
+src/lib/notesStorage.ts        (upload/delete attachments helpers)
+```
+
+### 8. Files to modify
+
+- `src/App.tsx` — register `/more/notes` and `/more/notes/:id` routes
+- `src/pages/More.tsx` — add "Smart Notepad" menu entry
+
+### 9. Out of scope (future)
+
+- Real-time collaboration / presence
+- Block re-ordering by drag
+- AI summaries (data shape is ready; UI/edge function not built)
+- Per-user share targeting (only pharmacy-wide for now)
