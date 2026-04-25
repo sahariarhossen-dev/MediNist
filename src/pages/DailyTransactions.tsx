@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
-import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock, Inbox } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -133,50 +133,53 @@ const DailyTransactions = () => {
     [salesRows],
   );
 
-  // Cash sales: completed sales not tied to an open due. Approximation:
-  // subtract any open dues from sales total to get the cash portion.
+  // Cash sales: portion of today's completed sales that wasn't booked as a new due.
   const cashSalesTotal = useMemo(
     () => Math.max(0, salesTotal - duesOpen),
     [salesTotal, duesOpen],
   );
 
-  // Sales are intentionally NOT shown in the manual transactions feed,
-  // but their cash portion still contributes to Cash Received / Cash in Hand.
-
-
-  // Manual entries only — sales are excluded from the feed but still counted in Cash in Hand.
+  // Operational feed: hide due_collection rows so the list focuses on
+  // shop investments (other_in) and expenses (direction=out).
   const feedItems = useMemo(
     () =>
-      [...txs].sort(
-        (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
-      ),
+      txs
+        .filter((t) => t.category !== "due_collection")
+        .sort(
+          (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
+        ),
     [txs],
   );
 
   const visibleFeedItems = useMemo(() => feedItems.slice(0, 5), [feedItems]);
 
-  const manualCashIn = useMemo(
+  // Investments / cash injections only — excludes due collections and legacy sale_cash.
+  const cashInInvestments = useMemo(
     () =>
       txs
-        .filter(
-          (t) =>
-            t.direction === "in" &&
-            (t.category === "sale_cash" ||
-              t.category === "due_collection" ||
-              t.category === "other_in"),
-        )
+        .filter((t) => t.direction === "in" && t.category === "other_in")
         .reduce((s, t) => s + Number(t.amount), 0),
     [txs],
   );
 
-  const cashReceived = manualCashIn + cashSalesTotal;
+  // Customer debt collected today (mirror cash_transactions written by ReceivePaymentSheet).
+  const dueReceived = useMemo(
+    () =>
+      txs
+        .filter((t) => t.direction === "in" && t.category === "due_collection")
+        .reduce((s, t) => s + Number(t.amount), 0),
+    [txs],
+  );
 
   const totalPayments = useMemo(
     () => txs.filter((t) => t.direction === "out").reduce((s, t) => s + Number(t.amount), 0),
     [txs],
   );
 
-  const cashInHand = startingBalance + cashReceived - totalPayments;
+  // Cash in Hand = opening + cash sales + due received + investments − payments.
+  // Due sales are intentionally NOT added (no cash changed hands at the time of sale).
+  const cashInHand =
+    startingBalance + cashSalesTotal + dueReceived + cashInInvestments - totalPayments;
 
   const isToday = isSameDay(date, new Date());
 
@@ -225,9 +228,25 @@ const DailyTransactions = () => {
       {/* Summary cards */}
       <div className="px-page grid grid-cols-2 gap-3 mt-2">
         <SummaryCard label="Total Sales" value={salesTotal} tone="blue" />
-        <SummaryCard label="Cash Received" value={cashReceived} tone="blue-soft" />
+        <SummaryCard label="Cash Sales" value={cashSalesTotal} tone="blue-soft" />
         <SummaryCard label="Total Payments" value={totalPayments} tone="teal" />
         <SummaryCard label="Today's Due" value={duesOpen} tone="teal-soft" />
+      </div>
+
+      {/* Due Payment Received (separate from operational summaries) */}
+      <div className="mx-page mt-3 bg-green-50 border border-green-100 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+          <Inbox size={20} className="text-green-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-fluid-xs font-medium text-green-700/80">Due Payment Received</p>
+          <p className="text-fluid-lg font-bold text-green-700 tabular-nums truncate">
+            ৳{formatBDT(dueReceived)}
+          </p>
+        </div>
+        <p className="text-fluid-xs text-green-600/70 text-right leading-tight whitespace-nowrap">
+          Collected<br />today
+        </p>
       </div>
 
       {/* Cash in Hand */}
@@ -325,10 +344,10 @@ const DailyTransactions = () => {
       <div className="bg-gray-100 rounded-2xl p-4 mt-5 mx-page">
         <h3 className="text-fluid-sm font-semibold text-gray-700 mb-3">Daily Closing Summary</h3>
         <div className="space-y-2">
-          <SummaryRow label="Total Sales" value={salesTotal} sign="+" tone="green" />
-          <SummaryRow label="Total Cash In" value={manualCashIn} sign="+" tone="green" />
+          <SummaryRow label="Total Sales (Cash + Due)" value={salesTotal} sign="+" tone="green" />
+          <SummaryRow label="Total Cash In (Investments)" value={cashInInvestments} sign="+" tone="green" />
           <SummaryRow label="Total Payments" value={totalPayments} sign="−" tone="red" />
-          <SummaryRow label="Today's Due" value={duesOpen} sign="" tone="neutral" />
+          <SummaryRow label="Total Due Received" value={dueReceived} sign="+" tone="green" />
         </div>
         <div className="border-t border-gray-300 mt-3 pt-3 flex items-center justify-between">
           <span className="text-fluid-base font-bold text-blue-700">Net Cash Balance</span>

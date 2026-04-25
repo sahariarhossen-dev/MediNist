@@ -1,49 +1,56 @@
+## Refine Daily Transactions Accounting & Summary
 
+Recompute the day's accounting so cash and credit are tracked separately, hide due-collection rows from the operational feed, and surface a dedicated "Due Payment Received" summary.
 
-## Multi-select for Prescription Vault & Sales search
+### 1. New accounting model (`src/pages/DailyTransactions.tsx`)
 
-Let pharmacists batch-pick items in two places: tick multiple prescriptions in the Vault and push them all to the Sales page in one go, and tick multiple search results on the Sales page before adding them to the cart together.
+Compute these from the existing data sources (no schema change):
 
-### 1. Prescription Vault — multi-select UI (`CustomerProfile.tsx` + `PrescriptionCard.tsx`)
+- **Total Sales** = sum of every completed `sales.total` for the day (cash sales + due sales together).
+- **Today's Due** = sum of `customer_ledger.amount` where `entry_type = 'due'` for the day. Already loaded via `duesOpen`.
+- **Cash Sales (today)** = `Total Sales − Today's Due` (clamped at 0). The current variable `cashSalesTotal` already does this.
+- **Due Received (today)** = sum of `cash_transactions.amount` where `direction='in'` and `category='due_collection'`. New derived value.
+- **Cash In / Investments (today)** = sum of `cash_transactions.amount` where `direction='in'` and `category='other_in'` (drop `sale_cash` and `due_collection` from this bucket).
+- **Total Payments (today)** = sum of `cash_transactions.amount` where `direction='out'` (unchanged).
+- **Cash in Hand** = `startingBalance + cashSalesTotal + dueReceived + cashInInvestments − totalPayments`. This matches the requested formula and avoids double-counting due sales.
 
-- Add `selectedIds: Set<string>` state in `CustomerProfile`'s vault tab.
-- **`PrescriptionCard`**: replace the per-card "Add to Sale" button with a left-aligned `Checkbox` (`@/components/ui/checkbox`). Tapping anywhere on the card body toggles the checkbox; checked state gets a blue ring (`ring-2 ring-blue-500`) and `bg-blue-50/40`. Edit / Delete remain in the kebab menu. Props change from `onAddToSale` → `selected: boolean` + `onToggleSelect()`.
-- **Vault tab header row**: add a "Select all" toggle (a `Checkbox` + label, indeterminate when partial). Clicking flips between all / none.
-- **Floating action bar**: when `selectedIds.size > 0`, render a fixed bar above the bottom safe area:
-  - `mx-page bottom-4 fixed` pill bar, blue gradient, label `Add Selected (N) to Sale`
-  - On tap → navigate to `/create-sale?customer=<id>&prescribe=<id1>,<id2>,…` (comma-separated list of prescription ids)
-- Empty state and "Add Prescription" button stay as-is.
+### 2. Summary cards (top grid)
 
-### 2. Sales page — accept multiple `prescribe` ids (`CreateSale.tsx`)
+Keep the 2×2 grid, recolored as today, but with this content:
 
-- Update the `?prescribe=` URL effect to split on `,`. Loop through each id, look up the matching prescription, and call `addPrescriptionToCart` sequentially so all prescribed meds land in the cart on arrival. Existing single-id usage keeps working (a single id is just a one-element list).
-- Single-tap chips in the "Saved for {customer}" strip remain unchanged (still adds one med at a time).
+- Total Sales (cash + due) — blue
+- Cash Sales — blue-soft (replaces "Cash Received", which conflated dues + sales + collections)
+- Today's Due — teal-soft
+- Total Payments — teal
 
-### 3. Sales page — multi-select search results (`CreateSale.tsx`)
+Below the grid, add a **new full-width "Due Payment Received" card** (green accent, `bg-green-50 text-green-700`, wallet/inbox icon) showing the day's `dueReceived` total. Sits between the summary grid and the existing "Cash in Hand" card so it's visually distinct from operational summaries.
 
-The search dropdown currently calls `addToCart(med)` on click and immediately closes. New behavior:
+The "Cash in Hand" card stays in place and uses the new formula.
 
-- Add `pendingSelection: Map<string, Medicine>` state (keyed by medicine id).
-- Each result row becomes a `<button>` that **toggles** membership in `pendingSelection` instead of immediately adding to cart. Tapping doesn't clear the search query or close the dropdown.
-- Visual checked state: when in `pendingSelection`, the row gets a blue background (`bg-blue-50`), a blue check icon on the right, and the pill icon turns blue. Unchecked rows render as today.
-- **Confirm bar inside the dropdown**: when `pendingSelection.size > 0`, render a sticky bottom row inside the dropdown card:
-  - Left: `N selected`
-  - Right: `Confirm` button (emerald) and a small `Clear` link
-  - On `Confirm` → push every pending medicine through the existing add-to-cart logic (skipping any already in cart, applying default discount for wholesale just like `addToCart` does), then clear `pendingSelection`, clear `searchQuery`, and close the dropdown. Expand the first newly added item.
-- Pressing the search `X` also clears `pendingSelection`.
+### 3. Transactions feed filtering
 
-### 4. State preservation across navigation
+The "Transactions" list currently shows every `cash_transactions` row. Change `feedItems` to exclude `category='due_collection'` rows so the feed shows only operational entries: `other_in` (Cash In / Investment) and `direction='out'` (Payments / Expenses). The "See All" link continues to navigate to `/more/all-transactions`, which keeps the unfiltered history.
 
-The deep-link contract (`/create-sale?customer=<id>&prescribe=<id1>,<id2>,…`) is the single source of truth — it survives full route change, refresh, and back-nav, so no extra cross-page store is needed. The Sales page already pre-selects the customer and loads prescriptions from this URL.
+The "Closing Balance from … (Carried Forward · Opening)" row at the top of the feed stays unchanged.
 
-### 5. Visual / accessibility
+### 4. Daily Closing Summary (bottom card)
 
-- Reuse existing `Checkbox`, color tokens, and `mx-page` paddings — no new design system.
-- Floating "Add Selected" bar uses `text-fluid-sm font-semibold`, blue (`bg-blue-600 hover:bg-blue-700`), with subtle shadow (`shadow-lg`).
-- Search-result checked state passes a11y: `aria-pressed={selected}` on the row button.
+Replace the four rows with:
+
+- Total Sales (cash + due) — green `+`
+- Total Cash In (investments only, i.e. `other_in`) — green `+`
+- Total Payments (expenses only) — red `−`
+- **Total Due Received** (new) — green `+`
+
+Net Cash Balance line at the bottom continues to show `cashInHand` using the new formula.
+
+### 5. Visual consistency
+
+- Greens for in/received, reds for out/payments — already the convention.
+- Reuse existing `SummaryCard` / `SummaryRow` components; add a `green` / `green-soft` tone variant to `SummaryCard` for the new "Due Payment Received" card.
+- No changes to `LogTransactionSheet`, `ReceivePaymentSheet`, schema, RLS, or `close-daily-transactions` edge function — those continue to record data exactly as today; only the read-side aggregation on this page changes.
 
 ### 6. Files
 
-- **Edit**: `src/pages/CustomerProfile.tsx` (vault tab logic + select-all + floating bar), `src/components/customers/PrescriptionCard.tsx` (checkbox prop, remove Add-to-Sale button), `src/pages/CreateSale.tsx` (multi-prescribe URL parsing + multi-select search dropdown + confirm bar).
-- **Unchanged**: database schema, RLS, routes, manifest, every other page, and the existing single-chip prescription strip.
-
+- **Edit only**: `src/pages/DailyTransactions.tsx` (recompute aggregates, filter feed, add new summary card + closing row, add green tone to `SummaryCard`).
+- **Unchanged**: every other page, every component, the database, RLS, and the nightly closing job (which already accounts for `due_collection` as cash-in inside its `totalCashIn` and uses `Math.max(0, totalSales − totalDue)` for the cash portion — semantically equivalent to the new on-screen formula).
