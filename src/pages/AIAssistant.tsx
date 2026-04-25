@@ -10,6 +10,7 @@ import TypingIndicator from "@/components/ai/TypingIndicator";
 import ChatHeader from "@/components/ai/ChatHeader";
 import ConversationSidebar, { type Conversation } from "@/components/ai/ConversationSidebar";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
+import { useScrollDirection } from "@/hooks/useScrollDirection";
 
 interface Message {
   id?: string;
@@ -40,6 +41,8 @@ const AIAssistant = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { setElement } = useScrollContainer();
+  const scrollDirection = useScrollDirection(scrollRef.current);
+  const isHeaderHidden = scrollDirection === "down";
 
   // Register the chat scroll container so BottomNav can react to scroll direction here.
   useEffect(() => {
@@ -223,12 +226,18 @@ const AIAssistant = () => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-white h-[100dvh]">
-      <ChatHeader
-        pharmacyName={pharmacyName}
-        userName={profile?.full_name ?? null}
-        avatarUrl={profile?.avatar_url ?? null}
-        onToggleSidebar={() => setSidebarOpen(true)}
-      />
+      <div
+        className={`absolute inset-x-0 top-0 z-30 transition-transform duration-300 ease-out ${
+          isHeaderHidden ? "-translate-y-full" : "translate-y-0"
+        }`}
+      >
+        <ChatHeader
+          pharmacyName={pharmacyName}
+          userName={profile?.full_name ?? null}
+          avatarUrl={profile?.avatar_url ?? null}
+          onToggleSidebar={() => setSidebarOpen(true)}
+        />
+      </div>
 
       <ConversationSidebar
         open={sidebarOpen}
@@ -241,7 +250,7 @@ const AIAssistant = () => {
       />
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-4 pt-20">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {messages.map((m, i) => (
             <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
