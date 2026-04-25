@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useScrollFocusedInput } from "@/hooks/useScrollFocusedInput";
 
 const schema = z.object({
   party_name: z
@@ -38,6 +39,8 @@ interface Props {
 const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onSaved }: Props) => {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useScrollFocusedInput(formRef);
 
   const {
     register,
@@ -102,7 +105,7 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onS
           <p className="text-xs text-gray-500">Record cash in or cash out for this date.</p>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="px-6 pb-6 pt-4 space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="px-6 pb-6 pt-4 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="party_name" className="text-sm text-gray-700">
               Description / Source
