@@ -56,7 +56,7 @@ Shop: ${shopName}
 }
 
 async function buildPharmacyContext(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   pharmacyId: string,
   role: "admin" | "staff",
 ): Promise<string> {
