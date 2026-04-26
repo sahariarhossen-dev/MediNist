@@ -381,7 +381,7 @@ const NoteEditor = () => {
       />
 
       <KeyboardAvoidingScroll
-        className="px-4 pt-4 pb-20 flex flex-col gap-1"
+        className="px-4 pt-4 pb-32 flex flex-col gap-1"
       >
         {/* Title */}
         <input
@@ -447,18 +447,21 @@ const NoteEditor = () => {
           </div>
         ))}
 
-        {/* Character counter */}
-        <div className="pt-2 flex justify-end">
+      </KeyboardAvoidingScroll>
+
+      {/* Subtle character counter pinned to bottom-right corner */}
+      {!readOnly && (
+        <div className="pointer-events-none fixed bottom-16 right-3 z-10">
           <span
             className={cn(
-              "text-xs",
+              "text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-white/60 backdrop-blur-sm",
               totalChars >= NEAR_LIMIT ? "text-red-500" : "text-gray-400",
             )}
           >
             {totalChars}/{MAX_CHARS}
           </span>
         </div>
-      </KeyboardAvoidingScroll>
+      )}
 
       {!readOnly && (
         <NoteKeyboardToolbar
