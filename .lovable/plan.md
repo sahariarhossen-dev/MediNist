@@ -1,67 +1,67 @@
 ## Goal
 
-Decouple the **display label** ("Chewable Tablet", "Soft Gelatin Capsule", "Oral Suspension") from the **functional category** used by stock/box/strip/MRP logic ("Tablet", "Capsule", "Syrup").
+Auto-detect Product Type on the Edit Product screen by scanning the medicine name for keywords ("Tablet", "Capsule", "Syrup/Suspension/Oral") whenever the saved `product_type` is missing.
 
-## Approach
+## Where the fix goes
 
-Add a new `unit_format` column to `medicines` for the raw display text. Keep the existing `product_type` column, but normalize whatever value arrives there to one of the canonical functional types via a small mapper. The UI shows `unit_format` (falling back to `product_type`); all calculations (`isSingleUnit`, tri-unit, stock alerts) read `product_type` only.
+`src/pages/AddProduct.tsx` — specifically the `useEffect` (line ~80) that hydrates the form from `location.state` when navigating from the Inventory edit action.
 
-## Database
-
-Migration on `public.medicines`:
-- Add `unit_format text` (nullable). Stores the verbatim label like "Chewable Tablet".
-- Backfill: `UPDATE medicines SET unit_format = product_type WHERE unit_format IS NULL` so existing rows keep their current display.
-- Normalize existing `product_type` values to canonical types using the same mapping rule (Tablet / Capsule / Syrup / else unchanged).
-
-No change to `master_medicines` (it already has both `format` and we map at insert time).
-
-## Code
-
-### `src/lib/productType.ts` (new)
-Single source of truth for the mapping:
+Today it does:
 ```ts
-export type FunctionalType = "Tablet" | "Capsule" | "Syrup" | string;
+if (s.productType) setProductType(s.productType);
+```
+…so if the DB row has no `product_type`, the dropdown stays empty even when the name clearly indicates it.
 
-export function toFunctionalType(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const s = raw.toLowerCase();
+## Changes
+
+### 1. Extend `src/lib/productType.ts`
+
+Reuse the existing `toFunctionalType` mapper, but also make it match the additional keyword "Oral" → "Syrup" (per the new spec). Add a small helper:
+
+```ts
+export function detectFunctionalTypeFromName(name: string | null | undefined):
+  "Tablet" | "Capsule" | "Syrup" | null {
+  if (!name) return null;
+  const s = name.toLowerCase();
   if (s.includes("tablet")) return "Tablet";
   if (s.includes("capsule")) return "Capsule";
-  if (s.includes("suspension") || s.includes("syrup")) return "Syrup";
-  return raw; // keep original for Cream/Injection/Ointment/etc.
-}
-
-export function getDisplayFormat(med: { unit_format?: string | null; product_type?: string | null }) {
-  return med.unit_format || med.product_type || "";
+  if (s.includes("syrup") || s.includes("suspension") || s.includes("oral")) return "Syrup";
+  return null;
 }
 ```
 
-### `src/pages/CatalogSearch.tsx` & `src/pages/Inventory.tsx` (catalog import)
-When inserting into `medicines` from `master_medicines`:
-- `unit_format: med.format || null` — full display string.
-- `product_type: toFunctionalType(med.format)` — normalized.
+(Case-insensitive via `toLowerCase()`. Kept separate from `toFunctionalType` so the existing import logic — which maps the verbatim `format` field — is untouched.)
 
-### `src/pages/AddProduct.tsx`
-Manual add already uses canonical types from a fixed dropdown, so set `unit_format = product_type` on save (keeps display consistent with new column). No UX change.
+### 2. Update the hydration `useEffect` in `AddProduct.tsx`
 
-### `src/pages/Inventory.tsx` (list rendering)
-- Read functional type from `med.product_type` for `isSingleUnit(...)`, `TriUnitDisplay`, stock alerts (already does this — fix the two spots at lines 249 and 541-553 where it currently reads `med.format` from the catalog match; switch them to use the catalog row's `format` for display only and `toFunctionalType(format)` for logic).
-- Display badge shows `getDisplayFormat(med)`.
+Replace the current block roughly like this:
 
-### `src/pages/CreateSale.tsx`
-- Extend the `Medicine` type with `unit_format: string | null`.
-- Add `unit_format` to all three `.select(...)` strings (lines 112, 202, 210).
-- Search-result row, cart row, and bottom-sheet item: render `getDisplayFormat(med)` in the orange/red superscript badge instead of `med.product_type`.
-- All `isSingleUnit(...)` and `totalPiecesToTriUnit(...)` calls continue to receive `product_type` (functional) — unchanged.
+```ts
+const saved = s.productType as ProductType | undefined;
+if (saved) {
+  setProductType(saved);
+} else {
+  // Auto-detect from medicine name only when DB value is empty/null
+  const detected = detectFunctionalTypeFromName(s.name);
+  if (detected) setProductType(detected);
+}
+```
 
-### `src/pages/Invoice.tsx` & `src/pages/Sales.tsx`
-Sale items already store `medicine_name` only; if a format label is shown anywhere here, swap to display value. (Quick scan shows no `product_type` usage in these files, so likely no edit needed — verify during implementation.)
+Rules respected:
+- Case-insensitive scan of `medicine_name`.
+- Saved DB `product_type` always wins; auto-detect only runs when it's empty/null.
+- Runs immediately on mount (the existing effect already runs once), so the dropdown shows the detected value as soon as the page opens.
 
-### Types
-`src/integrations/supabase/types.ts` regenerates automatically after the migration.
+### 3. No DB changes
 
-## Result
+Auto-detection is UI-only. The user can still override the dropdown before saving; on save, both `product_type` and `unit_format` are persisted as today.
 
-- Search result and cart show "Chewable Tablet" / "Soft Gelatin Capsule" / "Oral Suspension".
-- Stock display, Box:Strip:Pcs math, low-stock thresholds, and MRP logic all key off the normalized "Tablet" / "Capsule" / "Syrup" values.
-- Manually added products are unaffected (their format equals their type).
+## Out of scope
+
+- The "Add New Product" flow (no name yet at mount) — auto-detection there would fight the user typing. Not changed.
+- Inventory list rendering — display continues to use `unit_format` via `getDisplayFormat`.
+
+## Files touched
+
+- `src/lib/productType.ts` (add `detectFunctionalTypeFromName`)
+- `src/pages/AddProduct.tsx` (use it in the edit hydration effect)
