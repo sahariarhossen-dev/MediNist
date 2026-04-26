@@ -5,6 +5,8 @@ import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 interface Props extends React.HTMLAttributes<HTMLDivElement> {
   /** Extra spacing (px) kept between the focused field and the keyboard top edge. */
   scrollPadding?: number;
+  /** Always-on bottom padding (px) reserved for fixed toolbars or safe UI. */
+  bottomPadding?: number;
 }
 
 /**
@@ -23,6 +25,7 @@ export const KeyboardAvoidingScroll = ({
   style,
   children,
   scrollPadding = 16,
+  bottomPadding = 0,
   ...rest
 }: Props) => {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -63,7 +66,7 @@ export const KeyboardAvoidingScroll = ({
       className={cn("overflow-y-auto", className)}
       style={{
         ...style,
-        paddingBottom: `calc(${inset}px + env(safe-area-inset-bottom, 0px))`,
+        paddingBottom: `calc(${inset + bottomPadding}px + env(safe-area-inset-bottom, 0px))`,
         transition: "padding-bottom 200ms ease-out",
       }}
       {...rest}

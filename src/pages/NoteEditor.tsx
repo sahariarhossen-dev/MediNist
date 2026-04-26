@@ -381,7 +381,8 @@ const NoteEditor = () => {
       />
 
       <KeyboardAvoidingScroll
-        className="px-4 pt-4 pb-32 flex flex-col gap-1"
+        className="min-h-screen overflow-y-auto px-4 pt-4 flex flex-col gap-1"
+        bottomPadding={120}
       >
         {/* Title */}
         <input
@@ -447,21 +448,22 @@ const NoteEditor = () => {
           </div>
         ))}
 
-      </KeyboardAvoidingScroll>
+        {/* Safe-zone counter sits after content, before the infinite spacer. */}
+        {!readOnly && (
+          <div className="pointer-events-none flex justify-end pt-2">
+            <span
+              className={cn(
+                "text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-white/60 backdrop-blur-sm",
+                totalChars >= NEAR_LIMIT ? "text-red-500" : "text-gray-400",
+              )}
+            >
+              {totalChars}/{MAX_CHARS}
+            </span>
+          </div>
+        )}
 
-      {/* Subtle character counter pinned to bottom-right corner */}
-      {!readOnly && (
-        <div className="pointer-events-none fixed bottom-16 right-3 z-10">
-          <span
-            className={cn(
-              "text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-white/60 backdrop-blur-sm",
-              totalChars >= NEAR_LIMIT ? "text-red-500" : "text-gray-400",
-            )}
-          >
-            {totalChars}/{MAX_CHARS}
-          </span>
-        </div>
-      )}
+        <div aria-hidden="true" className="h-[50vh] shrink-0" />
+      </KeyboardAvoidingScroll>
 
       {!readOnly && (
         <NoteKeyboardToolbar
