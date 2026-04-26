@@ -3,7 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import {
   Select,
@@ -41,10 +41,7 @@ const ShortItems = () => {
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
-        .filter((m) => {
-          const threshold = m.stock_alert && m.stock_alert > 0 ? m.stock_alert : 5;
-          return (m.stock_quantity ?? 0) <= threshold;
-        })
+        .filter((m) => isLowStock(m))
         .map((m) => ({
           id: m.id,
           name: m.name,
