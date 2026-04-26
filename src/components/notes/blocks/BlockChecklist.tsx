@@ -13,13 +13,20 @@ interface BlockChecklistProps {
   items: ChecklistItem[];
   readOnly?: boolean;
   onChange?: (items: ChecklistItem[]) => void;
+  /** Max additional characters permitted across all items. */
+  maxRemaining?: number;
 }
 
-const BlockChecklist = ({ items, readOnly, onChange }: BlockChecklistProps) => {
+const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockChecklistProps) => {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const focusIndexRef = useRef<number | null>(null);
 
   const update = (i: number, patch: Partial<ChecklistItem>) => {
+    if (typeof maxRemaining === "number" && typeof patch.text === "string") {
+      const prevLen = items[i]?.text.length ?? 0;
+      const delta = patch.text.length - prevLen;
+      if (delta > maxRemaining) return;
+    }
     const next = items.map((it, idx) => (idx === i ? { ...it, ...patch } : it));
     onChange?.(next);
   };
@@ -66,7 +73,7 @@ const BlockChecklist = ({ items, readOnly, onChange }: BlockChecklistProps) => {
   };
 
   return (
-    <div className="space-y-2 bg-white rounded-md border border-gray-200 p-3">
+    <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2">
       {items.map((it, i) => (
         <div key={i} className="flex items-center gap-2">
           <Checkbox
