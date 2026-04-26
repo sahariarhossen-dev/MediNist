@@ -554,7 +554,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
-                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(med.format) ? "Box:" : "Qty (pcs):"}</span>
+                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(toFunctionalType(med.format)) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
