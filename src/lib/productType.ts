@@ -74,6 +74,24 @@ export function getFunctionalBucket(
 }
 
 /**
+ * Map a product_type to a Tailwind chip class string (background + text).
+ * Case-insensitive and keyword based, so custom types like "Eye Drop" or
+ * "Dry Powder Inhaler (DPI)" still resolve to the right color family.
+ */
+export function getProductTypeChipClasses(type: string | null | undefined): string {
+  const s = (type || "").toLowerCase();
+  if (!s) return "bg-gray-100 text-gray-600";
+  if (s.includes("tablet")) return "bg-blue-50 text-blue-700";
+  if (s.includes("capsule")) return "bg-purple-50 text-purple-700";
+  if (s.includes("syrup") || s.includes("suspension")) return "bg-amber-50 text-amber-700";
+  if (s.includes("injection") || s.includes("vial") || s.includes("ampoule")) return "bg-rose-50 text-rose-700";
+  if (s.includes("cream") || s.includes("ointment") || s.includes("gel") || s.includes("lotion")) return "bg-teal-50 text-teal-700";
+  if (s.includes("drop")) return "bg-cyan-50 text-cyan-700";
+  if (s.includes("inhaler") || s.includes("mdi") || s.includes("dpi") || s.includes("nebul")) return "bg-indigo-50 text-indigo-700";
+  return "bg-gray-100 text-gray-600";
+}
+
+/**
  * Fetch the dynamic list of product types available to a pharmacy.
  * Combines the seed list with every distinct `product_type` already used
  * in this pharmacy's inventory, de-duplicated case-insensitively. Seeds

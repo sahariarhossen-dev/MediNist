@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -57,13 +57,21 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
   if (isSingleUnit(productType ?? null)) {
-    return <span className="font-mono font-bold text-foreground">{totalPcs} Pcs</span>;
+    return (
+      <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
+        {totalPcs}
+        <span className="text-gray-400 font-medium ml-0.5">Pcs</span>
+      </span>
+    );
   }
-  const display = totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip);
-  const parts = display.split(" : ");
+  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
   return (
-    <span className="font-mono font-bold text-foreground">
-      {parts[0]}<span className="text-muted-foreground mx-0.5">:</span>{parts[1]}<span className="text-muted-foreground mx-0.5">:</span>{parts[2]}
+    <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
+      {boxes}<span className="text-gray-400 font-medium ml-0.5">Bx</span>
+      <span className="text-gray-300 mx-1">•</span>
+      {strips}<span className="text-gray-400 font-medium ml-0.5">St</span>
+      <span className="text-gray-300 mx-1">•</span>
+      {pcs}<span className="text-gray-400 font-medium ml-0.5">Pc</span>
     </span>
   );
 };
@@ -342,7 +350,7 @@ const Inventory = () => {
   const longPressMed = longPressId ? medicines.find((m) => m.id === longPressId) : null;
 
   return (
-    <div className="min-h-screen bg-background pb-6">
+    <div className="min-h-screen bg-gray-50 pb-6">
       {/* Top Header */}
       <AppHeader />
 
@@ -418,7 +426,7 @@ const Inventory = () => {
       )}
 
       {/* Medicine List */}
-      <div className="px-5 space-y-3">
+      <div className="px-5 space-y-3.5">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full rounded-2xl" />
@@ -454,20 +462,27 @@ const Inventory = () => {
                       onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
                       onMouseUp={cancelPress}
                       onMouseLeave={cancelPress}
-                      className={`bg-muted rounded-2xl transition-all duration-150 overflow-hidden select-none ${
+                      className={`bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60 transition-all duration-150 overflow-hidden select-none ${
                         searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
                       } ${pressingId === med.id ? "scale-95" : ""}`}
                     >
-                      <div className="flex items-center gap-4 p-4">
-                        <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Pill size={20} className="text-primary" />
+                      <div className="flex items-center gap-3.5 p-4">
+                        <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                          <Pill size={20} className="text-emerald-500" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground truncate flex items-center gap-1">
+                          <p className="text-sm font-bold text-gray-900 truncate flex items-center gap-1.5">
                             <span className="truncate">{truncateName(med.name)}</span>
-                            {med.product_size && <span className="text-[10px] text-muted-foreground font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
+                            {med.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate max-w-[120px]">{med.company_name || "—"}</p>
+                          <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                            <span className="text-[11px] text-gray-400 truncate min-w-0">{med.company_name || "—"}</span>
+                            {med.product_type && (
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type)}`}>
+                                {med.product_type}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -497,12 +512,12 @@ const Inventory = () => {
                       </div>
                       {isExpanded && (
                         <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
-                            <span className="text-foreground">৳ {med.price ?? "—"}</span>
-                            <span className="text-muted-foreground">
+                          <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
+                            <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
+                            <span className="text-gray-400">
                               pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
-                            <span className="text-primary font-semibold">
+                            <span className="text-emerald-600 font-semibold">
                               Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                           </div>
@@ -520,41 +535,44 @@ const Inventory = () => {
                     </p>
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
+                      const catalogType = toFunctionalType(med.format);
                       return (
                         <div
                           key={med.id}
                           onClick={() => handleCatalogCardClick(med.id)}
-                          className={`bg-muted rounded-2xl overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
-                            isExpanded ? "ring-1 ring-primary/30" : ""
+                          className={`bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60 overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
+                            isExpanded ? "ring-1 ring-emerald-300" : ""
                           }`}
                         >
-                          <div className="flex items-start gap-3 p-3">
-                            <div className="flex-shrink-0 h-11 w-11 rounded-full bg-accent flex items-center justify-center">
-                              <Plus size={20} className="text-primary" />
+                          <div className="flex items-start gap-3.5 p-4">
+                            <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                              <Plus size={20} className="text-emerald-500" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-foreground text-sm truncate">{med.brand_name}</p>
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{med.generic_name || "—"}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <p className="font-bold text-gray-900 text-sm truncate flex items-center gap-1.5">
+                                <span className="truncate">{med.brand_name}</span>
+                                {med.strength && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{med.strength}</span>}
+                              </p>
+                              <p className="text-[11px] text-gray-400 truncate mt-0.5">{med.generic_name || "—"}</p>
+                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                                 {med.company && (
-                                  <span className="text-[11px] text-muted-foreground truncate max-w-[50%]">{med.company}</span>
+                                  <span className="text-[11px] text-gray-400 truncate max-w-[55%]">{med.company}</span>
                                 )}
-                                {med.strength && (
-                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.strength}</span>
-                                )}
-                                {med.format && (
-                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.format}</span>
+                                {catalogType && (
+                                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(catalogType)}`}>
+                                    {catalogType}
+                                  </span>
                                 )}
                               </div>
                             </div>
                             <div className="flex-shrink-0 text-right">
-                              <p className="font-bold text-foreground text-sm">৳{med.unit_price ?? 0}</p>
+                              <p className="font-bold text-emerald-600 text-sm tabular-nums">৳{med.unit_price ?? 0}</p>
                             </div>
                           </div>
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
-                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(toFunctionalType(med.format)) ? "Box:" : "Qty (pcs):"}</span>
+                              <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2.5">
+                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit(catalogType) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
@@ -567,7 +585,7 @@ const Inventory = () => {
                                 <button
                                   onClick={() => handleAddFromCatalog(med)}
                                   disabled={addingCatalog}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-50 flex-shrink-0"
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50 flex-shrink-0"
                                 >
                                   {addingCatalog ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                                   Add
