@@ -107,6 +107,7 @@ const AddProduct = () => {
       name: name.trim(),
       company_name: companyName.trim() || null,
       product_type: productType || null,
+      unit_format: productType || null,
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
