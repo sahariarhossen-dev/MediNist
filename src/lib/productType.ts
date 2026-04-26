@@ -22,3 +22,19 @@ export function getDisplayFormat(med: {
 }): string {
   return med.unit_format || med.product_type || "";
 }
+
+/**
+ * Detect functional product type from a medicine name (case-insensitive).
+ * Returns null if no keyword matches. Used to auto-fill the Product Type
+ * dropdown on the Edit Product screen when the DB value is empty.
+ */
+export function detectFunctionalTypeFromName(
+  name: string | null | undefined
+): "Tablet" | "Capsule" | "Syrup" | null {
+  if (!name) return null;
+  const s = name.toLowerCase();
+  if (s.includes("tablet")) return "Tablet";
+  if (s.includes("capsule")) return "Capsule";
+  if (s.includes("syrup") || s.includes("suspension") || s.includes("oral")) return "Syrup";
+  return null;
+}

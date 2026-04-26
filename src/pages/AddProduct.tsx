@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { detectFunctionalTypeFromName } from "@/lib/productType";
 
 const productTypes = ["Tablet", "Capsule", "Syrup", "Injection", "Cream", "Suspension", "Ointment"] as const;
 type ProductType = (typeof productTypes)[number];
@@ -77,7 +78,13 @@ const AddProduct = () => {
     if (s.editId) setEditId(s.editId);
     if (s.companyName) setCompanyName(s.companyName);
     if (s.name) setName(s.name);
-    if (s.productType) setProductType(s.productType);
+    if (s.productType) {
+      setProductType(s.productType);
+    } else {
+      // Auto-detect from medicine name only when DB value is empty/null
+      const detected = detectFunctionalTypeFromName(s.name);
+      if (detected) setProductType(detected);
+    }
     if (s.strength) {
       // Parse numeric part from strength like "500" or already-numeric values
       const numericStrength = String(s.strength).replace(/[^0-9.]/g, "");
