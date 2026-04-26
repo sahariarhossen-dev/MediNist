@@ -1,7 +1,7 @@
 import { Pin, Users, Phone, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Note } from "@/hooks/useNotes";
-import { colorBg } from "./ColorPicker";
+import { colorHex } from "./ColorPicker";
 
 interface NoteCardProps {
   note: Note;
@@ -48,8 +48,8 @@ const NoteCard = ({ note, creatorName, isMine, onClick }: NoteCardProps) => {
       onClick={onClick}
       className={cn(
         "mb-2 w-full text-left rounded-xl border border-gray-200 p-3 break-inside-avoid hover:shadow-md transition",
-        colorBg(note.color),
       )}
+      style={{ backgroundColor: colorHex(note.color) }}
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <h3 className="font-bold text-gray-900 text-[15px] leading-snug line-clamp-2 flex-1">
