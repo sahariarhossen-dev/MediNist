@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,9 @@ interface BlockChecklistProps {
 }
 
 const BlockChecklist = ({ items, readOnly, onChange }: BlockChecklistProps) => {
+  const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
+  const focusIndexRef = useRef<number | null>(null);
+
   const update = (i: number, patch: Partial<ChecklistItem>) => {
     const next = items.map((it, idx) => (idx === i ? { ...it, ...patch } : it));
     onChange?.(next);
@@ -26,6 +30,39 @@ const BlockChecklist = ({ items, readOnly, onChange }: BlockChecklistProps) => {
 
   const add = () => {
     onChange?.([...items, { text: "", checked: false }]);
+  };
+
+  const insertAfter = (i: number) => {
+    const next = [
+      ...items.slice(0, i + 1),
+      { text: "", checked: false },
+      ...items.slice(i + 1),
+    ];
+    focusIndexRef.current = i + 1;
+    onChange?.(next);
+    // focus on the newly inserted row after re-render
+    requestAnimationFrame(() => {
+      const idx = focusIndexRef.current;
+      if (idx != null) inputsRef.current[idx]?.focus();
+      focusIndexRef.current = null;
+    });
+  };
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    i: number,
+  ) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      insertAfter(i);
+    } else if (e.key === "Backspace" && items[i].text === "" && items.length > 1) {
+      e.preventDefault();
+      const prev = i - 1;
+      remove(i);
+      requestAnimationFrame(() => {
+        if (prev >= 0) inputsRef.current[prev]?.focus();
+      });
+    }
   };
 
   return (
@@ -45,8 +82,10 @@ const BlockChecklist = ({ items, readOnly, onChange }: BlockChecklistProps) => {
             </span>
           ) : (
             <Input
+              ref={(el) => (inputsRef.current[i] = el)}
               value={it.text}
               onChange={(e) => update(i, { text: e.target.value })}
+              onKeyDown={(e) => handleKeyDown(e, i)}
               placeholder="List item"
               className={`h-8 flex-1 ${it.checked ? "line-through text-gray-400" : ""}`}
             />
