@@ -1,126 +1,80 @@
-## Smart Notepad for MediNist
 
-A new "Notepad" section accessible from the More page, with a Google Keep-style masonry grid, multi-format note editor, pin/color coding, search, and per-note privacy (private by default, optional Shared with Team).
+# Google Keep–style Notepad + Realtime Sync
 
-### 1. Database (Supabase migration)
+The Smart Notepad backend, editor, blocks, sharing, color coding, pinning, search, and storage are already built and working. This plan focuses on the **two missing pieces** the user is asking for:
 
-Create two tables in the `public` schema:
+1. A pixel-faithful **Google Keep visual redesign** of the main Notes screen.
+2. **Supabase Realtime** so a salesman's "Shortage" note pops into the admin's grid instantly.
 
-**`notes`**
-- `id` uuid PK
-- `pharmacy_id` uuid (NOT NULL) — used as `shop_id` for sharing
-- `creator_id` uuid (NOT NULL) — references `auth.uid()`
-- `title` text
-- `content` jsonb NOT NULL DEFAULT `'[]'` — array of typed blocks (see schema below)
-- `contact_numbers` text[] DEFAULT `'{}'` — clickable phones
-- `tags` text[] DEFAULT `'{}'`
-- `color` text DEFAULT `'default'` — one of: default, red, yellow, green, blue, purple, pink
-- `is_pinned` boolean DEFAULT false
-- `is_public` boolean DEFAULT false — the Shared-with-Team toggle
-- `image_metadata` jsonb DEFAULT `'{}'` — AI-friendly summary of attached images (urls, type: invoice/prescription/photo, ocr_text placeholder)
-- `created_at` / `updated_at` timestamptz with `touch_updated_at` trigger
+We are NOT rebuilding the editor, schema, RLS, storage, or block system — those already match the brief.
 
-**`note_blocks` content shape (stored in `content` jsonb):**
-```
-[
-  { "id": "...", "type": "text",      "html": "..." },
-  { "id": "...", "type": "checklist", "items": [{ "text": "...", "checked": false }] },
-  { "id": "...", "type": "image",     "url": "...", "caption": "...", "category": "invoice|prescription|photo" }
-]
-```
+---
 
-**RLS policies on `notes`:**
-- SELECT: `creator_id = auth.uid() OR (pharmacy_id = get_user_pharmacy_id() AND is_public = true)`
-- INSERT: `creator_id = auth.uid() AND pharmacy_id = get_user_pharmacy_id()`
-- UPDATE: `creator_id = auth.uid()` (only creator edits)
-- DELETE: `creator_id = auth.uid() OR is_pharmacy_admin()`
+## 1. Visual redesign of `src/pages/Notes.tsx` (Keep look)
 
-**Storage bucket `note-attachments`** (public read, authenticated write). Path layout: `{pharmacy_id}/{note_id}/{uuid}.{ext}`. Storage RLS:
-- INSERT/UPDATE/DELETE: only when first folder = user's `pharmacy_id` AND user is authenticated
-- SELECT: public (so shared notes render images cross-user)
+Reshape the top bar and grid to match the uploaded Keep screenshot, while keeping our brand blue `#2563eb` for accents.
 
-**View for search-by-creator:** add a security-definer SQL function `get_pharmacy_member_names()` returning `{user_id, full_name}` for current user's pharmacy so we can filter notes by creator name without exposing full profiles.
+**Top bar (sticky, single row, pill-shaped):**
+- Hamburger menu icon (left) — opens a slide-in `Sheet` drawer.
+- Rounded pill search input that fills remaining width — light gray bg in light mode, placeholder "Search your notes".
+- View-toggle icon (single-column / masonry) on the right inside the pill.
+- Circular profile avatar at far right (uses `profile.avatar_url`, falls back to initial).
+- Removes the current "back arrow + title + filter chips row" stack — Keep has none of that. Filters move into the drawer.
 
-### 2. Routes & Navigation
+**Drawer menu (new `NotesMenu.tsx` using existing `Sheet` component):**
+- Header: "MediNist Notes" with logo.
+- Items (each toggles the active filter): All notes, Pinned, Mine, Shared with team.
+- Footer: link back to More.
+- This replaces the inline filter chips currently above the grid.
 
-- New route `/more/notes` → `Notes.tsx` (list/grid view)
-- New route `/more/notes/:id` → `NoteEditor.tsx` (open existing or `new` for creation)
-- Add "Smart Notepad" entry in `src/pages/More.tsx` menu (StickyNote icon, brand blue)
-- Add "Notes" route registrations in `src/App.tsx`
+**Grid:**
+- Masonry stays (`columns-2 md:columns-3`), but tighten spacing to `gap-2` and card radius to `rounded-xl` to match Keep.
+- Empty state gets a Keep-style centered lightbulb icon + "Notes you add appear here".
 
-### 3. Pages & Components
+**FAB:**
+- Keep position `fixed bottom-6 right-6`, but use Keep's pill-shape look: larger (`h-14 w-14`), white bg with subtle shadow, blue `+` icon (instead of solid blue bg) — matches the latest Keep design shown in the screenshot.
 
-**`src/pages/Notes.tsx`** — Keep-style grid
-- AppHeader + sticky search bar (filters: text, tag, creator name)
-- Filter chips: All / Pinned / Mine / Shared / by color
-- Masonry grid: 1 col on mobile (<480px), 2 cols on sm, 3 cols on md+ — using CSS columns for true masonry
-- Each card: title, content preview (text + checklist progress + image thumbs + contact chips), pin indicator, color background, "Shared" badge if public, creator avatar (only for shared notes from others)
-- Floating "+" FAB (brand `#2563eb`) → navigates to `/more/notes/new`
+**Card refinements (`NoteCard.tsx`):**
+- Slightly larger title, tighter body, remove the dotted footer divider — Keep cards are borderless internally.
+- "Shared" pill stays but moves to top-right next to pin (small `Users` icon only, no text on mobile).
+- Image previews already render — keep current 2×2 thumb grid.
 
-**`src/pages/NoteEditor.tsx`** — full-screen editor
-- Top bar: back, pin toggle, color picker popover, Shared-with-Team Switch, delete (creator only), save state indicator (autosave on blur + debounce)
-- Title input
-- Block list (re-orderable later, MVP additive):
-  - Add block toolbar: Text, Checklist, Image, Invoice photo (image with category=invoice), Prescription photo (image with category=prescription)
-  - Text block: contentEditable rich text (bold/italic/list via simple toolbar)
-  - Checklist block: list of items with checkbox + text + add/remove
-  - Image block: shows uploaded image + caption + category badge; tap to view full-screen
-- Contact Numbers section: chips of phone numbers, each with `<a href="tel:...">` to call; add/remove input
-- Tags input (comma-separated chips)
-- KeyboardAvoidingScroll wrapper (existing) so editor stays usable with keyboard open
-- Read-only mode when current user is not the creator (shared note)
+---
 
-**Reusable components in `src/components/notes/`:**
-- `NoteCard.tsx` — grid card
-- `BlockText.tsx`, `BlockChecklist.tsx`, `BlockImage.tsx`
-- `ColorPicker.tsx` — 7 swatches mapped to Tailwind classes
-- `ContactChips.tsx`
-- `NoteSearchBar.tsx`
+## 2. Supabase Realtime sync
 
-### 4. Visibility & Privacy Logic
+Add live updates so any insert/update/delete on `notes` is reflected immediately in every open client of the same pharmacy.
 
-- `is_public` defaults to `false` (Private). Toggle in editor flips it.
-- Backend enforcement via the RLS SELECT policy described above. Frontend simply queries `notes` and Supabase returns the union of own + shared.
-- Shared notes from other users are visually marked with a "Shared by {name}" footer and are read-only.
+**Edit `src/hooks/useNotes.ts`:**
+- New hook `useNotesRealtime()` that subscribes to the `notes` table via `supabase.channel('notes-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, ...)`.
+- On any change event, call `queryClient.invalidateQueries({ queryKey: ['notes'] })` (and the specific `['notes', id]` key for UPDATE/DELETE).
+- RLS already filters server-side so each user only receives events for rows they're allowed to see (their own notes + shared notes in their pharmacy). No extra filter needed.
+- Cleanup `supabase.removeChannel(channel)` on unmount.
 
-### 5. AI-Ready Data Shape
+**Migration (SQL):**
+- `ALTER PUBLICATION supabase_realtime ADD TABLE public.notes;`
+- `ALTER TABLE public.notes REPLICA IDENTITY FULL;` (so UPDATE payloads include all columns).
 
-- `content` is structured JSON (block types) → easy for an agent to walk and summarise.
-- `image_metadata` stores `{ urls: [...], categories: [...], ocr_text: null }` so a future Edge Function can populate OCR/insights without schema changes.
-- A future `ai-chat` tool can read `notes` rows directly; no migration needed later.
+**Wire it up:**
+- Call `useNotesRealtime()` once at the top of `src/pages/Notes.tsx`.
+- React Query refetch is debounced naturally; no toast spam.
 
-### 6. UI / Styling
+---
 
-- Brand colour `#2563eb` for primary actions, FAB, active filter chips, links.
-- Note card colour palette uses soft pastel backgrounds (Tailwind: `bg-red-50`, `bg-amber-50`, `bg-emerald-50`, `bg-sky-50`, `bg-violet-50`, `bg-pink-50`, `bg-white`) with matching border accents.
-- 100% mobile-responsive — uses existing `max-w-md` mobile container on small screens, expands to wider grid on `sm:` and `md:` breakpoints by removing the max-width on `/more/notes` only.
-- Reuses `KeyboardAvoidingScroll`, `Sheet`, `Switch`, `Input`, `Textarea`, `Button` from existing UI kit.
+## 3. Files to change
 
-### 7. Files to create
-
-```
-supabase migration: create notes table, RLS, storage bucket + policies, helper function
-src/pages/Notes.tsx
-src/pages/NoteEditor.tsx
-src/components/notes/NoteCard.tsx
-src/components/notes/NoteSearchBar.tsx
-src/components/notes/ColorPicker.tsx
-src/components/notes/ContactChips.tsx
-src/components/notes/blocks/BlockText.tsx
-src/components/notes/blocks/BlockChecklist.tsx
-src/components/notes/blocks/BlockImage.tsx
-src/hooks/useNotes.ts          (React Query: list/get/create/update/delete + search filters)
-src/lib/notesStorage.ts        (upload/delete attachments helpers)
+```text
+src/pages/Notes.tsx                  redesign top bar, grid, FAB; mount realtime hook
+src/components/notes/NoteCard.tsx    tighten styling to match Keep
+src/components/notes/NoteSearchBar.tsx  pill style, hamburger + avatar slots
+src/components/notes/NotesMenu.tsx   NEW — drawer with filter items
+src/hooks/useNotes.ts                add useNotesRealtime hook
+supabase/migrations/<new>.sql        enable realtime publication on notes
 ```
 
-### 8. Files to modify
+No changes to: `NoteEditor.tsx`, blocks, `notesStorage.ts`, RLS policies, schema columns, `App.tsx` routes, `More.tsx` entry.
 
-- `src/App.tsx` — register `/more/notes` and `/more/notes/:id` routes
-- `src/pages/More.tsx` — add "Smart Notepad" menu entry
+---
 
-### 9. Out of scope (future)
-
-- Real-time collaboration / presence
-- Block re-ordering by drag
-- AI summaries (data shape is ready; UI/edge function not built)
-- Per-user share targeting (only pharmacy-wide for now)
+## 4. Out of scope (already done in earlier turn — confirmed)
+- `notes` table, RLS (private + shared by `is_public`), storage bucket, block content (text / checklist / image with invoice/Rx/photo categories), color coding, pinning, search by content/tags/creator, contact-number `tel:` chips, mobile responsiveness, brand color `#2563eb`, AI-readable `content` + `image_metadata` JSON.
