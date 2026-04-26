@@ -45,7 +45,7 @@ export const totalPiecesToTriUnit = (
 };
 
 /**
- * Convert total pieces into a labeled "0 Bx • 1 St • 5 Pc" string.
+ * Convert total pieces into a labeled "0 • 1 • 5" string.
  * Cleaner display for retail dashboards than the raw "0 : 1 : 5" colon format.
  */
 export const totalPiecesToTriUnitLabeled = (
@@ -54,7 +54,7 @@ export const totalPiecesToTriUnitLabeled = (
   pcsPerStrip: number | null
 ): string => {
   const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
-  return `${boxes} Bx • ${strips} St • ${pcs} Pc`;
+  return `${boxes} • ${strips} • ${pcs}`;
 };
 
 /**
