@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { normalizeForSearch } from "@/lib/searchUtils";
+import { toFunctionalType } from "@/lib/productType";
 
 interface MasterMedicine {
   id: string;
@@ -119,7 +120,8 @@ const CatalogSearch = () => {
       pharmacy_id: profile.pharmacy_id,
       name: med.brand_name,
       company_name: med.company || null,
-      product_type: med.format || null,
+      product_type: toFunctionalType(med.format),
+      unit_format: med.format || null,
       price: med.unit_price || null,
       stock_quantity: qty,
       pcs_per_strip: pcsPerStrip,

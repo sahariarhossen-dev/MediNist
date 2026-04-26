@@ -395,6 +395,7 @@ export type Database = {
           stock_alert: number | null
           stock_quantity: number | null
           strip_per_pack: number | null
+          unit_format: string | null
         }
         Insert: {
           company_name?: string | null
@@ -410,6 +411,7 @@ export type Database = {
           stock_alert?: number | null
           stock_quantity?: number | null
           strip_per_pack?: number | null
+          unit_format?: string | null
         }
         Update: {
           company_name?: string | null
@@ -425,6 +427,7 @@ export type Database = {
           stock_alert?: number | null
           stock_quantity?: number | null
           strip_per_pack?: number | null
+          unit_format?: string | null
         }
         Relationships: [
           {
@@ -762,6 +765,7 @@ export type Database = {
           stock_alert: number | null
           stock_quantity: number | null
           strip_per_pack: number | null
+          unit_format: string | null
         }[]
         SetofOptions: {
           from: "*"

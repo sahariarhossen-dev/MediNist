@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
+import { getDisplayFormat } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
@@ -19,6 +20,7 @@ interface Medicine {
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
   product_type: string | null;
+  unit_format: string | null;
   product_size: string | null;
 }
 
@@ -109,7 +111,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -126,6 +128,7 @@ const CreateSale = () => {
               pcs_per_strip: null,
               strip_per_pack: null,
               product_type: null,
+              unit_format: null,
               product_size: null,
             },
             quantity: it.quantity,
@@ -199,7 +202,7 @@ const CreateSale = () => {
     if (presc.medicine_id) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
         .eq("id", presc.medicine_id)
         .maybeSingle();
       med = (data as Medicine | null) ?? null;
@@ -207,7 +210,7 @@ const CreateSale = () => {
     if (!med) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
         .eq("pharmacy_id", profile.pharmacy_id)
         .ilike("name", presc.medicine_name)
         .limit(1)
@@ -525,8 +528,8 @@ const CreateSale = () => {
                   <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
                     <span className="truncate">{truncateName(med.name)}</span>
                     {med.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">{truncateStrength(med.product_size)}</span>}
-                    {med.product_type && (
-                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{med.product_type}</span>
+                    {getDisplayFormat(med) && (
+                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{getDisplayFormat(med)}</span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -600,8 +603,8 @@ const CreateSale = () => {
                       <p className="text-sm font-bold text-gray-900 min-w-0 truncate flex items-center gap-1">
                         <span className="truncate">{truncateName(item.medicine.name)}</span>
                         {item.medicine.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.medicine.product_size)}</span>}
-                        {item.medicine.product_type && (
-                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                        {getDisplayFormat(item.medicine) && (
+                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
                         )}
                       </p>
                       <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
@@ -691,8 +694,8 @@ const CreateSale = () => {
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
                       <span className="truncate">{truncateName(item.medicine.name)}</span>
                       {item.medicine.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-slate-800">{truncateStrength(item.medicine.product_size)}</span>}
-                      {item.medicine.product_type && (
-                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                      {getDisplayFormat(item.medicine) && (
+                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
                       )}
                     </p>
                     {isWholesale ? (

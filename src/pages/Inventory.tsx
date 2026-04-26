@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
+import { toFunctionalType } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -23,6 +24,7 @@ interface Medicine {
   strip_per_pack: number | null;
   pcs_per_strip: number | null;
   product_type: string | null;
+  unit_format: string | null;
   product_size: string | null;
   stock_alert: number | null;
 }
@@ -246,14 +248,16 @@ const Inventory = () => {
     const pcsPerStrip = parsePackSize(med.pack_size);
     const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
     const rawQty = parseInt(catalogQty, 10) || 0;
-    const isMultiUnit = !isSingleUnit(med.format);
+    const functionalType = toFunctionalType(med.format);
+    const isMultiUnit = !isSingleUnit(functionalType);
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
       name: med.brand_name,
       company_name: med.company || null,
-      product_type: med.format || null,
+      product_type: functionalType,
+      unit_format: med.format || null,
       product_size: med.strength || null,
       price: med.unit_price || null,
       stock_quantity: stockQty,
@@ -550,7 +554,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
-                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(med.format) ? "Box:" : "Qty (pcs):"}</span>
+                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(toFunctionalType(med.format)) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
