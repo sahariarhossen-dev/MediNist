@@ -155,3 +155,10 @@ All colors MUST be HSL.
     print-color-adjust: exact;
   }
 }
+
+/* Contenteditable placeholder for note editor */
+.empty-placeholder:empty::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}

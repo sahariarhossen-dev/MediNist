@@ -1,18 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  Pin,
-  Palette,
-  Trash2,
-  Loader2,
-  Type,
-  ListChecks,
-  Image as ImageIcon,
-  Receipt,
-  FileText,
-  Tag,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useNote,
@@ -24,17 +12,13 @@ import {
   type NoteColor,
 } from "@/hooks/useNotes";
 import { uploadNoteAttachment } from "@/lib/notesStorage";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
-import ColorPicker, { colorBg } from "@/components/notes/ColorPicker";
-import ContactChips from "@/components/notes/ContactChips";
-import BlockText from "@/components/notes/blocks/BlockText";
+import { colorBg } from "@/components/notes/ColorPicker";
+import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/BlockText";
 import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
+import NoteKeyboardToolbar from "@/components/notes/NoteKeyboardToolbar";
 import { cn } from "@/lib/utils";
 
 const newId = () =>
@@ -45,22 +29,23 @@ const newId = () =>
 interface DraftState {
   title: string;
   content: NoteBlock[];
+  color: NoteColor;
+  is_public: boolean;
+  // Preserved fields (not edited in this clean UI)
   contact_numbers: string[];
   tags: string[];
-  color: NoteColor;
   is_pinned: boolean;
-  is_public: boolean;
 }
 
-const emptyDraft: DraftState = {
+const makeEmpty = (): DraftState => ({
   title: "",
   content: [{ id: newId(), type: "text", html: "" }],
+  color: "default",
+  is_public: false,
   contact_numbers: [],
   tags: [],
-  color: "default",
   is_pinned: false,
-  is_public: false,
-};
+});
 
 const NoteEditor = () => {
   const { id } = useParams<{ id: string }>();
@@ -73,12 +58,12 @@ const NoteEditor = () => {
   const updateMut = useUpdateNote();
   const deleteMut = useDeleteNote();
 
-  const [draft, setDraft] = useState<DraftState>(emptyDraft);
-  const [tagDraft, setTagDraft] = useState("");
+  const [draft, setDraft] = useState<DraftState>(makeEmpty);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
-  const [uploading, setUploading] = useState(false);
+  const textRef = useRef<BlockTextHandle | null>(null);
 
   const noteId = savedNoteId ?? (isNew ? null : id ?? null);
   const readOnly = !!existing && existing.creator_id !== user?.id;
@@ -92,15 +77,16 @@ const NoteEditor = () => {
           existing.content && existing.content.length > 0
             ? existing.content
             : [{ id: newId(), type: "text", html: "" }],
+        color: existing.color,
+        is_public: existing.is_public,
         contact_numbers: existing.contact_numbers ?? [],
         tags: existing.tags ?? [],
-        color: existing.color,
         is_pinned: existing.is_pinned,
-        is_public: existing.is_public,
       });
     }
   }, [existing]);
 
+  // ---- block helpers ----
   const updateBlock = (blockId: string, patch: Partial<NoteBlock>) => {
     setDraft((d) => ({
       ...d,
@@ -111,7 +97,14 @@ const NoteEditor = () => {
   };
 
   const removeBlock = (blockId: string) => {
-    setDraft((d) => ({ ...d, content: d.content.filter((b) => b.id !== blockId) }));
+    setDraft((d) => {
+      const next = d.content.filter((b) => b.id !== blockId);
+      return {
+        ...d,
+        content:
+          next.length > 0 ? next : [{ id: newId(), type: "text", html: "" }],
+      };
+    });
   };
 
   const addBlock = (block: NoteBlock) => {
@@ -139,13 +132,21 @@ const NoteEditor = () => {
     };
   };
 
+  // Has the user typed anything worth saving?
+  const hasContent = useMemo(() => {
+    if (draft.title.trim()) return true;
+    return draft.content.some((b) => {
+      if (b.type === "text") return b.html.replace(/<[^>]*>/g, "").trim().length > 0;
+      if (b.type === "checklist") return b.items.some((i) => i.text.trim());
+      if (b.type === "image") return true;
+      return false;
+    });
+  }, [draft]);
+
   // Debounced autosave
   useEffect(() => {
-    if (readOnly) return;
-    if (isLoading) return;
-    if (isNew && !savedNoteId) return; // wait for explicit save
+    if (readOnly || isLoading) return;
     if (!noteId) return;
-
     const handle = setTimeout(() => {
       updateMut.mutate({ id: noteId, patch: buildPayload(draft) });
     }, 800);
@@ -157,20 +158,20 @@ const NoteEditor = () => {
     if (noteId) return noteId;
     const created = await createMut.mutateAsync(buildPayload(draft));
     setSavedNoteId(created.id);
-    // Replace URL so subsequent visits resolve to the saved note
     window.history.replaceState(null, "", `/more/notes/${created.id}`);
     return created.id;
   };
 
-  const handleSaveExit = async () => {
+  const handleBack = async () => {
     if (readOnly) {
       navigate(-1);
       return;
     }
     try {
-      const id = await ensureSaved();
-      if (id) {
-        await updateMut.mutateAsync({ id, patch: buildPayload(draft) });
+      if (!noteId && hasContent) {
+        await ensureSaved();
+      } else if (noteId) {
+        await updateMut.mutateAsync({ id: noteId, patch: buildPayload(draft) });
       }
       navigate("/more/notes");
     } catch (err) {
@@ -195,6 +196,18 @@ const NoteEditor = () => {
     }
   };
 
+  const handleDuplicate = async () => {
+    try {
+      const created = await createMut.mutateAsync(buildPayload(draft));
+      toast.success("Note duplicated");
+      navigate(`/more/notes/${created.id}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to duplicate");
+    }
+  };
+
+  // ---- attachments ----
   const triggerImagePicker = (category: "invoice" | "prescription" | "photo") => {
     fileCategoryRef.current = category;
     fileInputRef.current?.click();
@@ -232,86 +245,59 @@ const NoteEditor = () => {
     }
   };
 
-  const addTag = () => {
-    const v = tagDraft.trim().replace(/^#/, "");
-    if (!v) return;
-    if (draft.tags.includes(v)) {
-      setTagDraft("");
-      return;
-    }
-    setDraft((d) => ({ ...d, tags: [...d.tags, v] }));
-    setTagDraft("");
+  const handleAddChecklist = () => {
+    addBlock({
+      id: newId(),
+      type: "checklist",
+      items: [{ text: "", checked: false }],
+    });
   };
 
-  const removeTag = (t: string) => {
-    setDraft((d) => ({ ...d, tags: d.tags.filter((x) => x !== t) }));
+  // ---- text editing exec ----
+  const exec = (cmd: string, value?: string) => {
+    const el = textRef.current?.el();
+    if (el && document.activeElement !== el) el.focus();
+    try {
+      document.execCommand(cmd, false, value);
+    } catch {
+      // ignore
+    }
+    if (el) {
+      // sync change for the text block
+      const html = el.innerHTML;
+      const textBlock = draft.content.find((b) => b.type === "text") as
+        | Extract<NoteBlock, { type: "text" }>
+        | undefined;
+      if (textBlock) updateBlock(textBlock.id, { html });
+    }
   };
+
+  // First text block is the primary editable surface
+  const primaryText = draft.content.find((b) => b.type === "text") as
+    | Extract<NoteBlock, { type: "text" }>
+    | undefined;
 
   const headerStatus = useMemo(() => {
     if (readOnly) return "Read only";
-    if (createMut.isPending || updateMut.isPending) return "Saving...";
-    if (!noteId && isNew) return "Unsaved";
+    if (createMut.isPending || updateMut.isPending) return "Saving…";
+    if (!noteId && isNew) return hasContent ? "Edited" : "";
     return "Saved";
-  }, [readOnly, createMut.isPending, updateMut.isPending, noteId, isNew]);
+  }, [readOnly, createMut.isPending, updateMut.isPending, noteId, isNew, hasContent]);
 
   return (
     <div className={cn("min-h-screen w-full max-w-3xl mx-auto", colorBg(draft.color))}>
       {/* Top bar */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100 px-4 py-3 flex items-center gap-2">
+      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-gray-100 px-3 py-2 flex items-center gap-2">
         <button
           type="button"
-          onClick={handleSaveExit}
+          onClick={handleBack}
           aria-label="Back"
-          className="p-2 -ml-2 rounded-full hover:bg-gray-100"
+          className="p-2 rounded-full hover:bg-gray-100"
         >
           <ArrowLeft size={20} className="text-gray-700" />
         </button>
         <span className="text-xs text-gray-500 flex-1 truncate">{headerStatus}</span>
-
-        {!readOnly && (
-          <>
-            <button
-              type="button"
-              onClick={() => setDraft((d) => ({ ...d, is_pinned: !d.is_pinned }))}
-              aria-label={draft.is_pinned ? "Unpin" : "Pin"}
-              className={cn(
-                "p-2 rounded-full hover:bg-gray-100",
-                draft.is_pinned && "text-amber-600",
-              )}
-            >
-              <Pin size={18} className={draft.is_pinned ? "fill-amber-500" : ""} />
-            </button>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Color"
-                  className="p-2 rounded-full hover:bg-gray-100 text-gray-700"
-                >
-                  <Palette size={18} />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-3">
-                <ColorPicker
-                  value={draft.color}
-                  onChange={(c) => setDraft((d) => ({ ...d, color: c }))}
-                />
-              </PopoverContent>
-            </Popover>
-
-            {!isNew && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                aria-label="Delete"
-                className="p-2 rounded-full hover:bg-red-50 text-red-500"
-              >
-                <Trash2 size={18} />
-              </button>
-            )}
-          </>
-        )}
+        {uploading && <Loader2 size={16} className="animate-spin text-gray-400" />}
       </header>
 
       <input
@@ -323,218 +309,90 @@ const NoteEditor = () => {
         className="hidden"
       />
 
-      <KeyboardAvoidingScroll className="px-4 py-4 space-y-4">
+      <KeyboardAvoidingScroll
+        className="px-4 pt-4"
+        style={{ paddingBottom: "96px" }}
+      >
         {/* Title */}
-        <Input
+        <input
+          type="text"
           value={draft.title}
           onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
           placeholder="Title"
           readOnly={readOnly}
-          className="text-lg font-semibold border-0 bg-transparent shadow-none px-0 focus-visible:ring-0"
+          className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-3"
         />
 
-        {/* Shared toggle */}
-        {!readOnly && (
-          <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-3">
-            <div>
-              <p className="text-sm font-medium text-gray-900">Shared with Team</p>
-              <p className="text-xs text-gray-500">
-                {draft.is_public
-                  ? "Visible to everyone in your pharmacy"
-                  : "Private to you"}
-              </p>
-            </div>
-            <Switch
-              checked={draft.is_public}
-              onCheckedChange={(v) => setDraft((d) => ({ ...d, is_public: v }))}
-            />
-          </div>
-        )}
-
-        {/* Blocks */}
-        <div className="space-y-3">
-          {draft.content.map((block) => (
-            <div key={block.id} className="relative group">
-              {block.type === "text" && (
-                <BlockText
-                  html={block.html}
-                  readOnly={readOnly}
-                  onChange={(html) => updateBlock(block.id, { html })}
-                />
-              )}
-              {block.type === "checklist" && (
-                <BlockChecklist
-                  items={block.items}
-                  readOnly={readOnly}
-                  onChange={(items) => updateBlock(block.id, { items })}
-                />
-              )}
-              {block.type === "image" && (
-                <BlockImage
-                  url={block.url}
-                  path={block.path}
-                  caption={block.caption}
-                  category={block.category}
-                  readOnly={readOnly}
-                  onChange={(p) => updateBlock(block.id, p)}
-                />
-              )}
-              {!readOnly && draft.content.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeBlock(block.id)}
-                  className="absolute -top-2 -right-2 bg-white border border-gray-200 rounded-full p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
-                  aria-label="Remove block"
-                >
-                  <Trash2 size={12} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Add block toolbar */}
-        {!readOnly && (
-          <div className="bg-white rounded-xl border border-gray-200 p-3">
-            <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
-              Add block
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => addBlock({ id: newId(), type: "text", html: "" })}
-                className="justify-start"
-              >
-                <Type size={14} className="mr-1.5" /> Text
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  addBlock({
-                    id: newId(),
-                    type: "checklist",
-                    items: [{ text: "", checked: false }],
-                  })
-                }
-                className="justify-start"
-              >
-                <ListChecks size={14} className="mr-1.5" /> List
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => triggerImagePicker("photo")}
-                disabled={uploading}
-                className="justify-start"
-              >
-                {uploading ? (
-                  <Loader2 size={14} className="mr-1.5 animate-spin" />
-                ) : (
-                  <ImageIcon size={14} className="mr-1.5" />
-                )}
-                Photo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => triggerImagePicker("invoice")}
-                disabled={uploading}
-                className="justify-start"
-              >
-                <Receipt size={14} className="mr-1.5" /> Invoice
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => triggerImagePicker("prescription")}
-                disabled={uploading}
-                className="justify-start col-span-2 sm:col-span-1"
-              >
-                <FileText size={14} className="mr-1.5" /> Rx
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Contact numbers */}
-        <section className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Contact Numbers
-          </h3>
-          <ContactChips
-            numbers={draft.contact_numbers}
+        {/* Primary note body */}
+        {primaryText && (
+          <BlockText
+            ref={textRef}
+            html={primaryText.html}
             readOnly={readOnly}
-            onChange={(contact_numbers) => setDraft((d) => ({ ...d, contact_numbers }))}
+            placeholder="Note"
+            onChange={(html) => updateBlock(primaryText.id, { html })}
           />
-        </section>
+        )}
 
-        {/* Tags */}
-        <section className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Tags
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {draft.tags.map((t) => (
-              <span
-                key={t}
-                className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 rounded-full px-2.5 py-1 text-xs"
-              >
-                <Tag size={10} />#{t}
+        {/* Inserted blocks (image / checklist) appear below the body */}
+        <div className="space-y-3 mt-4">
+          {draft.content
+            .filter((b) => b.id !== primaryText?.id)
+            .map((block) => (
+              <div key={block.id} className="relative group">
+                {block.type === "checklist" && (
+                  <BlockChecklist
+                    items={block.items}
+                    readOnly={readOnly}
+                    onChange={(items) => updateBlock(block.id, { items })}
+                  />
+                )}
+                {block.type === "image" && (
+                  <BlockImage
+                    url={block.url}
+                    path={block.path}
+                    caption={block.caption}
+                    category={block.category}
+                    readOnly={readOnly}
+                    onChange={(p) => updateBlock(block.id, p)}
+                  />
+                )}
+                {block.type === "text" && (
+                  <BlockText
+                    html={block.html}
+                    readOnly={readOnly}
+                    onChange={(html) => updateBlock(block.id, { html })}
+                  />
+                )}
                 {!readOnly && (
                   <button
                     type="button"
-                    onClick={() => removeTag(t)}
-                    className="ml-1 text-gray-400 hover:text-red-500"
-                    aria-label={`Remove tag ${t}`}
+                    onClick={() => removeBlock(block.id)}
+                    className="absolute -top-2 -right-2 bg-white border border-gray-200 rounded-full p-1 text-gray-400 hover:text-red-500 opacity-80"
+                    aria-label="Remove block"
                   >
-                    ×
+                    <Trash2 size={12} />
                   </button>
                 )}
-              </span>
+              </div>
             ))}
-            {draft.tags.length === 0 && readOnly && (
-              <span className="text-xs text-gray-400">No tags</span>
-            )}
-          </div>
-          {!readOnly && (
-            <div className="flex gap-2">
-              <Input
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-                placeholder="Add tag"
-                className="h-9"
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={addTag}
-                className="bg-[#2563eb] hover:bg-[#1d4ed8]"
-              >
-                Add
-              </Button>
-            </div>
-          )}
-        </section>
-
-        {readOnly && existing && (
-          <p className="text-center text-xs text-gray-500 pt-2">
-            Shared note — read only
-          </p>
-        )}
+        </div>
       </KeyboardAvoidingScroll>
+
+      {!readOnly && (
+        <NoteKeyboardToolbar
+          color={draft.color}
+          onColorChange={(c) => setDraft((d) => ({ ...d, color: c }))}
+          isShared={draft.is_public}
+          onShareChange={(v) => setDraft((d) => ({ ...d, is_public: v }))}
+          onAddImage={triggerImagePicker}
+          onAddChecklist={handleAddChecklist}
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          exec={exec}
+          canDelete={!!noteId}
+        />
+      )}
     </div>
   );
 };
