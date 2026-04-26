@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,9 @@ import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
 import NoteKeyboardToolbar from "@/components/notes/NoteKeyboardToolbar";
 import { cn } from "@/lib/utils";
+
+const MAX_CHARS = 2000;
+const NEAR_LIMIT = 1800;
 
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -63,7 +66,11 @@ const NoteEditor = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
-  const textRef = useRef<BlockTextHandle | null>(null);
+  // Map of text-block id -> handle, so we can focus any text block by id
+  // (used by the auto-cursor flow after inserting an image/checklist).
+  const blockRefs = useRef<Map<string, BlockTextHandle>>(new Map());
+  const focusBlockIdRef = useRef<string | null>(null);
+  const nearLimitWarnedRef = useRef(false);
   // Latest draft, kept in a ref so the debounced save always sees fresh data
   // without having to re-create the timer on every keystroke.
   const draftRef = useRef<DraftState>(draft);
@@ -113,9 +120,34 @@ const NoteEditor = () => {
     });
   };
 
-  const addBlock = (block: NoteBlock) => {
-    setDraft((d) => ({ ...d, content: [...d.content, block] }));
+  /**
+   * Append a non-text block at the end and immediately add a fresh empty
+   * text block after it, then focus that new text block — Google-Keep /
+   * MS-Word style "keep typing" flow.
+   */
+  const addBlockWithCursor = (block: NoteBlock) => {
+    const trailingTextId = newId();
+    setDraft((d) => ({
+      ...d,
+      content: [
+        ...d.content,
+        block,
+        { id: trailingTextId, type: "text", html: "" },
+      ],
+    }));
+    focusBlockIdRef.current = trailingTextId;
   };
+
+  // After render, focus the queued text block (set by addBlockWithCursor).
+  useEffect(() => {
+    const id = focusBlockIdRef.current;
+    if (!id) return;
+    const handle = blockRefs.current.get(id);
+    if (handle) {
+      requestAnimationFrame(() => handle.focus());
+      focusBlockIdRef.current = null;
+    }
+  }, [draft.content]);
 
   const buildPayload = (state: DraftState): Partial<Note> => {
     const images = state.content.filter((b) => b.type === "image") as Extract<
@@ -137,6 +169,31 @@ const NoteEditor = () => {
       },
     };
   };
+
+  // ---- character counter ----
+  const totalChars = useMemo(() => {
+    let n = draft.title.length;
+    for (const b of draft.content) {
+      if (b.type === "text") {
+        n += b.html.replace(/<[^>]*>/g, "").length;
+      } else if (b.type === "checklist") {
+        for (const it of b.items) n += it.text.length;
+      }
+    }
+    return n;
+  }, [draft]);
+
+  const remaining = Math.max(0, MAX_CHARS - totalChars);
+
+  useEffect(() => {
+    if (totalChars >= NEAR_LIMIT && !nearLimitWarnedRef.current) {
+      nearLimitWarnedRef.current = true;
+      toast.warning("Approaching 2000 character limit");
+    }
+    if (totalChars < NEAR_LIMIT) {
+      nearLimitWarnedRef.current = false;
+    }
+  }, [totalChars]);
 
   // Has the user typed anything worth saving?
   const hasContent = useMemo(() => {
@@ -238,7 +295,7 @@ const NoteEditor = () => {
       const id = await ensureSaved();
       if (!id) throw new Error("Could not create note");
       const { path, url } = await uploadNoteAttachment(file, profile.pharmacy_id, id);
-      addBlock({
+      addBlockWithCursor({
         id: newId(),
         type: "image",
         path,
@@ -254,7 +311,7 @@ const NoteEditor = () => {
   };
 
   const handleAddChecklist = () => {
-    addBlock({
+    addBlockWithCursor({
       id: newId(),
       type: "checklist",
       items: [{ text: "", checked: false }],
@@ -263,31 +320,34 @@ const NoteEditor = () => {
 
   // ---- text editing exec ----
   const exec = (cmd: string, value?: string) => {
-    const el = textRef.current?.el();
+    // Apply formatting to whichever text block currently has focus; fall
+    // back to the first text block if none does.
+    let activeId: string | null = null;
+    for (const [bid, handle] of blockRefs.current.entries()) {
+      if (handle.el() === document.activeElement) {
+        activeId = bid;
+        break;
+      }
+    }
+    if (!activeId) {
+      const firstText = draft.content.find((b) => b.type === "text");
+      activeId = firstText?.id ?? null;
+    }
+    const el = activeId ? blockRefs.current.get(activeId)?.el() ?? null : null;
     if (el && document.activeElement !== el) el.focus();
     try {
       document.execCommand(cmd, false, value);
     } catch {
       // ignore
     }
-    if (el) {
-      // sync change for the text block
-      const html = el.innerHTML;
-      const textBlock = draft.content.find((b) => b.type === "text") as
-        | Extract<NoteBlock, { type: "text" }>
-        | undefined;
-      if (textBlock) updateBlock(textBlock.id, { html });
+    if (el && activeId) {
+      updateBlock(activeId, { html: el.innerHTML });
     }
   };
 
-  // First text block is the primary editable surface
-  const primaryText = draft.content.find((b) => b.type === "text") as
-    | Extract<NoteBlock, { type: "text" }>
-    | undefined;
-
   return (
     <div
-      className={cn("min-h-screen w-full max-w-3xl mx-auto bg-gray-100")}
+      className={cn("min-h-screen w-full max-w-3xl mx-auto")}
       style={{ backgroundColor: colorHex(draft.color) }}
     >
       {/* Top bar */}
@@ -321,72 +381,82 @@ const NoteEditor = () => {
       />
 
       <KeyboardAvoidingScroll
-        className="px-4 pt-4"
-        style={{ paddingBottom: "96px" }}
+        className="px-4 pt-4 pb-20 flex flex-col gap-1"
       >
         {/* Title */}
         <input
           type="text"
           value={draft.title}
-          onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+          onChange={(e) => {
+            const v = e.target.value;
+            const prev = draft.title;
+            const delta = v.length - prev.length;
+            if (delta > remaining) return;
+            setDraft((d) => ({ ...d, title: v }));
+          }}
           placeholder="Title"
           readOnly={readOnly}
-          className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-3"
+          className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-2"
         />
 
-        {/* Primary note body */}
-        {primaryText && (
-          <BlockText
-            ref={textRef}
-            html={primaryText.html}
-            readOnly={readOnly}
-            placeholder="Note"
-            onChange={(html) => updateBlock(primaryText.id, { html })}
-          />
-        )}
+        {/* Document flow — every block (text, image, checklist) sits in
+            a single ordered column with a tight 4 px gap. */}
+        {draft.content.map((block, idx) => (
+          <div key={block.id} className="relative group">
+            {block.type === "text" && (
+              <BlockText
+                ref={(h) => {
+                  if (h) blockRefs.current.set(block.id, h);
+                  else blockRefs.current.delete(block.id);
+                }}
+                html={block.html}
+                readOnly={readOnly}
+                placeholder={idx === 0 ? "Note" : ""}
+                maxRemaining={remaining}
+                onChange={(html) => updateBlock(block.id, { html })}
+              />
+            )}
+            {block.type === "checklist" && (
+              <BlockChecklist
+                items={block.items}
+                readOnly={readOnly}
+                maxRemaining={remaining}
+                onChange={(items) => updateBlock(block.id, { items })}
+              />
+            )}
+            {block.type === "image" && (
+              <BlockImage
+                url={block.url}
+                path={block.path}
+                caption={block.caption}
+                category={block.category}
+                readOnly={readOnly}
+                onChange={(p) => updateBlock(block.id, p)}
+              />
+            )}
+            {!readOnly && block.type !== "text" && (
+              <button
+                type="button"
+                onClick={() => removeBlock(block.id)}
+                className="absolute -top-2 -right-2 bg-white border border-gray-200 rounded-full p-1 text-gray-400 hover:text-red-500 opacity-80"
+                aria-label="Remove block"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+        ))}
 
-        {/* Inserted blocks (image / checklist) appear below the body */}
-        <div className="space-y-3 mt-4">
-          {draft.content
-            .filter((b) => b.id !== primaryText?.id)
-            .map((block) => (
-              <div key={block.id} className="relative group">
-                {block.type === "checklist" && (
-                  <BlockChecklist
-                    items={block.items}
-                    readOnly={readOnly}
-                    onChange={(items) => updateBlock(block.id, { items })}
-                  />
-                )}
-                {block.type === "image" && (
-                  <BlockImage
-                    url={block.url}
-                    path={block.path}
-                    caption={block.caption}
-                    category={block.category}
-                    readOnly={readOnly}
-                    onChange={(p) => updateBlock(block.id, p)}
-                  />
-                )}
-                {block.type === "text" && (
-                  <BlockText
-                    html={block.html}
-                    readOnly={readOnly}
-                    onChange={(html) => updateBlock(block.id, { html })}
-                  />
-                )}
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => removeBlock(block.id)}
-                    className="absolute -top-2 -right-2 bg-white border border-gray-200 rounded-full p-1 text-gray-400 hover:text-red-500 opacity-80"
-                    aria-label="Remove block"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-            ))}
+        {/* Character counter */}
+        <div className="pt-2 flex justify-end">
+          <span
+            className={cn(
+              "text-xs",
+              totalChars >= NEAR_LIMIT ? "text-red-500" : "text-gray-400",
+            )}
+          >
+            {totalChars}/{MAX_CHARS}
+          </span>
         </div>
       </KeyboardAvoidingScroll>
 
