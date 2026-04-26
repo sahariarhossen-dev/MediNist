@@ -276,7 +276,7 @@ const AddProduct = () => {
             Stock Alert Level
           </Label>
           <p className="text-xs text-muted-foreground">
-            Set the minimum quantity to trigger a low stock alert.
+            Leave empty to use smart defaults — 1 box for Tablet/Capsule, 2 units for others.
           </p>
           <Input
             type="number"

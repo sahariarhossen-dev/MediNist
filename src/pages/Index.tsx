@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
 import AppHeader from "@/components/AppHeader";
+import { isLowStock } from "@/lib/stockUtils";
 
 
 function getStartDate(range: string): string {
@@ -73,7 +74,7 @@ const Index = () => {
         .gte("created_at", startDate),
       supabase
         .from("medicines")
-        .select("id, stock_quantity, stock_alert")
+        .select("id, stock_quantity, stock_alert, product_type, strip_per_pack, pcs_per_strip")
         .eq("pharmacy_id", pharmacyId),
     ]);
 
@@ -83,10 +84,7 @@ const Index = () => {
     const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
     const activeStaff = staffIds.size;
 
-    const stockAlerts = (alertsRes.data ?? []).filter(m => {
-      const threshold = m.stock_alert && m.stock_alert > 0 ? m.stock_alert : 5;
-      return (m.stock_quantity ?? 0) < threshold;
-    }).length;
+    const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
 
     setStats({ totalSales, activeStaff, stockAlerts });
   }, [profile?.pharmacy_id, timeRange]);
