@@ -85,17 +85,107 @@ const Invoice = () => {
     const element = document.getElementById("invoice-content");
     if (!element) return;
     setDownloading(true);
+    // Save inline style so we can restore after capture
+    const originalWidth = element.style.width;
+    const originalMaxWidth = element.style.maxWidth;
     try {
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const imgData = canvas.toDataURL("image/png");
+      // Force the invoice to render at A4 width (~210mm @ 96dpi = 794px)
+      // regardless of the current viewport so html2canvas captures the
+      // desktop-style layout instead of the narrow mobile reflow.
+      const A4_PX = 794;
+      element.style.width = `${A4_PX}px`;
+      element.style.maxWidth = `${A4_PX}px`;
+      // Let the browser reflow at the new width before we snapshot.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await new Promise((r) => setTimeout(r, 50));
+
+      const A4_W = 210; // mm
+      const A4_H = 297; // mm
+      const MARGIN = 10; // mm
+      const CONTENT_W = A4_W - MARGIN * 2; // 190mm
+      const PAGE_CONTENT_H = A4_H - MARGIN * 2; // 277mm
+      const GAP = 3; // mm between sections
+
       const pdf = new jsPDF("p", "mm", "a4");
-      const imgWidth = 190;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+      let cursorY = MARGIN;
+
+      const sections = Array.from(
+        element.querySelectorAll<HTMLElement>("[data-pdf-section]")
+      );
+      // Fallback: if no sections marked, treat the whole element as one section.
+      const targets = sections.length > 0 ? sections : [element];
+
+      for (const section of targets) {
+        const canvas = await html2canvas(section, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          windowWidth: A4_PX,
+        });
+        const hMM = (canvas.height * CONTENT_W) / canvas.width;
+        const imgData = canvas.toDataURL("image/png");
+
+        if (hMM <= PAGE_CONTENT_H) {
+          // Whole section fits on a page — add a new page if it doesn't fit
+          // in the remaining space on the current one.
+          if (cursorY + hMM > A4_H - MARGIN && cursorY > MARGIN) {
+            pdf.addPage();
+            cursorY = MARGIN;
+          }
+          pdf.addImage(imgData, "PNG", MARGIN, cursorY, CONTENT_W, hMM);
+          cursorY += hMM + GAP;
+        } else {
+          // Section is taller than a full page (e.g. very long item table).
+          // Start it on a fresh page and slice the canvas across pages.
+          if (cursorY > MARGIN) {
+            pdf.addPage();
+            cursorY = MARGIN;
+          }
+          // pixels per mm based on the rendered canvas
+          const pxPerMM = canvas.width / CONTENT_W;
+          const sliceHeightPx = Math.floor(PAGE_CONTENT_H * pxPerMM);
+          let offsetPx = 0;
+          while (offsetPx < canvas.height) {
+            const remainingPx = canvas.height - offsetPx;
+            const thisSlicePx = Math.min(sliceHeightPx, remainingPx);
+            const sliceCanvas = document.createElement("canvas");
+            sliceCanvas.width = canvas.width;
+            sliceCanvas.height = thisSlicePx;
+            const ctx = sliceCanvas.getContext("2d");
+            if (!ctx) break;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            ctx.drawImage(
+              canvas,
+              0,
+              offsetPx,
+              canvas.width,
+              thisSlicePx,
+              0,
+              0,
+              canvas.width,
+              thisSlicePx
+            );
+            const sliceData = sliceCanvas.toDataURL("image/png");
+            const sliceMM = (thisSlicePx * CONTENT_W) / canvas.width;
+            pdf.addImage(sliceData, "PNG", MARGIN, MARGIN, CONTENT_W, sliceMM);
+            offsetPx += thisSlicePx;
+            if (offsetPx < canvas.height) {
+              pdf.addPage();
+            } else {
+              cursorY = MARGIN + sliceMM + GAP;
+            }
+          }
+        }
+      }
+
       pdf.save(`${invoiceId}.pdf`);
     } catch (e) {
       console.error("PDF generation failed", e);
     } finally {
+      // Restore original layout so the on-screen preview snaps back.
+      element.style.width = originalWidth;
+      element.style.maxWidth = originalMaxWidth;
       setDownloading(false);
     }
   };
@@ -147,7 +237,7 @@ const Invoice = () => {
       <div id="invoice-content" className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none my-4 print:my-0 p-8 print:p-6">
         
         {/* Two-column header with vertical divider */}
-        <div className="flex items-center mb-1">
+        <div data-pdf-section="header" className="flex items-center mb-1">
           {/* Left — Shop Profile (6 rows) */}
           <div className="flex-1 flex flex-col leading-7">
             <h1 className="text-lg font-extrabold text-gray-900 tracking-tight whitespace-nowrap truncate">{pharmacy?.name || "Pharmacy"}</h1>
@@ -176,11 +266,11 @@ const Invoice = () => {
         </div>
 
         {/* Red divider */}
-        <div className="h-[3px] bg-red-700 mb-6 py-0 my-[15px]" />
+        <div data-pdf-section="divider" className="h-[3px] bg-red-700 mb-6 py-0 my-[15px]" />
 
         {/* Items table */}
-        <div className="overflow-x-auto mb-6">
-          <table className="w-full text-sm">
+        <div data-pdf-section="items" className="overflow-x-auto mb-6">
+          <table className="w-full text-sm pdf-table">
             <thead>
               <tr className="bg-red-700 text-white">
                 <th className="text-left py-3 px-4 font-semibold uppercase tracking-wide text-xs">#</th>
@@ -210,7 +300,7 @@ const Invoice = () => {
         </div>
 
         {/* Summary */}
-        <div className="flex justify-end">
+        <div data-pdf-section="summary" className="flex justify-end">
           <div className="w-72 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal</span>
@@ -232,7 +322,7 @@ const Invoice = () => {
         </div>
 
         {/* Closing message */}
-        <p className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
+        <p data-pdf-section="footer" className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
 
       </div>
     </div>
