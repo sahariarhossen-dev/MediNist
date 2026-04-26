@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { format, isToday, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import AppHeader from "@/components/AppHeader";
+import { formatMoney } from "@/lib/formatUtils";
 
 const sparklineData = [
   { v: 320 }, { v: 480 }, { v: 390 }, { v: 520 }, { v: 610 }, { v: 580 },
@@ -108,7 +109,7 @@ const Sales = () => {
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-fluid-xs font-medium text-gray-400 uppercase tracking-wide">Today's Total Sale</p>
-              <p className="text-fluid-2xl font-extrabold text-emerald-600 mt-1.5 tracking-tight tabular-nums truncate">৳{todayTotal.toLocaleString()}</p>
+              <p className="text-fluid-2xl font-extrabold text-emerald-600 mt-1.5 tracking-tight tabular-nums truncate">৳{formatMoney(todayTotal)}</p>
               <div className="flex items-center gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-0.5 text-fluid-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                   <ArrowUp className="w-3 h-3" />
@@ -168,7 +169,7 @@ const Sales = () => {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatTime(sale.created_at)}</p>
                   </div>
-                  <p className="text-sm font-bold text-emerald-600">৳{Number(sale.total).toLocaleString()}</p>
+                  <p className="text-sm font-bold text-emerald-600">৳{formatMoney(sale.total)}</p>
                 </div>
               ))
             )}

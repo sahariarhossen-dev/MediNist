@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
-import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
@@ -290,28 +290,28 @@ const CreateSale = () => {
   const getLineTotal = useCallback((item: CartItem) => {
     const gross = item.quantity * (item.medicine.price || 0);
     if (saleType === "wholesale") {
-      return Math.round(gross * (1 - item.discountPercent / 100));
+      return roundMoney(gross * (1 - item.discountPercent / 100));
     }
-    return gross;
+    return roundMoney(gross);
   }, [saleType]);
 
   const subtotal = useMemo(
-    () => cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0),
+    () => roundMoney(cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0)),
     [cartItems]
   );
 
   // For wholesale: net total = sum of per-item net amounts (no global discount)
   // For retail: net total = subtotal - global discount
   const wholesaleNetTotal = useMemo(
-    () => cartItems.reduce((sum, c) => sum + getLineTotal(c), 0),
+    () => roundMoney(cartItems.reduce((sum, c) => sum + getLineTotal(c), 0)),
     [cartItems, getLineTotal]
   );
 
-  const discountAmount = useMemo(() => Math.round(subtotal * discountPercent / 100), [subtotal, discountPercent]);
-  const retailNetTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
+  const discountAmount = useMemo(() => roundMoney(subtotal * discountPercent / 100), [subtotal, discountPercent]);
+  const retailNetTotal = useMemo(() => roundMoney(subtotal - discountAmount), [subtotal, discountAmount]);
 
   const netTotal = saleType === "wholesale" ? wholesaleNetTotal : retailNetTotal;
-  const totalDiscountAmount = saleType === "wholesale" ? subtotal - wholesaleNetTotal : discountAmount;
+  const totalDiscountAmount = saleType === "wholesale" ? roundMoney(subtotal - wholesaleNetTotal) : discountAmount;
 
   const saveSale = async (status: "draft" | "completed") => {
     if (cartItems.length === 0) {
@@ -328,10 +328,10 @@ const CreateSale = () => {
 
       const salePayload = {
         sale_type: saleType,
-        subtotal,
+        subtotal: roundMoney(subtotal),
         discount_percent: saleType === "wholesale" ? 0 : discountPercent,
-        discount_amount: totalDiscountAmount,
-        total: netTotal,
+        discount_amount: roundMoney(totalDiscountAmount),
+        total: roundMoney(netTotal),
         status,
       };
 
@@ -363,8 +363,8 @@ const CreateSale = () => {
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
         quantity: c.quantity,
-        unit_price: c.medicine.price || 0,
-        total_price: getLineTotal(c),
+        unit_price: roundMoney(c.medicine.price || 0),
+        total_price: roundMoney(getLineTotal(c)),
         discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
       }));
 
@@ -382,8 +382,8 @@ const CreateSale = () => {
 
         // Customer ledger posting (due/split)
         if (selectedCustomer && (paymentMethod === "due" || paymentMethod === "split")) {
-          const paid = paymentMethod === "split" ? Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0)) : 0;
-          const dueAmt = Math.max(0, netTotal - paid);
+          const paid = paymentMethod === "split" ? roundMoney(Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0))) : 0;
+          const dueAmt = roundMoney(Math.max(0, netTotal - paid));
           if (dueAmt > 0) {
             const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
               customer_id: selectedCustomer.id,
@@ -535,7 +535,7 @@ const CreateSale = () => {
                     <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
-                <p className="text-lime-900 text-sm font-bold">৳{med.price ?? 0}</p>
+                <p className="text-lime-900 text-sm font-bold">৳{formatMoney(med.price ?? 0)}</p>
               </button>
             ))}
           </div>
@@ -604,7 +604,7 @@ const CreateSale = () => {
                           <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{unitPrice}</span>
+                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
                       {item.medicine.company_name && (
                         <span className="text-[10px] text-emerald-600 flex-shrink-0 font-medium truncate max-w-[60px]">{item.medicine.company_name}</span>
                       )}
@@ -640,7 +640,7 @@ const CreateSale = () => {
                       {/* Retail: show calculation */}
                       {!isWholesale && (
                         <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0 ml-auto">
-                          {item.quantity}*{unitPrice}={grossTotal}৳
+                          {item.quantity}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
                         </span>
                       )}
 
@@ -671,7 +671,7 @@ const CreateSale = () => {
                     {isWholesale && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
                         <p className="text-xs font-mono text-gray-500 text-center">
-                          {unitPrice} × {item.quantity} = {grossTotal} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{lineTotal} ৳</span>
+                          {formatMoney(unitPrice)} × {item.quantity} = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
                         </p>
                       </div>
                     )}
@@ -697,13 +697,13 @@ const CreateSale = () => {
                     </p>
                     {isWholesale ? (
                       <>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{unitPrice}-{item.discountPercent}%</span>
-                        <span className="text-xs font-bold text-blue-700">{lineTotal} ৳</span>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
+                        <span className="text-xs font-bold text-blue-700">{formatMoney(lineTotal)} ৳</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
-                        <span className="text-xs font-bold text-emerald-600">{grossTotal} ৳</span>
+                        <span className="text-[10px] text-secondary">{item.quantity}×{formatMoney(unitPrice)}</span>
+                        <span className="text-xs font-bold text-emerald-600">{formatMoney(grossTotal)} ৳</span>
                       </>
                     )}
                   </div>
@@ -725,10 +725,10 @@ const CreateSale = () => {
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
                     {i > 0 && " + "}
-                    {c.quantity * (c.medicine.price || 0)}
+                    {formatMoney(c.quantity * (c.medicine.price || 0))}
                   </span>
                 ))}
-                {" = "}{subtotal} ৳
+                {" = "}{formatMoney(subtotal)} ৳
               </span>
             </div>
 
@@ -778,7 +778,7 @@ const CreateSale = () => {
                     </span>
                   )}
                 </span>
-                <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
+                <span className="text-sm font-bold text-gray-900">-{formatMoney(discountAmount)} ৳</span>
               </div>
             )}
 
@@ -786,13 +786,13 @@ const CreateSale = () => {
             {isWholesale && (
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-500 ml-2">Item Discounts</span>
-                <span className="text-sm font-bold text-gray-900">-{totalDiscountAmount} ৳</span>
+                <span className="text-sm font-bold text-gray-900">-{formatMoney(totalDiscountAmount)} ৳</span>
               </div>
             )}
 
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-base font-extrabold text-gray-900">Net Total</span>
-              <span className={`text-xl font-extrabold ${isWholesale ? "text-blue-700" : "text-emerald-600"}`}>{netTotal} ৳</span>
+              <span className={`text-xl font-extrabold ${isWholesale ? "text-blue-700" : "text-emerald-600"}`}>{formatMoney(netTotal)} ৳</span>
             </div>
           </div>
         )}

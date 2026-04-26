@@ -6,6 +6,7 @@ import { X, Download, FileText } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { formatMoney } from "@/lib/formatUtils";
 
 interface SaleData {
   id: string;
@@ -199,9 +200,9 @@ const Invoice = () => {
                     {item.company_name && <p className="text-[10px] text-gray-400">{item.company_name}</p>}
                   </td>
                   <td className="py-2.5 px-4 text-center font-medium text-gray-700">{item.quantity}</td>
-                  <td className="py-2.5 px-4 text-right font-medium text-gray-700 font-mono">৳{Number(item.unit_price).toLocaleString()}</td>
+                  <td className="py-2.5 px-4 text-right font-medium text-gray-700 font-mono">৳{formatMoney(item.unit_price)}</td>
                   {isWholesale && <td className="py-2.5 px-4 text-center font-medium text-gray-700">{item.discount_percent ?? 0}%</td>}
-                  <td className="py-2.5 px-4 text-right font-bold text-gray-900 font-mono">৳{Number(item.total_price).toLocaleString()}</td>
+                  <td className="py-2.5 px-4 text-right font-bold text-gray-900 font-mono">৳{formatMoney(item.total_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -213,19 +214,19 @@ const Invoice = () => {
           <div className="w-72 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal</span>
-              <span className="font-semibold text-gray-800 font-mono">৳{Number(sale.subtotal).toLocaleString()}</span>
+              <span className="font-semibold text-gray-800 font-mono">৳{formatMoney(sale.subtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Discount ({sale.discount_percent}%)</span>
-              <span className="font-semibold text-gray-800 font-mono">-৳{Number(sale.discount_amount).toLocaleString()}</span>
+              <span className="font-semibold text-gray-800 font-mono">-৳{formatMoney(sale.discount_amount)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal Less Discount</span>
-              <span className="font-semibold text-gray-800 font-mono">৳{subtotalLessDiscount.toLocaleString()}</span>
+              <span className="font-semibold text-gray-800 font-mono">৳{formatMoney(subtotalLessDiscount)}</span>
             </div>
             <div className="border-t-[3px] border-red-700 pt-3 mt-3 flex justify-between items-center">
               <span className="font-extrabold text-gray-900 text-base">Total Payable</span>
-              <span className="text-red-700 font-mono text-xl font-extrabold">৳{Number(sale.total).toLocaleString()}</span>
+              <span className="text-red-700 font-mono text-xl font-extrabold">৳{formatMoney(sale.total)}</span>
             </div>
           </div>
         </div>
