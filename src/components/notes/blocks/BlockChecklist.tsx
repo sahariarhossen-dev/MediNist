@@ -73,7 +73,7 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
   };
 
   return (
-    <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2">
+    <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2 mb-0 mt-0 pt-[8px] pb-[8px]">
       {items.map((it, i) => (
         <div key={i} className="flex items-center gap-2">
           <Checkbox
