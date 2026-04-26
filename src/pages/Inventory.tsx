@@ -535,41 +535,44 @@ const Inventory = () => {
                     </p>
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
+                      const catalogType = toFunctionalType(med.format);
                       return (
                         <div
                           key={med.id}
                           onClick={() => handleCatalogCardClick(med.id)}
-                          className={`bg-muted rounded-2xl overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
-                            isExpanded ? "ring-1 ring-primary/30" : ""
+                          className={`bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60 overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
+                            isExpanded ? "ring-1 ring-emerald-300" : ""
                           }`}
                         >
-                          <div className="flex items-start gap-3 p-3">
-                            <div className="flex-shrink-0 h-11 w-11 rounded-full bg-accent flex items-center justify-center">
-                              <Plus size={20} className="text-primary" />
+                          <div className="flex items-start gap-3.5 p-4">
+                            <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                              <Plus size={20} className="text-emerald-500" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-foreground text-sm truncate">{med.brand_name}</p>
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{med.generic_name || "—"}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <p className="font-bold text-gray-900 text-sm truncate flex items-center gap-1.5">
+                                <span className="truncate">{med.brand_name}</span>
+                                {med.strength && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{med.strength}</span>}
+                              </p>
+                              <p className="text-[11px] text-gray-400 truncate mt-0.5">{med.generic_name || "—"}</p>
+                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                                 {med.company && (
-                                  <span className="text-[11px] text-muted-foreground truncate max-w-[50%]">{med.company}</span>
+                                  <span className="text-[11px] text-gray-400 truncate max-w-[55%]">{med.company}</span>
                                 )}
-                                {med.strength && (
-                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.strength}</span>
-                                )}
-                                {med.format && (
-                                  <span className="text-[11px] bg-background px-1.5 py-0.5 rounded text-muted-foreground">{med.format}</span>
+                                {catalogType && (
+                                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(catalogType)}`}>
+                                    {catalogType}
+                                  </span>
                                 )}
                               </div>
                             </div>
                             <div className="flex-shrink-0 text-right">
-                              <p className="font-bold text-foreground text-sm">৳{med.unit_price ?? 0}</p>
+                              <p className="font-bold text-emerald-600 text-sm tabular-nums">৳{med.unit_price ?? 0}</p>
                             </div>
                           </div>
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
-                                <span className="text-xs text-muted-foreground flex-shrink-0">{!isSingleUnit(toFunctionalType(med.format)) ? "Box:" : "Qty (pcs):"}</span>
+                              <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2.5">
+                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit(catalogType) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
@@ -582,7 +585,7 @@ const Inventory = () => {
                                 <button
                                   onClick={() => handleAddFromCatalog(med)}
                                   disabled={addingCatalog}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-50 flex-shrink-0"
+                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50 flex-shrink-0"
                                 >
                                   {addingCatalog ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                                   Add
