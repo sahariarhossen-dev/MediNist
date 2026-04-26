@@ -67,3 +67,47 @@ export const boxesToPieces = (
   const pps = pcsPerStrip || 1;
   return boxes * spp * pps;
 };
+
+/**
+ * Compute the effective low-stock threshold (in pieces) for a medicine.
+ *
+ * Rules:
+ * - If the user explicitly set `stock_alert > 0`, use that value.
+ * - Otherwise, fall back to a smart default based on product_type:
+ *   • Tablet / Capsule → one full box (strip_per_pack × pcs_per_strip),
+ *     fallback to 10 pieces if pack info is missing.
+ *   • Everything else (Syrup, Injection, Cream, Suspension, Ointment, …)
+ *     → 2 units.
+ */
+export const getEffectiveStockAlert = (med: {
+  product_type?: string | null;
+  stock_alert?: number | null;
+  strip_per_pack?: number | null;
+  pcs_per_strip?: number | null;
+}): number => {
+  if (med.stock_alert && med.stock_alert > 0) return med.stock_alert;
+
+  const type = (med.product_type || "").toLowerCase();
+  if (type === "tablet" || type === "capsule") {
+    const spp = med.strip_per_pack || 0;
+    const pps = med.pcs_per_strip || 0;
+    const oneBox = spp * pps;
+    return oneBox > 0 ? oneBox : 10;
+  }
+  return 2;
+};
+
+/**
+ * Returns true when a medicine's current stock is at or below its
+ * effective low-stock threshold.
+ */
+export const isLowStock = (med: {
+  product_type?: string | null;
+  stock_alert?: number | null;
+  strip_per_pack?: number | null;
+  pcs_per_strip?: number | null;
+  stock_quantity?: number | null;
+}): boolean => {
+  const qty = med.stock_quantity ?? 0;
+  return qty <= getEffectiveStockAlert(med);
+};
