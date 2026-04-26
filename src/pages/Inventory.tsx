@@ -60,18 +60,17 @@ const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { 
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
-        <span className="text-gray-400 font-medium ml-0.5">Pcs</span>
       </span>
     );
   }
   const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
   return (
     <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
-      {boxes}<span className="text-gray-400 font-medium ml-0.5">Bx</span>
+      {boxes}
       <span className="text-gray-300 mx-1">•</span>
-      {strips}<span className="text-gray-400 font-medium ml-0.5">St</span>
+      {strips}
       <span className="text-gray-300 mx-1">•</span>
-      {pcs}<span className="text-gray-400 font-medium ml-0.5">Pc</span>
+      {pcs}
     </span>
   );
 };
