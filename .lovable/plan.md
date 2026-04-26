@@ -1,42 +1,78 @@
-## Goal
+# Flexible product search (ignore spaces, hyphens, special chars)
 
-Replace the hardcoded fallback threshold of `5` with a smart, product-type-aware default that respects any user-set `stock_alert` value.
+Make searches match regardless of hyphens, spaces, or other non-alphanumeric characters in either the query or the stored product name. "amactin", "a mactin", "a-mactin" should all match "A-mactin". Display names stay untouched — only matching is normalized.
 
-## Threshold rule (single source of truth)
+## Approach
 
-Create a helper `getEffectiveStockAlert(medicine)` in `src/lib/stockUtils.ts`:
+Normalize both sides of the comparison by stripping everything that isn't `a-z` or `0-9` and lowercasing. Apply this in three places that handle product search.
 
-- If `stock_alert > 0` → use that exact value (in pieces).
-- Else, default by `product_type` (case-insensitive):
-  - **Tablet / Capsule** → `strip_per_pack × pcs_per_strip` (1 full box, in pieces). Falls back to `10` if either is missing.
-  - **Everything else** (Syrup, Injection, Cream, Suspension, Ointment, unknown) → `2`.
+### 1. Shared helper — `src/lib/searchUtils.ts` (new)
 
-Alert condition: `stock_quantity ≤ threshold`.
+```ts
+export const normalizeForSearch = (s: string | null | undefined): string =>
+  (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+```
 
-Example check: a Syrup with 5 units, no custom alert → threshold 2 → 5 ≤ 2 is false → no alert. ✓
+### 2. Inventory page — `src/pages/Inventory.tsx` (client-side)
 
-## Files to change
+- Replace the current `m.name.toLowerCase().includes(searchQuery.toLowerCase())` filter with `normalizeForSearch(m.name).includes(normalizeForSearch(searchQuery))`.
+- Same for the catalog filter block (brand_name, generic_name, company).
 
-**`src/lib/stockUtils.ts`** — add and export:
-- `getEffectiveStockAlert({ product_type, stock_alert, strip_per_pack, pcs_per_strip })` returning the threshold in pieces.
-- `isLowStock(medicine)` returning `stock_quantity ≤ threshold`.
+### 3. Catalog Search page — `src/pages/CatalogSearch.tsx` (client-side)
 
-**`src/pages/ShortItems.tsx`**
-- Replace the inline `threshold = m.stock_alert && m.stock_alert > 0 ? m.stock_alert : 5` filter with `isLowStock(m)`.
-- Already selects all needed columns (`stock_alert, strip_per_pack, pcs_per_strip, product_type`).
+- Replace the `q = searchQuery.toLowerCase()` + `.includes(q)` checks with normalized comparisons across `brand_name`, `generic_name`, and `company`.
 
-**`src/pages/Index.tsx`** (dashboard "Stock Alerts" stat)
-- Update the `medicines` select to also fetch `product_type, strip_per_pack, pcs_per_strip`.
-- Replace the inline threshold logic with `isLowStock(m)`.
-- Change comparison from `<` to `≤` to match the new rule.
+### 4. Create Sale page — `src/pages/CreateSale.tsx` (server-side)
 
-**`src/pages/Inventory.tsx`** (UI low-stock styling, if any)
-- Audit row rendering for any color/badge tied to low stock; if present, switch to `isLowStock`. Currently no inline threshold exists here, so likely no visual change is needed beyond confirming.
+This is the only page using a Supabase server query (`ilike`). Switch to a normalized comparison using PostgreSQL's `regexp_replace`.
 
-**`src/pages/AddProduct.tsx`** (UX clarity, no logic change)
-- Add helper text under the Stock Alert input: *"Leave empty to use smart defaults — 1 box for Tablet/Capsule, 2 units for others."*
+- Use `.or()` with a `regexp_replace` filter via Supabase's `filter()` builder, or call an RPC. Cleanest path: use the PostgREST `or` with a computed expression isn't supported — instead use `.filter()` which accepts raw column expressions only on the column itself. PostgREST does **not** allow function calls on the left side of a filter.
+- **Solution**: create a small Postgres SQL function + use `.rpc()`, OR add a generated column + index. Lightweight choice for this app: a SQL function that returns matching medicine rows for a pharmacy + normalized query.
+
+**New RPC (migration):**
+
+```sql
+create or replace function public.search_medicines(
+  _pharmacy_id uuid,
+  _query text
+)
+returns setof public.medicines
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select *
+  from public.medicines
+  where pharmacy_id = _pharmacy_id
+    and regexp_replace(lower(name), '[^a-z0-9]', '', 'g')
+        like '%' || regexp_replace(lower(_query), '[^a-z0-9]', '', 'g') || '%'
+  order by
+    case
+      when regexp_replace(lower(name), '[^a-z0-9]', '', 'g')
+           like regexp_replace(lower(_query), '[^a-z0-9]', '', 'g') || '%'
+      then 0 else 1
+    end,
+    name
+  limit 10;
+$$;
+```
+
+RLS on `medicines` still applies because the function runs as `security invoker`.
+
+**CreateSale change**: replace the two `ilike` queries with a single `supabase.rpc("search_medicines", { _pharmacy_id, _query: q })` call. Drop the dual starts-with/contains logic — ordering is done in SQL. Keep the 150ms debounce.
+
+### 5. Prescription auto-add lookup (`CreateSale.tsx` line 212)
+
+The `.ilike("name", presc.medicine_name)` exact-name lookup for prescriptions is intentionally exact and should stay as-is (it matches the prescription's stored medicine name verbatim). No change.
+
+## Files touched
+
+- New: `src/lib/searchUtils.ts`
+- New migration: `search_medicines` SQL function
+- Edited: `src/pages/Inventory.tsx`, `src/pages/CatalogSearch.tsx`, `src/pages/CreateSale.tsx`
 
 ## Out of scope
 
-- No DB migration. `stock_alert` stays nullable/`0` = "use default".
-- No changes to how `stock_alert` is saved (still stored in pieces, 0 means "use default").
+- Display names, stored data, and indexes are unchanged.
+- Other text fields (customer names, companies in filters, notes search) are not touched — only product/medicine name search.
