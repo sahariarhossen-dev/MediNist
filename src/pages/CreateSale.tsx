@@ -528,8 +528,8 @@ const CreateSale = () => {
                   <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
                     <span className="truncate">{truncateName(med.name)}</span>
                     {med.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">{truncateStrength(med.product_size)}</span>}
-                    {med.product_type && (
-                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{med.product_type}</span>
+                    {getDisplayFormat(med) && (
+                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{getDisplayFormat(med)}</span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -603,8 +603,8 @@ const CreateSale = () => {
                       <p className="text-sm font-bold text-gray-900 min-w-0 truncate flex items-center gap-1">
                         <span className="truncate">{truncateName(item.medicine.name)}</span>
                         {item.medicine.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.medicine.product_size)}</span>}
-                        {item.medicine.product_type && (
-                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                        {getDisplayFormat(item.medicine) && (
+                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
                         )}
                       </p>
                       <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
@@ -694,8 +694,8 @@ const CreateSale = () => {
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
                       <span className="truncate">{truncateName(item.medicine.name)}</span>
                       {item.medicine.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-slate-800">{truncateStrength(item.medicine.product_size)}</span>}
-                      {item.medicine.product_type && (
-                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
+                      {getDisplayFormat(item.medicine) && (
+                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
                       )}
                     </p>
                     {isWholesale ? (
