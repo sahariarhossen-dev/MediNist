@@ -1,67 +1,47 @@
-import { useEffect, useRef } from "react";
-import { Bold, Italic, List } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 interface BlockTextProps {
   html: string;
   readOnly?: boolean;
+  placeholder?: string;
   onChange?: (html: string) => void;
-  onRemove?: () => void;
+  onFocus?: () => void;
 }
 
-const BlockText = ({ html, readOnly, onChange }: BlockTextProps) => {
-  const ref = useRef<HTMLDivElement>(null);
+export interface BlockTextHandle {
+  focus: () => void;
+  el: () => HTMLDivElement | null;
+}
 
-  useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== html) {
-      ref.current.innerHTML = html || "";
-    }
-  }, [html]);
+const BlockText = forwardRef<BlockTextHandle, BlockTextProps>(
+  ({ html, readOnly, placeholder = "Note", onChange, onFocus }, ref) => {
+    const innerRef = useRef<HTMLDivElement>(null);
 
-  const exec = (cmd: string) => {
-    document.execCommand(cmd, false);
-    if (ref.current) onChange?.(ref.current.innerHTML);
-  };
+    useImperativeHandle(ref, () => ({
+      focus: () => innerRef.current?.focus(),
+      el: () => innerRef.current,
+    }));
 
-  return (
-    <div className="space-y-2">
-      {!readOnly && (
-        <div className="flex gap-1 border border-gray-200 rounded-md p-1 bg-white w-fit">
-          <button
-            type="button"
-            onClick={() => exec("bold")}
-            className="p-1.5 rounded hover:bg-gray-100"
-            aria-label="Bold"
-          >
-            <Bold size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => exec("italic")}
-            className="p-1.5 rounded hover:bg-gray-100"
-            aria-label="Italic"
-          >
-            <Italic size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => exec("insertUnorderedList")}
-            className="p-1.5 rounded hover:bg-gray-100"
-            aria-label="Bulleted list"
-          >
-            <List size={14} />
-          </button>
-        </div>
-      )}
+    useEffect(() => {
+      if (innerRef.current && innerRef.current.innerHTML !== html) {
+        innerRef.current.innerHTML = html || "";
+      }
+    }, [html]);
+
+    return (
       <div
-        ref={ref}
+        ref={innerRef}
         contentEditable={!readOnly}
         suppressContentEditableWarning
         onInput={(e) => onChange?.((e.target as HTMLDivElement).innerHTML)}
-        className="min-h-[60px] w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 prose prose-sm max-w-none"
-        data-placeholder="Type something..."
+        onFocus={onFocus}
+        data-placeholder={placeholder}
+        className="empty-placeholder min-h-[160px] w-full bg-transparent text-base text-gray-800 leading-relaxed focus:outline-none prose prose-sm max-w-none"
       />
-    </div>
-  );
-};
+    );
+  },
+);
+
+BlockText.displayName = "BlockText";
 
 export default BlockText;
