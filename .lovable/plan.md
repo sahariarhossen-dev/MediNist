@@ -1,42 +1,42 @@
-## Context
+## Goal
 
-The previous turn already removed real-time autosave and implemented save-on-exit in `src/pages/NoteEditor.tsx`. Verified:
+Replace the hardcoded fallback threshold of `5` with a smart, product-type-aware default that respects any user-set `stock_alert` value.
 
-- No debounce / `setTimeout` / interval saves remain.
-- `updateMut` is only called from `handleBack` and the unmount cleanup (gated by `flushedRef`).
-- No "Saving…" / "Saved" indicator in the header (line 391: silent sync).
-- 50vh bottom spacer (line 490), `gap-1` flex column (line 409), and 1800/2000 char limits (lines 24–25, 188–196) are all intact.
+## Threshold rule (single source of truth)
 
-So requirements 1, 2, 4 and 5 are already done. Only the **checkbox glitch (item 3)** still has a real bug to fix.
+Create a helper `getEffectiveStockAlert(medicine)` in `src/lib/stockUtils.ts`:
 
-## Root cause of the checkbox glitch
+- If `stock_alert > 0` → use that exact value (in pieces).
+- Else, default by `product_type` (case-insensitive):
+  - **Tablet / Capsule** → `strip_per_pack × pcs_per_strip` (1 full box, in pieces). Falls back to `10` if either is missing.
+  - **Everything else** (Syrup, Injection, Cream, Suspension, Ointment, unknown) → `2`.
 
-`src/components/notes/blocks/BlockChecklist.tsx` renders list items with `key={i}` (array index). When the user presses Enter to insert a new item mid-list, React reuses the existing `<Input>` DOM nodes for shifted positions, which causes:
+Alert condition: `stock_quantity ≤ threshold`.
 
-- the focused input value to appear to "duplicate" into the new row,
-- existing items to look like they vanished or merged,
-- cursor focus to land on the wrong row.
+Example check: a Syrup with 5 units, no custom alert → threshold 2 → 5 ≤ 2 is false → no alert. ✓
 
-This is independent of saving — it's purely a React reconciliation issue, which is why removing autosave didn't make it go away.
+## Files to change
 
-## Fix
+**`src/lib/stockUtils.ts`** — add and export:
+- `getEffectiveStockAlert({ product_type, stock_alert, strip_per_pack, pcs_per_strip })` returning the threshold in pieces.
+- `isLowStock(medicine)` returning `stock_quantity ≤ threshold`.
 
-Give each checklist item a stable id and use it as the React `key`.
+**`src/pages/ShortItems.tsx`**
+- Replace the inline `threshold = m.stock_alert && m.stock_alert > 0 ? m.stock_alert : 5` filter with `isLowStock(m)`.
+- Already selects all needed columns (`stock_alert, strip_per_pack, pcs_per_strip, product_type`).
 
-### Changes to `src/components/notes/blocks/BlockChecklist.tsx`
+**`src/pages/Index.tsx`** (dashboard "Stock Alerts" stat)
+- Update the `medicines` select to also fetch `product_type, strip_per_pack, pcs_per_strip`.
+- Replace the inline threshold logic with `isLowStock(m)`.
+- Change comparison from `<` to `≤` to match the new rule.
 
-1. Extend `ChecklistItem` locally with an optional `id: string` (kept optional so existing notes without ids still load).
-2. On first render / whenever an incoming item is missing an id, normalize the array by assigning `crypto.randomUUID()` (with the same fallback used in `NoteEditor.tsx`) and push the normalized list back via `onChange`.
-3. In `add()` and `insertAfter()`, generate a fresh id for the new row.
-4. Change the row `key` from `key={i}` to `key={item.id}`.
-5. Keep the `inputsRef` array indexed by position (it already aligns with the rendered order), so Enter / Backspace focus behavior keeps working.
+**`src/pages/Inventory.tsx`** (UI low-stock styling, if any)
+- Audit row rendering for any color/badge tied to low stock; if present, switch to `isLowStock`. Currently no inline threshold exists here, so likely no visual change is needed beyond confirming.
 
-### Type compatibility
-
-`NoteBlock` checklist items are typed in `src/hooks/useNotes.ts`. Add an optional `id?: string` to that item shape so the new field round-trips through Supabase JSON without TypeScript complaints. (The DB column is `jsonb`, so no migration is needed — older notes simply won't have the field until the editor opens them once.)
+**`src/pages/AddProduct.tsx`** (UX clarity, no logic change)
+- Add helper text under the Stock Alert input: *"Leave empty to use smart defaults — 1 box for Tablet/Capsule, 2 units for others."*
 
 ## Out of scope
 
-- No DB migration.
-- No changes to save logic, toolbar, spacer, character counter, or any other file.
-- No new UI elements or visible behavior changes — the fix is purely structural so React can correctly track each checkbox row across inserts/removals.
+- No DB migration. `stock_alert` stays nullable/`0` = "use default".
+- No changes to how `stock_alert` is saved (still stored in pieces, 0 means "use default").
