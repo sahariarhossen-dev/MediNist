@@ -1,80 +1,78 @@
+## Goal
 
-# Google Keep–style Notepad + Realtime Sync
+Replace the current Note Editor (which shows pre-selected "Add block", "Contact", "Tags", "Shared" cards from the start) with a strictly clean, context-driven editor that mirrors Google Keep:
 
-The Smart Notepad backend, editor, blocks, sharing, color coding, pinning, search, and storage are already built and working. This plan focuses on the **two missing pieces** the user is asking for:
+- Open the editor with **only** a Title field and a Note body field — nothing else.
+- All formatting, attachments, color, share toggle, and destructive actions live in a **sticky toolbar pinned above the mobile keyboard**.
+- Autosave on Back; the note remains editable after save (no read-only lock for the creator).
 
-1. A pixel-faithful **Google Keep visual redesign** of the main Notes screen.
-2. **Supabase Realtime** so a salesman's "Shortage" note pops into the admin's grid instantly.
+## What changes
 
-We are NOT rebuilding the editor, schema, RLS, storage, or block system — those already match the brief.
+### 1. Blank creation flow
+- `+` FAB on `/more/notes` already routes to `/more/notes/new` — kept as is.
+- `NoteEditor.tsx` opens with:
+  - Top bar: Back arrow + tiny "Saved/Saving…" status (no pin/color/delete buttons here anymore — they move to the toolbar `⋮`).
+  - Title input (large, borderless).
+  - A single auto-growing Note textarea (replaces the contentEditable `BlockText`’s toolbar; the per-block format bar is removed in favor of the global keyboard toolbar).
+  - No "Add block", "Contact Numbers", "Tags", or "Shared with Team" cards visible up front.
 
----
+### 2. New `NoteKeyboardToolbar` component (sticky above keyboard)
+File: `src/components/notes/NoteKeyboardToolbar.tsx`
 
-## 1. Visual redesign of `src/pages/Notes.tsx` (Keep look)
+Layout (left → right, matching the reference): `＋`  `🎨`  `A`  `↶`  `↷`  `⋮`
 
-Reshape the top bar and grid to match the uploaded Keep screenshot, while keeping our brand blue `#2563eb` for accents.
+- Sits in a `fixed` bar anchored to `bottom: useKeyboardInset()` so it rides above the keyboard. Falls back to `bottom: env(safe-area-inset-bottom)` when keyboard closed.
+- Visible only when not read-only.
+- Uses `lucide-react` icons: `Plus`, `Palette`, `Type`, `Undo2`, `Redo2`, `MoreVertical`.
 
-**Top bar (sticky, single row, pill-shaped):**
-- Hamburger menu icon (left) — opens a slide-in `Sheet` drawer.
-- Rounded pill search input that fills remaining width — light gray bg in light mode, placeholder "Search your notes".
-- View-toggle icon (single-column / masonry) on the right inside the pill.
-- Circular profile avatar at far right (uses `profile.avatar_url`, falls back to initial).
-- Removes the current "back arrow + title + filter chips row" stack — Keep has none of that. Filters move into the drawer.
+Icon behaviors:
 
-**Drawer menu (new `NotesMenu.tsx` using existing `Sheet` component):**
-- Header: "MediNist Notes" with logo.
-- Items (each toggles the active filter): All notes, Pinned, Mine, Shared with team.
-- Footer: link back to More.
-- This replaces the inline filter chips currently above the grid.
+| Icon | Action |
+|---|---|
+| `＋` | Opens a small bottom sheet (`Drawer`) with exactly two options: **Add Image / Invoice** and **Add Checkboxes**. Image option opens the existing file picker (defaults to `photo` category, with quick chips for Invoice/Rx). Checkbox inserts a `checklist` block. |
+| `🎨` Palette | Opens a `Popover` above the icon with the existing pastel `ColorPicker` (sets `draft.color`). |
+| `A` | Opens a `Popover` with **B / I / U / H1 / H2** buttons that run `document.execCommand` on the focused contentEditable note body. |
+| `↶ / ↷` | `document.execCommand('undo' / 'redo')` on the note body; history resets each session (no persistence). Disabled state when there's nothing to undo/redo (best-effort via a small in-memory stack count). |
+| `⋮` | `DropdownMenu` with: **Delete**, **Make a copy**, and a **Share with Team** switch row (off = Private by default). Delete confirms then removes; Make a copy creates a new note with the same content and navigates to it. |
 
-**Grid:**
-- Masonry stays (`columns-2 md:columns-3`), but tighten spacing to `gap-2` and card radius to `rounded-xl` to match Keep.
-- Empty state gets a Keep-style centered lightbulb icon + "Notes you add appear here".
+### 3. Note body becomes a single rich-text surface
+- Replace the multi-block list in the default view with one `contentEditable` div that holds the entire note body (still serialized into a single `text` block in `content[]` for storage compatibility).
+- Inserting an image or checklist appends a new block **after** the text block, rendered inline below it (image preview / checklist card). The text block remains the primary editable surface and stays focused after insertion so the keyboard + toolbar stay up.
+- Per-block toolbar inside `BlockText.tsx` is removed (formatting now lives in the global `A` popover). `BlockText` becomes a thin contentEditable wrapper.
 
-**FAB:**
-- Keep position `fixed bottom-6 right-6`, but use Keep's pill-shape look: larger (`h-14 w-14`), white bg with subtle shadow, blue `+` icon (instead of solid blue bg) — matches the latest Keep design shown in the screenshot.
+### 4. Autosave-on-back (and silent debounced save)
+- Keep the existing 800 ms debounced autosave to Supabase.
+- `handleSaveExit` (Back arrow + Android hardware back via existing `useRootBackHandler` if applicable) calls `ensureSaved()` then `updateMut` then navigates. No "discard" prompt.
+- Creator can keep editing after save (current behavior — `readOnly` only true when `existing.creator_id !== user.id`). No change.
 
-**Card refinements (`NoteCard.tsx`):**
-- Slightly larger title, tighter body, remove the dotted footer divider — Keep cards are borderless internally.
-- "Shared" pill stays but moves to top-right next to pin (small `Users` icon only, no text on mobile).
-- Image previews already render — keep current 2×2 thumb grid.
+### 5. Removed from the editor surface
+- The "Add block" grid card.
+- The standalone "Shared with Team" card (moved into `⋮` menu).
+- The standalone "Contact Numbers" and "Tags" cards. (They remain in the data model and in `NoteCard` previews; they can be re-added later via a "More options" item in the `⋮` menu if requested — flagged as out-of-scope for this pass to keep the screen clean as the user asked.)
 
----
+### 6. Mobile responsiveness
+- Title and note body use `auto`-growing heights (`field-sizing: content` where supported, plus a `useEffect` that sets `style.height = scrollHeight` on input).
+- Editor scroll area gets `padding-bottom: 64px + keyboard inset` so the toolbar never overlaps content.
+- The toolbar itself is `h-12`, full-width, white background, top border, with `safe-area-inset-bottom` padding.
 
-## 2. Supabase Realtime sync
+## File-level changes
 
-Add live updates so any insert/update/delete on `notes` is reflected immediately in every open client of the same pharmacy.
+- **edit** `src/pages/NoteEditor.tsx` — strip pre-selected sections, mount `<NoteKeyboardToolbar/>`, wire toolbar handlers (color, insert image/checklist, share toggle, delete, copy, format-exec, undo/redo), keep autosave + back behavior.
+- **new** `src/components/notes/NoteKeyboardToolbar.tsx` — the sticky toolbar described above.
+- **new** `src/components/notes/AddBlockSheet.tsx` — the small `Drawer` opened by `＋` with the two options (Image/Invoice, Checkboxes).
+- **new** `src/components/notes/TextFormatPopover.tsx` — B/I/U/H1/H2 buttons calling `document.execCommand`.
+- **edit** `src/components/notes/blocks/BlockText.tsx` — drop the local Bold/Italic/List toolbar; expose `onFocus` so the parent knows which editable to target with format/undo commands.
+- No DB / RLS / storage changes. No new migrations.
 
-**Edit `src/hooks/useNotes.ts`:**
-- New hook `useNotesRealtime()` that subscribes to the `notes` table via `supabase.channel('notes-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, ...)`.
-- On any change event, call `queryClient.invalidateQueries({ queryKey: ['notes'] })` (and the specific `['notes', id]` key for UPDATE/DELETE).
-- RLS already filters server-side so each user only receives events for rows they're allowed to see (their own notes + shared notes in their pharmacy). No extra filter needed.
-- Cleanup `supabase.removeChannel(channel)` on unmount.
+## Out of scope (kept as-is)
+- Realtime sync, RLS, storage bucket, `useNotes` hook, `Notes.tsx` grid, FAB, search bar, side menu — all unchanged.
+- Tags and contact-number editing UI (data preserved; UI temporarily hidden from the clean editor screen).
 
-**Migration (SQL):**
-- `ALTER PUBLICATION supabase_realtime ADD TABLE public.notes;`
-- `ALTER TABLE public.notes REPLICA IDENTITY FULL;` (so UPDATE payloads include all columns).
-
-**Wire it up:**
-- Call `useNotesRealtime()` once at the top of `src/pages/Notes.tsx`.
-- React Query refetch is debounced naturally; no toast spam.
-
----
-
-## 3. Files to change
-
-```text
-src/pages/Notes.tsx                  redesign top bar, grid, FAB; mount realtime hook
-src/components/notes/NoteCard.tsx    tighten styling to match Keep
-src/components/notes/NoteSearchBar.tsx  pill style, hamburger + avatar slots
-src/components/notes/NotesMenu.tsx   NEW — drawer with filter items
-src/hooks/useNotes.ts                add useNotesRealtime hook
-supabase/migrations/<new>.sql        enable realtime publication on notes
-```
-
-No changes to: `NoteEditor.tsx`, blocks, `notesStorage.ts`, RLS policies, schema columns, `App.tsx` routes, `More.tsx` entry.
-
----
-
-## 4. Out of scope (already done in earlier turn — confirmed)
-- `notes` table, RLS (private + shared by `is_public`), storage bucket, block content (text / checklist / image with invoice/Rx/photo categories), color coding, pinning, search by content/tags/creator, contact-number `tel:` chips, mobile responsiveness, brand color `#2563eb`, AI-readable `content` + `image_metadata` JSON.
+## Acceptance check
+1. Tap `+` on `/more/notes` → editor opens showing only Title + empty note body + sticky toolbar above the keyboard. No other cards.
+2. Type some text → toolbar `＋` becomes meaningful; tapping it shows the two-option sheet.
+3. Palette opens pastel swatches; selecting one changes the editor background instantly.
+4. `A` opens B/I/U/H1/H2 and applies to selection.
+5. Undo/Redo work for the current session; closing/reopening the note clears history.
+6. `⋮` shows Delete, Make a copy, and Share-with-Team toggle (off by default).
+7. Press Back → status flips to "Saving…" then navigates to the list; reopening shows the same content and remains editable.
