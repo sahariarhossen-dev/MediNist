@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { normalizeForSearch } from "@/lib/searchUtils";
 
 interface MasterMedicine {
   id: string;
@@ -69,12 +70,13 @@ const CatalogSearch = () => {
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return catalog;
-    const q = searchQuery.toLowerCase();
+    const q = normalizeForSearch(searchQuery);
+    if (!q) return catalog;
     return catalog.filter(
       (m) =>
-        m.brand_name.toLowerCase().includes(q) ||
-        (m.generic_name && m.generic_name.toLowerCase().includes(q)) ||
-        (m.company && m.company.toLowerCase().includes(q))
+        normalizeForSearch(m.brand_name).includes(q) ||
+        (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
+        (m.company && normalizeForSearch(m.company).includes(q))
     );
   }, [catalog, searchQuery]);
 

@@ -234,25 +234,15 @@ const CreateSale = () => {
     const timeout = setTimeout(async () => {
       setSearching(true);
       const q = searchQuery.trim();
-      const baseQuery = supabase
-        .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
-        .eq("pharmacy_id", profile.pharmacy_id!);
-
-      const [startsRes, containsRes] = await Promise.all([
-        baseQuery.ilike("name", `${q}%`).limit(10),
-        supabase
-          .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, product_size")
-          .eq("pharmacy_id", profile.pharmacy_id!)
-          .ilike("name", `%${q}%`)
-          .limit(10),
-      ]);
-
-      const startsWith = startsRes.data || [];
-      const startIds = new Set(startsWith.map((m) => m.id));
-      const contains = (containsRes.data || []).filter((m) => !startIds.has(m.id));
-      setSearchResults([...startsWith, ...contains].slice(0, 10));
+      const { data, error } = await supabase.rpc("search_medicines", {
+        _pharmacy_id: profile.pharmacy_id!,
+        _query: q,
+      });
+      if (error) {
+        setSearchResults([]);
+      } else {
+        setSearchResults(((data ?? []) as Medicine[]).slice(0, 10));
+      }
       setSearching(false);
     }, 150);
     return () => clearTimeout(timeout);
