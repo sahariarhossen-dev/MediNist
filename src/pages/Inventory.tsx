@@ -426,7 +426,7 @@ const Inventory = () => {
       )}
 
       {/* Medicine List */}
-      <div className="px-5 space-y-3">
+      <div className="px-5 space-y-3.5">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full rounded-2xl" />
@@ -462,20 +462,27 @@ const Inventory = () => {
                       onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
                       onMouseUp={cancelPress}
                       onMouseLeave={cancelPress}
-                      className={`bg-muted rounded-2xl transition-all duration-150 overflow-hidden select-none ${
+                      className={`bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60 transition-all duration-150 overflow-hidden select-none ${
                         searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
                       } ${pressingId === med.id ? "scale-95" : ""}`}
                     >
-                      <div className="flex items-center gap-4 p-4">
-                        <div className="flex-shrink-0 h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Pill size={20} className="text-primary" />
+                      <div className="flex items-center gap-3.5 p-4">
+                        <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                          <Pill size={20} className="text-emerald-500" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground truncate flex items-center gap-1">
+                          <p className="text-sm font-bold text-gray-900 truncate flex items-center gap-1.5">
                             <span className="truncate">{truncateName(med.name)}</span>
-                            {med.product_size && <span className="text-[10px] text-muted-foreground font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
+                            {med.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate max-w-[120px]">{med.company_name || "—"}</p>
+                          <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                            <span className="text-[11px] text-gray-400 truncate min-w-0">{med.company_name || "—"}</span>
+                            {med.product_type && (
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type)}`}>
+                                {med.product_type}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -505,12 +512,12 @@ const Inventory = () => {
                       </div>
                       {isExpanded && (
                         <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-4 text-xs font-medium bg-background rounded-xl px-4 py-2.5">
-                            <span className="text-foreground">৳ {med.price ?? "—"}</span>
-                            <span className="text-muted-foreground">
+                          <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
+                            <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
+                            <span className="text-gray-400">
                               pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
-                            <span className="text-primary font-semibold">
+                            <span className="text-emerald-600 font-semibold">
                               Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                           </div>
