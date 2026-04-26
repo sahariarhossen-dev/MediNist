@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
 
 interface ChecklistItem {
+  id?: string;
   text: string;
   checked: boolean;
 }
@@ -17,9 +18,25 @@ interface BlockChecklistProps {
   maxRemaining?: number;
 }
 
+const newItemId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
 const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockChecklistProps) => {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const focusIndexRef = useRef<number | null>(null);
+
+  // Backfill stable ids for items loaded from older notes so React can key
+  // rows by id (prevents the "duplicating / disappearing checkbox" glitch
+  // caused by index-based keys when inserting mid-list).
+  useEffect(() => {
+    if (!onChange) return;
+    if (items.some((it) => !it.id)) {
+      onChange(items.map((it) => (it.id ? it : { ...it, id: newItemId() })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   const update = (i: number, patch: Partial<ChecklistItem>) => {
     if (typeof maxRemaining === "number" && typeof patch.text === "string") {
@@ -36,13 +53,13 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
   };
 
   const add = () => {
-    onChange?.([...items, { text: "", checked: false }]);
+    onChange?.([...items, { id: newItemId(), text: "", checked: false }]);
   };
 
   const insertAfter = (i: number) => {
     const next = [
       ...items.slice(0, i + 1),
-      { text: "", checked: false },
+      { id: newItemId(), text: "", checked: false },
       ...items.slice(i + 1),
     ];
     focusIndexRef.current = i + 1;
@@ -75,7 +92,7 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
   return (
     <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2 mb-0 mt-0 pt-[8px] pb-[8px]">
       {items.map((it, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={it.id ?? `idx-${i}`} className="flex items-center gap-2">
           <Checkbox
             checked={it.checked}
             onCheckedChange={(v) => update(i, { checked: !!v })}
