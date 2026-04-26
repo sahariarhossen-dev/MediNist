@@ -57,7 +57,7 @@ const NoteKeyboardToolbar = ({
           transition: "bottom 150ms ease-out",
         }}
       >
-        <div className="max-w-3xl mx-auto h-12 px-3 flex items-center bg-gray-100">
+        <div className="max-w-3xl mx-auto h-12 px-3 flex items-center bg-gray-100 pt-0 mt-[30px]">
           {/* Left group: Add, Color, Text */}
           <div className="flex items-center gap-2">
             <button
