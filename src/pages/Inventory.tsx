@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import { normalizeForSearch } from "@/lib/searchUtils";
 
 interface Medicine {
   id: string;
@@ -147,7 +148,10 @@ const Inventory = () => {
     () => {
       let result = medicines;
       if (searchQuery) {
-        result = result.filter((m) => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        const q = normalizeForSearch(searchQuery);
+        if (q) {
+          result = result.filter((m) => normalizeForSearch(m.name).includes(q));
+        }
       }
       if (selectedCompanies.size > 0) {
         result = result.filter((m) => m.company_name && selectedCompanies.has(m.company_name));
@@ -160,13 +164,14 @@ const Inventory = () => {
   // Filter catalog results (exclude items already in local inventory)
   const filteredCatalog = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
+    const q = normalizeForSearch(searchQuery);
+    if (!q) return [];
     const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
     let result = catalog.filter(
       (m) =>
-        (m.brand_name.toLowerCase().includes(q) ||
-          (m.generic_name && m.generic_name.toLowerCase().includes(q)) ||
-          (m.company && m.company.toLowerCase().includes(q))) &&
+        (normalizeForSearch(m.brand_name).includes(q) ||
+          (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
+          (m.company && normalizeForSearch(m.company).includes(q))) &&
         !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
     if (selectedCompanies.size > 0) {
