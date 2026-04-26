@@ -287,7 +287,7 @@ const NoteEditor = () => {
 
   return (
     <div
-      className={cn("min-h-screen w-full max-w-3xl mx-auto")}
+      className={cn("min-h-screen w-full max-w-3xl mx-auto bg-gray-100")}
       style={{ backgroundColor: colorHex(draft.color) }}
     >
       {/* Top bar */}
