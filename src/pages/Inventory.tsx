@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnit, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -57,13 +57,21 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
   if (isSingleUnit(productType ?? null)) {
-    return <span className="font-mono font-bold text-foreground">{totalPcs} Pcs</span>;
+    return (
+      <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
+        {totalPcs}
+        <span className="text-gray-400 font-medium ml-0.5">Pcs</span>
+      </span>
+    );
   }
-  const display = totalPiecesToTriUnit(totalPcs, stripPerPack, pcsPerStrip);
-  const parts = display.split(" : ");
+  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
   return (
-    <span className="font-mono font-bold text-foreground">
-      {parts[0]}<span className="text-muted-foreground mx-0.5">:</span>{parts[1]}<span className="text-muted-foreground mx-0.5">:</span>{parts[2]}
+    <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
+      {boxes}<span className="text-gray-400 font-medium ml-0.5">Bx</span>
+      <span className="text-gray-300 mx-1">•</span>
+      {strips}<span className="text-gray-400 font-medium ml-0.5">St</span>
+      <span className="text-gray-300 mx-1">•</span>
+      {pcs}<span className="text-gray-400 font-medium ml-0.5">Pc</span>
     </span>
   );
 };
