@@ -1,67 +1,68 @@
 ## Goal
 
-Auto-detect Product Type on the Edit Product screen by scanning the medicine name for keywords ("Tablet", "Capsule", "Syrup/Suspension/Oral") whenever the saved `product_type` is missing.
+Replace the hardcoded 7-item Product Type list with a **dynamic, self-extending** system. New formats like "Eye Drop", "Pediatric Drops", or "MDI" should:
+1. Be auto-saved as the product's `product_type` during catalog import (already partially working — needs tightening).
+2. Appear in the Add/Edit Product dropdown automatically.
+3. Be addable on the fly from the Add/Edit screen without leaving the page.
 
-## Where the fix goes
+No new database tables are required — `medicines.product_type` already stores the canonical type, so distinct values from this column become the dynamic option list.
 
-`src/pages/AddProduct.tsx` — specifically the `useEffect` (line ~80) that hydrates the form from `location.state` when navigating from the Inventory edit action.
+## What changes
 
-Today it does:
+### 1. `src/lib/productType.ts` — strengthen functional mapping
+
+Update `toFunctionalType()` so the import path is explicit:
+- Contains "tablet" → `"Tablet"`
+- Contains "capsule" → `"Capsule"`
+- Contains "syrup" or "suspension" → `"Syrup"`
+- Otherwise → return the **trimmed verbatim format** (e.g. `"Eye Drop"`, `"Pediatric Drops"`, `"Metered-Dose Inhaler (MDI)"`). This becomes the new `product_type`.
+
+`detectFunctionalTypeFromName()` keeps its current behavior (used for auto-detect from medicine name on Edit hydration).
+
+Add a new helper:
 ```ts
-if (s.productType) setProductType(s.productType);
+fetchPharmacyProductTypes(pharmacyId): Promise<string[]>
 ```
-…so if the DB row has no `product_type`, the dropdown stays empty even when the name clearly indicates it.
+Queries `medicines.product_type` distinct for the pharmacy, merges with the seed list (`Tablet, Capsule, Syrup, Injection, Cream, Suspension, Ointment`), de-duplicates case-insensitively, and returns sorted with seeds first.
 
-## Changes
+### 2. `src/pages/AddProduct.tsx` — dynamic dropdown + custom add
 
-### 1. Extend `src/lib/productType.ts`
+- Replace the hardcoded `productTypes` array with state populated from `fetchPharmacyProductTypes()` on mount.
+- If the medicine being edited has a `product_type` not yet in the fetched list (rare race / freshly-imported), inject it into the options so the Select can render its current value.
+- Add an **"+ Add new type…"** item at the bottom of the dropdown. Selecting it opens a small inline input (or `prompt`-style row) where the user types a custom type; on confirm it's appended to local state and selected immediately. It will be persisted to the DB as soon as the product is saved (because `product_type` is just a column).
+- Keep `getStrengthConfig` keyed off **functional buckets**:
+  - If `productType` matches Tablet/Capsule/Injection → mg input + strip/box section
+  - If matches Syrup/Suspension → ml input
+  - If matches Cream/Ointment → gm input
+  - Otherwise (Eye Drop, MDI, etc.) → no strength input shown, no strip/box section. Stock & MRP still work normally.
+- On save, write `product_type` and `unit_format` exactly as selected (custom types flow through unchanged).
 
-Reuse the existing `toFunctionalType` mapper, but also make it match the additional keyword "Oral" → "Syrup" (per the new spec). Add a small helper:
+### 3. `src/pages/CatalogSearch.tsx` — no behavior change needed
 
-```ts
-export function detectFunctionalTypeFromName(name: string | null | undefined):
-  "Tablet" | "Capsule" | "Syrup" | null {
-  if (!name) return null;
-  const s = name.toLowerCase();
-  if (s.includes("tablet")) return "Tablet";
-  if (s.includes("capsule")) return "Capsule";
-  if (s.includes("syrup") || s.includes("suspension") || s.includes("oral")) return "Syrup";
-  return null;
-}
-```
+Already calls `toFunctionalType(med.format)`. After step 1, unknown formats like `"Eye Drop"` will be saved verbatim into `product_type`, which is what we want. The newly-saved type immediately becomes a distinct value the dropdown will pick up next time `fetchPharmacyProductTypes` runs.
 
-(Case-insensitive via `toLowerCase()`. Kept separate from `toFunctionalType` so the existing import logic — which maps the verbatim `format` field — is untouched.)
+### 4. `src/pages/Inventory.tsx` — no schema change
 
-### 2. Update the hydration `useEffect` in `AddProduct.tsx`
+Continues to use `getDisplayFormat()` for UI and `isSingleUnit(product_type)` for math. `isSingleUnit` already returns true for non-Tablet/Capsule types, so Eye Drop / MDI / Drops will display as `"N Pcs"` correctly.
 
-Replace the current block roughly like this:
+### 5. Refresh on return
 
-```ts
-const saved = s.productType as ProductType | undefined;
-if (saved) {
-  setProductType(saved);
-} else {
-  // Auto-detect from medicine name only when DB value is empty/null
-  const detected = detectFunctionalTypeFromName(s.name);
-  if (detected) setProductType(detected);
-}
-```
-
-Rules respected:
-- Case-insensitive scan of `medicine_name`.
-- Saved DB `product_type` always wins; auto-detect only runs when it's empty/null.
-- Runs immediately on mount (the existing effect already runs once), so the dropdown shows the detected value as soon as the page opens.
-
-### 3. No DB changes
-
-Auto-detection is UI-only. The user can still override the dropdown before saving; on save, both `product_type` and `unit_format` are persisted as today.
+When the user saves a new product with a custom type and navigates back to Add Product later, the dropdown re-fetches on mount, so the new type appears automatically. No realtime subscription needed — fetching on mount is sufficient and matches existing patterns in the app.
 
 ## Out of scope
 
-- The "Add New Product" flow (no name yet at mount) — auto-detection there would fight the user typing. Not changed.
-- Inventory list rendering — display continues to use `unit_format` via `getDisplayFormat`.
+- No dedicated `product_categories` table. The distinct-query approach is simpler, requires no migration, and meets the requirement "becomes available for future products".
+- No global cross-pharmacy type sharing — each pharmacy's dropdown reflects its own inventory plus the seed list.
 
 ## Files touched
 
-- `src/lib/productType.ts` (add `detectFunctionalTypeFromName`)
-- `src/pages/AddProduct.tsx` (use it in the edit hydration effect)
+- `src/lib/productType.ts` — add `fetchPharmacyProductTypes`, tighten `toFunctionalType` pass-through.
+- `src/pages/AddProduct.tsx` — dynamic options state, inline "Add new type" UI, functional-bucket strength config.
+
+## Verification
+
+After implementation:
+1. Import an "Eye Drop" from the catalog → opens in inventory with `product_type = "Eye Drop"`, displayed as `"Eye Drop"`.
+2. Open Add Product → dropdown shows seeds + every distinct type from the pharmacy (including "Eye Drop").
+3. Type a brand-new type via "+ Add new type…" → saves correctly, appears in dropdown on next visit.
+4. Edit an existing "Eye Drop" product → dropdown pre-selects "Eye Drop" without strip/box fields shown.
