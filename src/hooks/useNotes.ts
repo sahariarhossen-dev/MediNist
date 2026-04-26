@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -159,4 +160,32 @@ export function useDeleteNote() {
       qc.invalidateQueries({ queryKey: ["notes"] });
     },
   });
+}
+
+/**
+ * Subscribe to realtime INSERT/UPDATE/DELETE events on the notes table.
+ * RLS limits payloads to rows the current user is allowed to see, so any
+ * received event means a relevant note changed in this pharmacy.
+ */
+export function useNotesRealtime() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel("notes-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notes" },
+        (payload) => {
+          qc.invalidateQueries({ queryKey: ["notes"] });
+          const row = (payload.new ?? payload.old) as { id?: string } | null;
+          if (row?.id) {
+            qc.invalidateQueries({ queryKey: ["notes", row.id] });
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
 }
