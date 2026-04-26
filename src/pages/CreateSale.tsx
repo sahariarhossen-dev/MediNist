@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
-import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
@@ -290,28 +290,28 @@ const CreateSale = () => {
   const getLineTotal = useCallback((item: CartItem) => {
     const gross = item.quantity * (item.medicine.price || 0);
     if (saleType === "wholesale") {
-      return Math.round(gross * (1 - item.discountPercent / 100));
+      return roundMoney(gross * (1 - item.discountPercent / 100));
     }
-    return gross;
+    return roundMoney(gross);
   }, [saleType]);
 
   const subtotal = useMemo(
-    () => cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0),
+    () => roundMoney(cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0)),
     [cartItems]
   );
 
   // For wholesale: net total = sum of per-item net amounts (no global discount)
   // For retail: net total = subtotal - global discount
   const wholesaleNetTotal = useMemo(
-    () => cartItems.reduce((sum, c) => sum + getLineTotal(c), 0),
+    () => roundMoney(cartItems.reduce((sum, c) => sum + getLineTotal(c), 0)),
     [cartItems, getLineTotal]
   );
 
-  const discountAmount = useMemo(() => Math.round(subtotal * discountPercent / 100), [subtotal, discountPercent]);
-  const retailNetTotal = useMemo(() => subtotal - discountAmount, [subtotal, discountAmount]);
+  const discountAmount = useMemo(() => roundMoney(subtotal * discountPercent / 100), [subtotal, discountPercent]);
+  const retailNetTotal = useMemo(() => roundMoney(subtotal - discountAmount), [subtotal, discountAmount]);
 
   const netTotal = saleType === "wholesale" ? wholesaleNetTotal : retailNetTotal;
-  const totalDiscountAmount = saleType === "wholesale" ? subtotal - wholesaleNetTotal : discountAmount;
+  const totalDiscountAmount = saleType === "wholesale" ? roundMoney(subtotal - wholesaleNetTotal) : discountAmount;
 
   const saveSale = async (status: "draft" | "completed") => {
     if (cartItems.length === 0) {
@@ -328,10 +328,10 @@ const CreateSale = () => {
 
       const salePayload = {
         sale_type: saleType,
-        subtotal,
+        subtotal: roundMoney(subtotal),
         discount_percent: saleType === "wholesale" ? 0 : discountPercent,
-        discount_amount: totalDiscountAmount,
-        total: netTotal,
+        discount_amount: roundMoney(totalDiscountAmount),
+        total: roundMoney(netTotal),
         status,
       };
 
@@ -363,8 +363,8 @@ const CreateSale = () => {
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
         quantity: c.quantity,
-        unit_price: c.medicine.price || 0,
-        total_price: getLineTotal(c),
+        unit_price: roundMoney(c.medicine.price || 0),
+        total_price: roundMoney(getLineTotal(c)),
         discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
       }));
 
@@ -382,8 +382,8 @@ const CreateSale = () => {
 
         // Customer ledger posting (due/split)
         if (selectedCustomer && (paymentMethod === "due" || paymentMethod === "split")) {
-          const paid = paymentMethod === "split" ? Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0)) : 0;
-          const dueAmt = Math.max(0, netTotal - paid);
+          const paid = paymentMethod === "split" ? roundMoney(Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0))) : 0;
+          const dueAmt = roundMoney(Math.max(0, netTotal - paid));
           if (dueAmt > 0) {
             const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
               customer_id: selectedCustomer.id,
