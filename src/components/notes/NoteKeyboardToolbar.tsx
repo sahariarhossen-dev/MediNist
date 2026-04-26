@@ -116,12 +116,12 @@ const NoteKeyboardToolbar = ({
             </button>
 
             <button
-            type="button"
-             className="h-10 w-10 inline-flex items-center justify-center rounded-full mr-[10px] text-muted-foreground bg-muted-foreground"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => exec("redo")}
-            aria-label="Redo"
-          >
+              type="button"
+              className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-gray-100 mr-0 text-gray-700 border-gray-100"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => exec("redo")}
+              aria-label="Redo"
+            >
             <Redo2 size={18} />
             </button>
 
@@ -133,7 +133,7 @@ const NoteKeyboardToolbar = ({
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="More"
               >
-                 <MoreVertical size={18} className="lucide lucide-ellipsis-vertical bg-muted-foreground" />
+                 <MoreVertical size={18} className="lucide lucide-ellipsis-vertical bg-gray-100 text-gray-700" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="end" className="w-60">
