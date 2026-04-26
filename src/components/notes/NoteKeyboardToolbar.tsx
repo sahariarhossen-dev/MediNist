@@ -57,20 +57,20 @@ const NoteKeyboardToolbar = ({
           transition: "bottom 150ms ease-out",
         }}
       >
-        <div className="max-w-3xl mx-auto h-12 px-2 flex items-center justify-between">
-          {/* + Add */}
-          <button
-            type="button"
-            className={iconBtn}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setAddOpen(true)}
-            aria-label="Add"
-          >
-            <Plus size={20} />
-          </button>
+        <div className="max-w-3xl mx-auto h-12 px-2 flex items-center">
+          {/* Left group: Add, Color, Text */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className={iconBtn}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setAddOpen(true)}
+              aria-label="Add"
+            >
+              <Plus size={20} />
+            </button>
 
-          {/* Color */}
-          <Popover>
+            <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -84,10 +84,9 @@ const NoteKeyboardToolbar = ({
             <PopoverContent side="top" align="center" className="w-auto p-3">
               <ColorPicker value={color} onChange={onColorChange} />
             </PopoverContent>
-          </Popover>
+            </Popover>
 
-          {/* A — text format */}
-          <Popover>
+            <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -101,10 +100,15 @@ const NoteKeyboardToolbar = ({
             <PopoverContent side="top" align="center" className="w-auto p-2">
               <TextFormatPopover exec={exec} />
             </PopoverContent>
-          </Popover>
+            </Popover>
+          </div>
 
-          {/* Undo */}
-          <button
+          {/* Elegant breathing space */}
+          <div className="flex-1" />
+
+          {/* Right group: Undo, Redo, More */}
+          <div className="flex items-center gap-1">
+            <button
             type="button"
             className={iconBtn}
             onMouseDown={(e) => e.preventDefault()}
@@ -112,10 +116,9 @@ const NoteKeyboardToolbar = ({
             aria-label="Undo"
           >
             <Undo2 size={18} />
-          </button>
+            </button>
 
-          {/* Redo */}
-          <button
+            <button
             type="button"
             className={iconBtn}
             onMouseDown={(e) => e.preventDefault()}
@@ -123,10 +126,9 @@ const NoteKeyboardToolbar = ({
             aria-label="Redo"
           >
             <Redo2 size={18} />
-          </button>
+            </button>
 
-          {/* ⋮ More */}
-          <DropdownMenu>
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -159,7 +161,8 @@ const NoteKeyboardToolbar = ({
                 <Trash2 size={14} className="mr-2" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 

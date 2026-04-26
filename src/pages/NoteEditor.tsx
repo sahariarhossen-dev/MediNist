@@ -14,7 +14,7 @@ import {
 import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
-import { colorBg } from "@/components/notes/ColorPicker";
+import { colorHex } from "@/components/notes/ColorPicker";
 import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/BlockText";
 import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
@@ -64,6 +64,12 @@ const NoteEditor = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
   const textRef = useRef<BlockTextHandle | null>(null);
+  // Latest draft, kept in a ref so the debounced save always sees fresh data
+  // without having to re-create the timer on every keystroke.
+  const draftRef = useRef<DraftState>(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   const noteId = savedNoteId ?? (isNew ? null : id ?? null);
   const readOnly = !!existing && existing.creator_id !== user?.id;
@@ -143,13 +149,15 @@ const NoteEditor = () => {
     });
   }, [draft]);
 
-  // Debounced autosave
+  // Silent 3-second debounced autosave. We only schedule a single timer that
+  // reads the latest draft from the ref, so React state updates (typing) do
+  // not re-render or fire mutations on every keystroke.
   useEffect(() => {
     if (readOnly || isLoading) return;
     if (!noteId) return;
     const handle = setTimeout(() => {
-      updateMut.mutate({ id: noteId, patch: buildPayload(draft) });
-    }, 800);
+      updateMut.mutate({ id: noteId, patch: buildPayload(draftRef.current) });
+    }, 3000);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, noteId]);
@@ -277,17 +285,16 @@ const NoteEditor = () => {
     | Extract<NoteBlock, { type: "text" }>
     | undefined;
 
-  const headerStatus = useMemo(() => {
-    if (readOnly) return "Read only";
-    if (createMut.isPending || updateMut.isPending) return "Saving…";
-    if (!noteId && isNew) return hasContent ? "Edited" : "";
-    return "Saved";
-  }, [readOnly, createMut.isPending, updateMut.isPending, noteId, isNew, hasContent]);
-
   return (
-    <div className={cn("min-h-screen w-full max-w-3xl mx-auto", colorBg(draft.color))}>
+    <div
+      className={cn("min-h-screen w-full max-w-3xl mx-auto")}
+      style={{ backgroundColor: colorHex(draft.color) }}
+    >
       {/* Top bar */}
-      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-gray-100 px-3 py-2 flex items-center gap-2">
+      <header
+        className="sticky top-0 z-20 backdrop-blur border-b border-gray-100 px-3 py-2 flex items-center gap-2"
+        style={{ backgroundColor: `${colorHex(draft.color)}cc` }}
+      >
         <button
           type="button"
           onClick={handleBack}
@@ -296,7 +303,11 @@ const NoteEditor = () => {
         >
           <ArrowLeft size={20} className="text-gray-700" />
         </button>
-        <span className="text-xs text-gray-500 flex-1 truncate">{headerStatus}</span>
+        {/* Silent background sync — no status text */}
+        <div className="flex-1" />
+        {readOnly && (
+          <span className="text-xs text-gray-500">Read only</span>
+        )}
         {uploading && <Loader2 size={16} className="animate-spin text-gray-400" />}
       </header>
 
