@@ -746,6 +746,30 @@ export type Database = {
       }
       get_user_pharmacy_id: { Args: never; Returns: string }
       is_pharmacy_admin: { Args: never; Returns: boolean }
+      search_medicines: {
+        Args: { _pharmacy_id: string; _query: string }
+        Returns: {
+          company_name: string | null
+          created_at: string | null
+          expiry_date: string | null
+          id: string
+          name: string
+          pcs_per_strip: number | null
+          pharmacy_id: string
+          price: number | null
+          product_size: string | null
+          product_type: string | null
+          stock_alert: number | null
+          stock_quantity: number | null
+          strip_per_pack: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "medicines"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       [_ in never]: never
