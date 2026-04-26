@@ -54,7 +54,7 @@ const NoteKeyboardToolbar = ({
           transition: "bottom 150ms ease-out",
         }}
       >
-         <div className="max-w-3xl mx-auto h-12 px-2 flex items-center mt-[10px] mb-[10px] pt-0 pb-0 my-0 border-0">
+         <div className="max-w-3xl mx-auto h-12 px-2 flex items-center mt-[10px] mb-[10px] pt-0 pb-0 my-0 border-0 bg-gray-100">
           {/* Left group: Add, Color, Text */}
            <div className="flex items-center gap-1 mr-[10px]">
             <button
@@ -117,7 +117,7 @@ const NoteKeyboardToolbar = ({
 
             <button
               type="button"
-              className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-gray-100 mr-0 text-gray-700 border-gray-100"
+              className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-gray-100 mr-0 text-gray-700 border-inherit"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => exec("redo")}
               aria-label="Redo"
