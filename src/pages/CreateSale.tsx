@@ -535,7 +535,7 @@ const CreateSale = () => {
                     <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
-                <p className="text-lime-900 text-sm font-bold">৳{med.price ?? 0}</p>
+                <p className="text-lime-900 text-sm font-bold">৳{formatMoney(med.price ?? 0)}</p>
               </button>
             ))}
           </div>
@@ -604,7 +604,7 @@ const CreateSale = () => {
                           <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{item.medicine.product_type}</span>
                         )}
                       </p>
-                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{unitPrice}</span>
+                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
                       {item.medicine.company_name && (
                         <span className="text-[10px] text-emerald-600 flex-shrink-0 font-medium truncate max-w-[60px]">{item.medicine.company_name}</span>
                       )}
@@ -640,7 +640,7 @@ const CreateSale = () => {
                       {/* Retail: show calculation */}
                       {!isWholesale && (
                         <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0 ml-auto">
-                          {item.quantity}*{unitPrice}={grossTotal}৳
+                          {item.quantity}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
                         </span>
                       )}
 
@@ -671,7 +671,7 @@ const CreateSale = () => {
                     {isWholesale && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
                         <p className="text-xs font-mono text-gray-500 text-center">
-                          {unitPrice} × {item.quantity} = {grossTotal} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{lineTotal} ৳</span>
+                          {formatMoney(unitPrice)} × {item.quantity} = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
                         </p>
                       </div>
                     )}
@@ -697,13 +697,13 @@ const CreateSale = () => {
                     </p>
                     {isWholesale ? (
                       <>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{unitPrice}-{item.discountPercent}%</span>
-                        <span className="text-xs font-bold text-blue-700">{lineTotal} ৳</span>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
+                        <span className="text-xs font-bold text-blue-700">{formatMoney(lineTotal)} ৳</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-[10px] text-secondary">{item.quantity}×{unitPrice}</span>
-                        <span className="text-xs font-bold text-emerald-600">{grossTotal} ৳</span>
+                        <span className="text-[10px] text-secondary">{item.quantity}×{formatMoney(unitPrice)}</span>
+                        <span className="text-xs font-bold text-emerald-600">{formatMoney(grossTotal)} ৳</span>
                       </>
                     )}
                   </div>
@@ -725,10 +725,10 @@ const CreateSale = () => {
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
                     {i > 0 && " + "}
-                    {c.quantity * (c.medicine.price || 0)}
+                    {formatMoney(c.quantity * (c.medicine.price || 0))}
                   </span>
                 ))}
-                {" = "}{subtotal} ৳
+                {" = "}{formatMoney(subtotal)} ৳
               </span>
             </div>
 
@@ -778,7 +778,7 @@ const CreateSale = () => {
                     </span>
                   )}
                 </span>
-                <span className="text-sm font-bold text-gray-900">-{discountAmount} ৳</span>
+                <span className="text-sm font-bold text-gray-900">-{formatMoney(discountAmount)} ৳</span>
               </div>
             )}
 
@@ -786,13 +786,13 @@ const CreateSale = () => {
             {isWholesale && (
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-500 ml-2">Item Discounts</span>
-                <span className="text-sm font-bold text-gray-900">-{totalDiscountAmount} ৳</span>
+                <span className="text-sm font-bold text-gray-900">-{formatMoney(totalDiscountAmount)} ৳</span>
               </div>
             )}
 
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-base font-extrabold text-gray-900">Net Total</span>
-              <span className={`text-xl font-extrabold ${isWholesale ? "text-blue-700" : "text-emerald-600"}`}>{netTotal} ৳</span>
+              <span className={`text-xl font-extrabold ${isWholesale ? "text-blue-700" : "text-emerald-600"}`}>{formatMoney(netTotal)} ৳</span>
             </div>
           </div>
         )}
