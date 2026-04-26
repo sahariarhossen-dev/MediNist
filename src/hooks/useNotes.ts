@@ -169,12 +169,23 @@ export function useDeleteNote() {
  */
 export function useNotesRealtime() {
   const qc = useQueryClient();
+  const { profile } = useAuth();
+  const pharmacyId = profile?.pharmacy_id ?? null;
   useEffect(() => {
+    // Only subscribe once we know the pharmacy scope. This ensures the
+    // channel filter restricts events to the current pharmacy and prevents
+    // any cross-tenant event delivery (defense in depth on top of RLS).
+    if (!pharmacyId) return;
     const channel = supabase
-      .channel("notes-changes")
+      .channel(`notes-changes:${pharmacyId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notes" },
+        {
+          event: "*",
+          schema: "public",
+          table: "notes",
+          filter: `pharmacy_id=eq.${pharmacyId}`,
+        },
         (payload) => {
           qc.invalidateQueries({ queryKey: ["notes"] });
           const row = (payload.new ?? payload.old) as { id?: string } | null;
@@ -187,5 +198,5 @@ export function useNotesRealtime() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [qc]);
+  }, [qc, pharmacyId]);
 }
