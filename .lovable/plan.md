@@ -1,68 +1,46 @@
-## Goal
+# Inventory Page Redesign — Match Sales Page Typography
 
-Replace the hardcoded 7-item Product Type list with a **dynamic, self-extending** system. New formats like "Eye Drop", "Pediatric Drops", or "MDI" should:
-1. Be auto-saved as the product's `product_type` during catalog import (already partially working — needs tightening).
-2. Appear in the Add/Edit Product dropdown automatically.
-3. Be addable on the fly from the Add/Edit screen without leaving the page.
+Restyle the inventory list so each product card looks like the polished Sales-screen rows: white background, bold dark medicine name, lighter company text, colored product-type chip, and a friendlier `0 Bx • 1 St • 5 Pc` stock format.
 
-No new database tables are required — `medicines.product_type` already stores the canonical type, so distinct values from this column become the dynamic option list.
+## What Changes (User-Facing)
 
-## What changes
+1. **Cards** — switch from flat gray (`bg-muted`) to white with subtle shadow + light border, matching Sales (`bg-white shadow-lg shadow-gray-200/60 border border-gray-100`). Increase vertical breathing room between rows.
+2. **Typography hierarchy** (same scale as Sales):
+   - Medicine name: `text-sm font-bold text-gray-900`
+   - Company name: `text-[11px] text-gray-400` (smaller, lighter)
+   - Strength (e.g. 500mg): `text-[10px] text-gray-400`
+3. **Product type chip** — small colored pill shown next to/under the medicine name:
+   - Tablet → blue (`bg-blue-50 text-blue-700`)
+   - Capsule → purple (`bg-purple-50 text-purple-700`)
+   - Syrup / Suspension → amber (`bg-amber-50 text-amber-700`)
+   - Injection → rose (`bg-rose-50 text-rose-700`)
+   - Cream / Ointment → teal (`bg-teal-50 text-teal-700`)
+   - Drops (Eye/Ear/Nasal/Pediatric) → cyan (`bg-cyan-50 text-cyan-700`)
+   - Inhaler / MDI / DPI → indigo (`bg-indigo-50 text-indigo-700`)
+   - Anything else → neutral gray (`bg-gray-100 text-gray-600`)
+4. **Stock format** — replace `0 : 1 : 5` with `0 Bx • 1 St • 5 Pc`. Single-unit products (drops, syrups, etc.) keep `12 Pcs`. Numbers stay tabular and bold; unit suffixes in lighter gray.
+5. **Catalog "From Catalog" cards** in the search results get the same white-card + chip treatment so the two sections feel cohesive.
 
-### 1. `src/lib/productType.ts` — strengthen functional mapping
+## Visual Reference
 
-Update `toFunctionalType()` so the import path is explicit:
-- Contains "tablet" → `"Tablet"`
-- Contains "capsule" → `"Capsule"`
-- Contains "syrup" or "suspension" → `"Syrup"`
-- Otherwise → return the **trimmed verbatim format** (e.g. `"Eye Drop"`, `"Pediatric Drops"`, `"Metered-Dose Inhaler (MDI)"`). This becomes the new `product_type`.
-
-`detectFunctionalTypeFromName()` keeps its current behavior (used for auto-detect from medicine name on Edit hydration).
-
-Add a new helper:
-```ts
-fetchPharmacyProductTypes(pharmacyId): Promise<string[]>
+```text
+┌────────────────────────────────────────────────┐
+│  💊  Napa Extra            500mg               │
+│      Beximco Pharma                 0 Bx • 1 St • 5 Pc │
+│      [Tablet]                                  │
+└────────────────────────────────────────────────┘
 ```
-Queries `medicines.product_type` distinct for the pharmacy, merges with the seed list (`Tablet, Capsule, Syrup, Injection, Cream, Suspension, Ointment`), de-duplicates case-insensitively, and returns sorted with seeds first.
 
-### 2. `src/pages/AddProduct.tsx` — dynamic dropdown + custom add
+## Technical Notes
 
-- Replace the hardcoded `productTypes` array with state populated from `fetchPharmacyProductTypes()` on mount.
-- If the medicine being edited has a `product_type` not yet in the fetched list (rare race / freshly-imported), inject it into the options so the Select can render its current value.
-- Add an **"+ Add new type…"** item at the bottom of the dropdown. Selecting it opens a small inline input (or `prompt`-style row) where the user types a custom type; on confirm it's appended to local state and selected immediately. It will be persisted to the DB as soon as the product is saved (because `product_type` is just a column).
-- Keep `getStrengthConfig` keyed off **functional buckets**:
-  - If `productType` matches Tablet/Capsule/Injection → mg input + strip/box section
-  - If matches Syrup/Suspension → ml input
-  - If matches Cream/Ointment → gm input
-  - Otherwise (Eye Drop, MDI, etc.) → no strength input shown, no strip/box section. Stock & MRP still work normally.
-- On save, write `product_type` and `unit_format` exactly as selected (custom types flow through unchanged).
+- **`src/lib/stockUtils.ts`** — add `totalPiecesToTriUnitLabeled(totalPcs, spp, pps)` returning `"0 Bx • 1 St • 5 Pc"`. Keep existing `totalPiecesToTriUnit` for places that still need the colon format.
+- **`src/lib/productType.ts`** — add `getProductTypeChipClasses(type: string | null): string` that maps a product_type (case-insensitive, keyword-based via existing `getFunctionalBucket` plus extra checks for "drop"/"inhaler"/"injection"/"cream"/"ointment") to Tailwind class strings. Centralised so other screens can reuse later.
+- **`src/pages/Inventory.tsx`**:
+  - Replace the in-file `TriUnitDisplay` to use the new labeled formatter (Bx/St/Pc), keeping muted styling for unit suffixes and bold tabular nums for digits.
+  - Update the medicine card container classes from `bg-muted rounded-2xl` to `bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/50`.
+  - Increase list spacing from `space-y-3` to `space-y-3.5` and bump card padding to `p-4` (already there) but adjust internal text sizes to match Sales.
+  - Replace the medicine name `<p>` block with a two-line layout: name + strength on top (`font-bold text-gray-900 text-sm`), then a flex row containing the company (`text-[11px] text-gray-400`) and the product-type chip from `getProductTypeChipClasses`.
+  - Apply the same chip + typography treatment to the "From Catalog" rows (using `med.format` mapped via `toFunctionalType`).
+  - Long-press / expand interaction, stock editing, delete flow, filters — unchanged behaviour, only restyled where text colors are touched.
 
-### 3. `src/pages/CatalogSearch.tsx` — no behavior change needed
-
-Already calls `toFunctionalType(med.format)`. After step 1, unknown formats like `"Eye Drop"` will be saved verbatim into `product_type`, which is what we want. The newly-saved type immediately becomes a distinct value the dropdown will pick up next time `fetchPharmacyProductTypes` runs.
-
-### 4. `src/pages/Inventory.tsx` — no schema change
-
-Continues to use `getDisplayFormat()` for UI and `isSingleUnit(product_type)` for math. `isSingleUnit` already returns true for non-Tablet/Capsule types, so Eye Drop / MDI / Drops will display as `"N Pcs"` correctly.
-
-### 5. Refresh on return
-
-When the user saves a new product with a custom type and navigates back to Add Product later, the dropdown re-fetches on mount, so the new type appears automatically. No realtime subscription needed — fetching on mount is sufficient and matches existing patterns in the app.
-
-## Out of scope
-
-- No dedicated `product_categories` table. The distinct-query approach is simpler, requires no migration, and meets the requirement "becomes available for future products".
-- No global cross-pharmacy type sharing — each pharmacy's dropdown reflects its own inventory plus the seed list.
-
-## Files touched
-
-- `src/lib/productType.ts` — add `fetchPharmacyProductTypes`, tighten `toFunctionalType` pass-through.
-- `src/pages/AddProduct.tsx` — dynamic options state, inline "Add new type" UI, functional-bucket strength config.
-
-## Verification
-
-After implementation:
-1. Import an "Eye Drop" from the catalog → opens in inventory with `product_type = "Eye Drop"`, displayed as `"Eye Drop"`.
-2. Open Add Product → dropdown shows seeds + every distinct type from the pharmacy (including "Eye Drop").
-3. Type a brand-new type via "+ Add new type…" → saves correctly, appears in dropdown on next visit.
-4. Edit an existing "Eye Drop" product → dropdown pre-selects "Eye Drop" without strip/box fields shown.
+No database changes. No routing or behavioural changes — purely visual + a couple of helper utilities.
