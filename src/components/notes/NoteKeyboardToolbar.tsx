@@ -43,6 +43,9 @@ const NoteKeyboardToolbar = ({
   const inset = useKeyboardInset();
   const [addOpen, setAddOpen] = useState(false);
 
+  const iconBtn =
+    "h-10 w-10 inline-flex items-center justify-center rounded-full text-gray-700 hover:bg-gray-200 active:bg-gray-300 transition-colors";
+
   return (
     <>
       <div
@@ -54,12 +57,12 @@ const NoteKeyboardToolbar = ({
           transition: "bottom 150ms ease-out",
         }}
       >
-         <div className="max-w-3xl mx-auto h-12 px-2 flex items-center mt-[10px] mb-[10px] pt-0 pb-0 my-0 border-0 bg-gray-100">
+        <div className="max-w-3xl mx-auto h-12 px-3 flex items-center bg-gray-100">
           {/* Left group: Add, Color, Text */}
-           <div className="flex items-center gap-1 mr-[10px]">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-               className="h-10 w-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 text-gray-700 ml-[20px]"
+              className={iconBtn}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setAddOpen(true)}
               aria-label="Add"
@@ -71,7 +74,7 @@ const NoteKeyboardToolbar = ({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                 className="h-10 w-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 text-gray-700 ml-[20px]"
+                className={iconBtn}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Color"
               >
@@ -87,7 +90,7 @@ const NoteKeyboardToolbar = ({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                 className="h-10 w-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 text-gray-700 ml-[20px]"
+                className={iconBtn}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="Text format"
               >
@@ -104,10 +107,10 @@ const NoteKeyboardToolbar = ({
           <div className="flex-1" />
 
           {/* Right group: Undo, Redo, More */}
-           <div className="flex items-center gap-1 mr-[10px]">
+          <div className="flex items-center gap-2">
             <button
             type="button"
-             className="h-10 w-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 text-gray-700 mb-0 mr-[10px]"
+            className={iconBtn}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => exec("undo")}
             aria-label="Undo"
@@ -117,7 +120,7 @@ const NoteKeyboardToolbar = ({
 
             <button
               type="button"
-              className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-gray-100 mr-0 text-gray-700 border-inherit"
+              className={iconBtn}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => exec("redo")}
               aria-label="Redo"
@@ -129,11 +132,11 @@ const NoteKeyboardToolbar = ({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                 className="h-10 w-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 active:bg-gray-200 text-gray-700"
+                className={iconBtn}
                 onMouseDown={(e) => e.preventDefault()}
                 aria-label="More"
               >
-                 <MoreVertical size={18} className="lucide lucide-ellipsis-vertical bg-gray-100 text-gray-700" />
+                <MoreVertical size={18} />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="end" className="w-60">
