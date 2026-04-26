@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export type NoteBlock =
   | { id: string; type: "text"; html: string }
-  | { id: string; type: "checklist"; items: { text: string; checked: boolean }[] }
+  | { id: string; type: "checklist"; items: { id?: string; text: string; checked: boolean }[] }
   | {
       id: string;
       type: "image";
