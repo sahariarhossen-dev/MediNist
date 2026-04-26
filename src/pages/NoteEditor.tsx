@@ -206,18 +206,42 @@ const NoteEditor = () => {
     });
   }, [draft]);
 
-  // Silent 3-second debounced autosave. We only schedule a single timer that
-  // reads the latest draft from the ref, so React state updates (typing) do
-  // not re-render or fire mutations on every keystroke.
+  // Save-on-exit only: no autosave during typing. We keep all edits in local
+  // React state (draft) and flush a single upsert when the editor unmounts
+  // (back button, route change, tab close are handled separately by handleBack).
+  // Refs below keep the latest values available to the unmount cleanup without
+  // re-subscribing on every keystroke.
+  const readOnlyRef = useRef(readOnly);
+  const noteIdRef = useRef<string | null>(noteId);
+  const hasContentRef = useRef(hasContent);
   useEffect(() => {
-    if (readOnly || isLoading) return;
-    if (!noteId) return;
-    const handle = setTimeout(() => {
-      updateMut.mutate({ id: noteId, patch: buildPayload(draftRef.current) });
-    }, 3000);
-    return () => clearTimeout(handle);
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
+  useEffect(() => {
+    noteIdRef.current = noteId;
+  }, [noteId]);
+  useEffect(() => {
+    hasContentRef.current = hasContent;
+  }, [hasContent]);
+
+  // Track whether handleBack already flushed, so the unmount cleanup doesn't
+  // double-save.
+  const flushedRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (flushedRef.current) return;
+      if (readOnlyRef.current) return;
+      const latest = draftRef.current;
+      const id = noteIdRef.current;
+      if (id) {
+        updateMut.mutate({ id, patch: buildPayload(latest) });
+      } else if (hasContentRef.current) {
+        createMut.mutate(buildPayload(latest));
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, noteId]);
+  }, []);
 
   const ensureSaved = async (): Promise<string | null> => {
     if (noteId) return noteId;
@@ -238,6 +262,7 @@ const NoteEditor = () => {
       } else if (noteId) {
         await updateMut.mutateAsync({ id: noteId, patch: buildPayload(draft) });
       }
+      flushedRef.current = true;
       navigate("/more/notes");
     } catch (err) {
       console.error(err);
