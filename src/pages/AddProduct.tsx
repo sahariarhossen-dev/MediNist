@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Pill, FlaskConical, Syringe, Package, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Pill, FlaskConical, Syringe, Package, AlertTriangle, Plus, Check, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,22 +13,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { detectFunctionalTypeFromName } from "@/lib/productType";
+import {
+  detectFunctionalTypeFromName,
+  fetchPharmacyProductTypes,
+  getFunctionalBucket,
+  SEED_PRODUCT_TYPES,
+} from "@/lib/productType";
 
-const productTypes = ["Tablet", "Capsule", "Syrup", "Injection", "Cream", "Suspension", "Ointment"] as const;
-type ProductType = (typeof productTypes)[number];
+const ADD_NEW_SENTINEL = "__add_new__";
 
-const getStrengthConfig = (type: ProductType | "") => {
-  switch (type) {
-    case "Tablet":
-    case "Capsule":
-    case "Injection":
+const getStrengthConfig = (type: string) => {
+  const bucket = getFunctionalBucket(type);
+  switch (bucket) {
+    case "tablet-like":
       return { label: "Strength", unit: "mg", placeholder: "e.g. 500" };
-    case "Syrup":
-    case "Suspension":
+    case "liquid":
       return { label: "Volume", unit: "ml", placeholder: "e.g. 100" };
-    case "Cream":
-    case "Ointment":
+    case "topical":
       return { label: "Weight", unit: "gm", placeholder: "e.g. 15" };
     default:
       return null;
@@ -36,20 +37,17 @@ const getStrengthConfig = (type: ProductType | "") => {
 };
 
 const getTypeIcon = (type: string) => {
-  switch (type) {
-    case "Tablet":
-    case "Capsule":
+  const bucket = getFunctionalBucket(type);
+  switch (bucket) {
+    case "tablet-like":
+      if (type.toLowerCase().includes("injection")) return <Syringe size={16} />;
       return <Pill size={16} />;
-    case "Syrup":
-    case "Suspension":
+    case "liquid":
       return <FlaskConical size={16} />;
-    case "Injection":
-      return <Syringe size={16} />;
-    case "Cream":
-    case "Ointment":
+    case "topical":
       return <Package size={16} />;
     default:
-      return null;
+      return <Package size={16} />;
   }
 };
 
@@ -62,15 +60,40 @@ const AddProduct = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [productType, setProductType] = useState<ProductType | "">("");
+  const [productType, setProductType] = useState<string>("");
+  const [productTypes, setProductTypes] = useState<string[]>([...SEED_PRODUCT_TYPES]);
+  const [showAddType, setShowAddType] = useState(false);
+  const [newTypeInput, setNewTypeInput] = useState("");
   const [strength, setStrength] = useState("");
   const [stockAlert, setStockAlert] = useState("");
   const [mrp, setMrp] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
 
-  const isTabletOrCapsule = productType === "Tablet" || productType === "Capsule";
+  const isTabletOrCapsule = (() => {
+    const s = productType.toLowerCase();
+    return s === "tablet" || s === "capsule";
+  })();
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
+
+  // Load dynamic product types from this pharmacy's existing inventory
+  useEffect(() => {
+    if (!profile?.pharmacy_id) return;
+    let cancelled = false;
+    fetchPharmacyProductTypes(profile.pharmacy_id).then((types) => {
+      if (cancelled) return;
+      setProductTypes((prev) => {
+        // Preserve any in-session custom type the user just added
+        const merged = new Map<string, string>();
+        for (const t of types) merged.set(t.toLowerCase(), t);
+        for (const t of prev) if (!merged.has(t.toLowerCase())) merged.set(t.toLowerCase(), t);
+        return Array.from(merged.values());
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.pharmacy_id]);
 
   useEffect(() => {
     const s = location.state;
@@ -80,6 +103,12 @@ const AddProduct = () => {
     if (s.name) setName(s.name);
     if (s.productType) {
       setProductType(s.productType);
+      // Make sure the saved type is selectable in the dropdown
+      setProductTypes((prev) =>
+        prev.some((t) => t.toLowerCase() === s.productType.toLowerCase())
+          ? prev
+          : [...prev, s.productType]
+      );
     } else {
       // Auto-detect from medicine name only when DB value is empty/null
       const detected = detectFunctionalTypeFromName(s.name);
@@ -97,6 +126,31 @@ const AddProduct = () => {
   }, []);
 
   const strengthConfig = getStrengthConfig(productType);
+
+  const handleTypeChange = (v: string) => {
+    if (v === ADD_NEW_SENTINEL) {
+      setShowAddType(true);
+      setNewTypeInput("");
+      return;
+    }
+    setProductType(v);
+  };
+
+  const handleConfirmNewType = () => {
+    const v = newTypeInput.trim();
+    if (!v) {
+      toast.error("Type name cannot be empty");
+      return;
+    }
+    const exists = productTypes.find((t) => t.toLowerCase() === v.toLowerCase());
+    const finalValue = exists || v;
+    setProductTypes((prev) =>
+      exists ? prev : [...prev, v]
+    );
+    setProductType(finalValue);
+    setShowAddType(false);
+    setNewTypeInput("");
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -163,20 +217,65 @@ const AddProduct = () => {
         {/* 1. Product Type */}
         <div className="space-y-2">
           <Label className="text-sm font-medium text-foreground">Product Type</Label>
-          <Select value={productType} onValueChange={(v) => setProductType(v as ProductType)}>
-            <SelectTrigger className="rounded-xl bg-muted border-0 h-12">
-              <SelectValue placeholder="Select type" />
-            </SelectTrigger>
-            <SelectContent>
-              {productTypes.map((t) => (
-                <SelectItem key={t} value={t}>
-                  <span className="flex items-center gap-2">
-                    {getTypeIcon(t)} {t}
+          {showAddType ? (
+            <div className="flex items-center gap-2">
+              <Input
+                autoFocus
+                placeholder="e.g. Eye Drop, MDI, Lozenge"
+                value={newTypeInput}
+                onChange={(e) => setNewTypeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleConfirmNewType();
+                  } else if (e.key === "Escape") {
+                    setShowAddType(false);
+                    setNewTypeInput("");
+                  }
+                }}
+                className="rounded-xl bg-muted border-0 h-12 flex-1"
+              />
+              <button
+                type="button"
+                onClick={handleConfirmNewType}
+                className="h-12 w-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center"
+                aria-label="Confirm new type"
+              >
+                <Check size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddType(false);
+                  setNewTypeInput("");
+                }}
+                className="h-12 w-12 rounded-xl bg-muted text-foreground flex items-center justify-center"
+                aria-label="Cancel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : (
+            <Select value={productType} onValueChange={handleTypeChange}>
+              <SelectTrigger className="rounded-xl bg-muted border-0 h-12">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {productTypes.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    <span className="flex items-center gap-2">
+                      {getTypeIcon(t)} {t}
+                    </span>
+                  </SelectItem>
+                ))}
+                <SelectItem value={ADD_NEW_SENTINEL}>
+                  <span className="flex items-center gap-2 text-primary font-medium">
+                    <Plus size={16} /> Add new type…
                   </span>
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* 2. Medicine Name */}
