@@ -1,78 +1,81 @@
-## Goal
+# Note Editor — Document Flow Refactor
 
-Replace the current Note Editor (which shows pre-selected "Add block", "Contact", "Tags", "Shared" cards from the start) with a strictly clean, context-driven editor that mirrors Google Keep:
+Refactor `src/pages/NoteEditor.tsx` and related block components so the editor behaves like a true document (Google Keep / MS Word style) with a tight inline flow, auto-cursoring after inserts, a character-limit guard, and the finalized 6-icon toolbar.
 
-- Open the editor with **only** a Title field and a Note body field — nothing else.
-- All formatting, attachments, color, share toggle, and destructive actions live in a **sticky toolbar pinned above the mobile keyboard**.
-- Autosave on Back; the note remains editable after save (no read-only lock for the creator).
+## 1. Document flow layout
 
-## What changes
+Replace the current "primary text + extra blocks below" split with a single ordered list of blocks rendered in `flex flex-col gap-1` (4 px between every block). All block types — text, image, checklist — render inline in insertion order.
 
-### 1. Blank creation flow
-- `+` FAB on `/more/notes` already routes to `/more/notes/new` — kept as is.
-- `NoteEditor.tsx` opens with:
-  - Top bar: Back arrow + tiny "Saved/Saving…" status (no pin/color/delete buttons here anymore — they move to the toolbar `⋮`).
-  - Title input (large, borderless).
-  - A single auto-growing Note textarea (replaces the contentEditable `BlockText`’s toolbar; the per-block format bar is removed in favor of the global keyboard toolbar).
-  - No "Add block", "Contact Numbers", "Tags", or "Shared with Team" cards visible up front.
+- Container: `flex flex-col gap-1 pb-20` on the scroll area (80 px safe zone so the user can scroll past the last line above the keyboard).
+- Each text block is a slim `BlockText` with `min-h` reduced (~24 px) so consecutive text/image/checkbox lines sit tight together like a Word document.
+- Remove the `space-y-3 mt-4` extra-blocks wrapper and the visual separation between "primary" body and "inserted" blocks.
 
-### 2. New `NoteKeyboardToolbar` component (sticky above keyboard)
-File: `src/components/notes/NoteKeyboardToolbar.tsx`
+## 2. Auto-cursor after insertion
 
-Layout (left → right, matching the reference): `＋`  `🎨`  `A`  `↶`  `↷`  `⋮`
+When the user inserts an image or checklist via the `+` toolbar:
 
-- Sits in a `fixed` bar anchored to `bottom: useKeyboardInset()` so it rides above the keyboard. Falls back to `bottom: env(safe-area-inset-bottom)` when keyboard closed.
-- Visible only when not read-only.
-- Uses `lucide-react` icons: `Plus`, `Palette`, `Type`, `Undo2`, `Redo2`, `MoreVertical`.
+1. Append the new image/checklist block.
+2. Immediately append a fresh empty text block right after it.
+3. Focus that new text block on the next animation frame.
 
-Icon behaviors:
+Implement by:
+- Tracking blocks via `blockRefs: Map<string, BlockTextHandle>` so any text block can be focused by id.
+- Updating `addBlock` to take an optional `insertAfter` block id and to auto-append a trailing empty text block when the inserted block is non-text.
+- After `setDraft`, `requestAnimationFrame(() => blockRefs.get(newTextId)?.focus())`.
 
-| Icon | Action |
-|---|---|
-| `＋` | Opens a small bottom sheet (`Drawer`) with exactly two options: **Add Image / Invoice** and **Add Checkboxes**. Image option opens the existing file picker (defaults to `photo` category, with quick chips for Invoice/Rx). Checkbox inserts a `checklist` block. |
-| `🎨` Palette | Opens a `Popover` above the icon with the existing pastel `ColorPicker` (sets `draft.color`). |
-| `A` | Opens a `Popover` with **B / I / U / H1 / H2** buttons that run `document.execCommand` on the focused contentEditable note body. |
-| `↶ / ↷` | `document.execCommand('undo' / 'redo')` on the note body; history resets each session (no persistence). Disabled state when there's nothing to undo/redo (best-effort via a small in-memory stack count). |
-| `⋮` | `DropdownMenu` with: **Delete**, **Make a copy**, and a **Share with Team** switch row (off = Private by default). Delete confirms then removes; Make a copy creates a new note with the same content and navigates to it. |
+## 3. Character limit (2,000)
 
-### 3. Note body becomes a single rich-text surface
-- Replace the multi-block list in the default view with one `contentEditable` div that holds the entire note body (still serialized into a single `text` block in `content[]` for storage compatibility).
-- Inserting an image or checklist appends a new block **after** the text block, rendered inline below it (image preview / checklist card). The text block remains the primary editable surface and stays focused after insertion so the keyboard + toolbar stay up.
-- Per-block toolbar inside `BlockText.tsx` is removed (formatting now lives in the global `A` popover). `BlockText` becomes a thin contentEditable wrapper.
+Add a derived `totalChars` count across all text blocks (strip HTML) plus checklist item text.
 
-### 4. Autosave-on-back (and silent debounced save)
-- Keep the existing 800 ms debounced autosave to Supabase.
-- `handleSaveExit` (Back arrow + Android hardware back via existing `useRootBackHandler` if applicable) calls `ensureSaved()` then `updateMut` then navigates. No "discard" prompt.
-- Creator can keep editing after save (current behavior — `readOnly` only true when `existing.creator_id !== user.id`). No change.
+- Counter pill at the bottom-right of the scroll area: `120 / 2000`, `text-xs text-gray-400`, fixed inside the editor (above the toolbar).
+- At ≥ 1,800: counter turns `text-red-500`, and a one-shot `toast.warning("Approaching 2000 character limit")` fires (guarded by a ref so it only shows once per session).
+- At ≥ 2,000: block further input.
+  - In `BlockText.onInput`, if the new total would exceed 2000, revert `el.innerHTML` to the last accepted value and place the caret at the end.
+  - Disable the title input's extra characters via `maxLength` calculation (or at least block when total hits limit).
+  - Same guard for checklist `Input` `onChange`.
 
-### 5. Removed from the editor surface
-- The "Add block" grid card.
-- The standalone "Shared with Team" card (moved into `⋮` menu).
-- The standalone "Contact Numbers" and "Tags" cards. (They remain in the data model and in `NoteCard` previews; they can be re-added later via a "More options" item in the `⋮` menu if requested — flagged as out-of-scope for this pass to keep the screen clean as the user asked.)
+## 4. Toolbar refinement
 
-### 6. Mobile responsiveness
-- Title and note body use `auto`-growing heights (`field-sizing: content` where supported, plus a `useEffect` that sets `style.height = scrollHeight` on input).
-- Editor scroll area gets `padding-bottom: 64px + keyboard inset` so the toolbar never overlaps content.
-- The toolbar itself is `h-12`, full-width, white background, top border, with `safe-area-inset-bottom` padding.
+`NoteKeyboardToolbar` already has the 6-icon two-group layout with a `flex-1` spacer. Cleanup pass:
 
-## File-level changes
+- Normalize all 6 icon buttons to one shared class (remove ad-hoc `ml-[20px]`, `mr-[10px]`, `bg-gray-100` on the Redo button, and the `bg-gray-100` on the MoreVertical icon).
+- Standard button: `h-10 w-10 inline-flex items-center justify-center rounded-full text-gray-700 hover:bg-gray-200 active:bg-gray-300`.
+- Container row: `max-w-3xl mx-auto h-12 px-3 flex items-center bg-gray-100`.
+- Left group `flex items-center gap-2`, spacer `flex-1`, right group `flex items-center gap-2`.
 
-- **edit** `src/pages/NoteEditor.tsx` — strip pre-selected sections, mount `<NoteKeyboardToolbar/>`, wire toolbar handlers (color, insert image/checklist, share toggle, delete, copy, format-exec, undo/redo), keep autosave + back behavior.
-- **new** `src/components/notes/NoteKeyboardToolbar.tsx` — the sticky toolbar described above.
-- **new** `src/components/notes/AddBlockSheet.tsx` — the small `Drawer` opened by `＋` with the two options (Image/Invoice, Checkboxes).
-- **new** `src/components/notes/TextFormatPopover.tsx` — B/I/U/H1/H2 buttons calling `document.execCommand`.
-- **edit** `src/components/notes/blocks/BlockText.tsx` — drop the local Bold/Italic/List toolbar; expose `onFocus` so the parent knows which editable to target with format/undo commands.
-- No DB / RLS / storage changes. No new migrations.
+## 5. Background color applies to entire note immediately
 
-## Out of scope (kept as-is)
-- Realtime sync, RLS, storage bucket, `useNotes` hook, `Notes.tsx` grid, FAB, search bar, side menu — all unchanged.
-- Tags and contact-number editing UI (data preserved; UI temporarily hidden from the clean editor screen).
+Already wired — `colorHex(draft.color)` is applied as inline `backgroundColor` on the root container, and `setDraft` updates synchronously when the palette is clicked, so the change is instant. Verify and remove the redundant `bg-gray-100` Tailwind class from the root container so it does not flash gray before the inline style paints.
 
-## Acceptance check
-1. Tap `+` on `/more/notes` → editor opens showing only Title + empty note body + sticky toolbar above the keyboard. No other cards.
-2. Type some text → toolbar `＋` becomes meaningful; tapping it shows the two-option sheet.
-3. Palette opens pastel swatches; selecting one changes the editor background instantly.
-4. `A` opens B/I/U/H1/H2 and applies to selection.
-5. Undo/Redo work for the current session; closing/reopening the note clears history.
-6. `⋮` shows Delete, Make a copy, and Share-with-Team toggle (off by default).
-7. Press Back → status flips to "Saving…" then navigates to the list; reopening shows the same content and remains editable.
+## 6. Performance / debounced save
+
+Already implemented (3 s debounced `updateMut.mutate` reading from `draftRef`). No change needed — confirm that block refactor keeps the debounce intact (the effect depends on `[draft, noteId]`, which still works with the new flat block list).
+
+## Technical details
+
+Files to edit:
+
+- `src/pages/NoteEditor.tsx`
+  - Drop `primaryText` split; render `draft.content` as a single ordered list.
+  - Add `blockRefs` map, `addBlockAfter`, auto-text-after-insert logic.
+  - Add `totalChars` memo, character counter element, near-limit toast guard.
+  - Pass `canInsertChars(n)` helper down to `BlockText`, `BlockChecklist`, and the title input.
+  - Remove `bg-gray-100` from root container.
+  - Change scroll container to `flex flex-col gap-1 pb-20`.
+- `src/components/notes/blocks/BlockText.tsx`
+  - Accept `onBeforeInput?: (delta: number) => boolean` (or simpler: `maxRemaining: number` from parent) and revert input when exceeded.
+  - Reduce `min-h-[160px]` to `min-h-[24px]` so blocks are inline.
+  - Keep caret-preserving `lastSetHtmlRef` logic intact.
+- `src/components/notes/blocks/BlockChecklist.tsx`
+  - Accept and respect remaining-character budget on item text changes.
+  - Tighten outer padding so it sits flush with surrounding text blocks.
+- `src/components/notes/NoteKeyboardToolbar.tsx`
+  - Normalize button classes, remove ad-hoc spacing/colors as listed above.
+
+No database, RLS, or edge function changes.
+
+## Out of scope
+
+- No changes to the notes list page or `NoteCard`.
+- No changes to autosave timing (already 3 s).
+- No changes to the share/duplicate/delete menu behavior.
