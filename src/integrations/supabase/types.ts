@@ -878,6 +878,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_pharmacy_member_presence: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          full_name: string
+          last_seen: string
+          role: string
+          user_id: string
+        }[]
+      }
       get_user_pharmacy_id: { Args: never; Returns: string }
       is_pharmacy_admin: { Args: never; Returns: boolean }
       search_medicines: {
