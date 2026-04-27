@@ -352,22 +352,7 @@ const ShopProfile = () => {
                     >
                       <option value="salesman">Salesman</option>
                       <option value="manager">Manager</option>
-                      <option value="owner">Owner</option>
                     </select>
-                    {inviteRole === "owner" && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center justify-center h-10 w-10 shrink-0">
-                              <AlertTriangle size={18} className="text-amber-500" />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[220px] text-xs">
-                            Giving someone 'Owner' access allows them to manage all shop settings.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
                     <Button
                       onClick={handleInvite}
                       disabled={inviting || !inviteEmail.trim()}
@@ -376,6 +361,7 @@ const ShopProfile = () => {
                       <Send size={14} /> {inviting ? "Sending..." : "Send"}
                     </Button>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Invitations expire after 7 days.</p>
                 </div>
               )}
               <div className="space-y-2">
@@ -386,19 +372,51 @@ const ShopProfile = () => {
                     <div key={s.id} className="flex items-center gap-3 p-3 bg-muted rounded-2xl">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{s.email}</p>
-                        <div className="flex gap-1.5 mt-1">
+                        <div className="flex gap-1.5 mt-1 flex-wrap">
                           <Badge variant="secondary" className="text-[10px] capitalize rounded-lg">{s.role}</Badge>
                           <Badge
-                            className={`text-[10px] rounded-lg ${s.status === "active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-amber-100 text-amber-700 border-amber-200"}`}
+                            className={`text-[10px] rounded-lg capitalize ${
+                              s.status === "accepted" || s.status === "active"
+                                ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                                : s.status === "pending"
+                                ? "bg-amber-100 text-amber-700 border-amber-200"
+                                : s.status === "revoked"
+                                ? "bg-gray-200 text-gray-600 border-gray-300"
+                                : "bg-rose-100 text-rose-700 border-rose-200"
+                            }`}
                           >
-                            {s.status === "active" ? "Active" : "Pending"}
+                            {s.status === "accepted" || s.status === "active" ? "Accepted" : s.status}
                           </Badge>
                         </div>
                       </div>
                       {isAdmin && (
-                        <button onClick={() => handleRemoveStaff(s.id)} className="p-2 rounded-full hover:bg-destructive/10">
-                          <Trash2 size={16} className="text-destructive" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {s.status === "pending" && (
+                            <button
+                              onClick={() => handleResendInvite(s.email, s.role)}
+                              className="p-2 rounded-full hover:bg-emerald-100"
+                              title="Resend invitation"
+                            >
+                              <Send size={14} className="text-emerald-600" />
+                            </button>
+                          )}
+                          {s.status === "pending" && (
+                            <button
+                              onClick={() => handleRevokeInvite(s.id)}
+                              className="p-2 rounded-full hover:bg-amber-100"
+                              title="Revoke invitation"
+                            >
+                              <AlertTriangle size={14} className="text-amber-600" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRemoveStaff(s.id)}
+                            className="p-2 rounded-full hover:bg-destructive/10"
+                            title="Remove"
+                          >
+                            <Trash2 size={16} className="text-destructive" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))
