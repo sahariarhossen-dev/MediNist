@@ -128,6 +128,30 @@ const DailyTransactions = () => {
     loadData();
   }, [loadData]);
 
+  // Realtime: re-pull whenever any pharmacy member changes the underlying
+  // tables so totals stay in sync without a manual refresh.
+  useEffect(() => {
+    const pharmacyId = profile?.pharmacy_id;
+    if (!pharmacyId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounced = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => loadData(), 250);
+    };
+    const filter = `pharmacy_id=eq.${pharmacyId}`;
+    const channel = supabase
+      .channel(`daily-tx-${pharmacyId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_transactions", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_ledger", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_closings", filter }, debounced)
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.pharmacy_id, loadData]);
+
   const salesTotal = useMemo(
     () => salesRows.reduce((s, r) => s + Number(r.total || 0), 0),
     [salesRows],
