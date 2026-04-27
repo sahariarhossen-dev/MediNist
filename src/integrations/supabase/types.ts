@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_override_requests: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          pharmacy_id: string
+          reason: string | null
+          requested_by: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          pharmacy_id: string
+          reason?: string | null
+          requested_by: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          pharmacy_id?: string
+          reason?: string | null
+          requested_by?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       ai_conversations: {
         Row: {
           created_at: string
@@ -302,12 +344,18 @@ export type Database = {
       daily_closings: {
         Row: {
           closed_at: string
+          closed_by_user_id: string | null
           closing_date: string
+          closing_type: string
           created_at: string
+          declared_cash: number | null
+          discrepancy: number | null
           id: string
           net_balance: number
+          notes: string | null
           pharmacy_id: string
           starting_balance: number
+          system_cash: number | null
           total_cash_in: number
           total_due: number
           total_payments: number
@@ -315,12 +363,18 @@ export type Database = {
         }
         Insert: {
           closed_at?: string
+          closed_by_user_id?: string | null
           closing_date: string
+          closing_type?: string
           created_at?: string
+          declared_cash?: number | null
+          discrepancy?: number | null
           id?: string
           net_balance?: number
+          notes?: string | null
           pharmacy_id: string
           starting_balance?: number
+          system_cash?: number | null
           total_cash_in?: number
           total_due?: number
           total_payments?: number
@@ -328,12 +382,18 @@ export type Database = {
         }
         Update: {
           closed_at?: string
+          closed_by_user_id?: string | null
           closing_date?: string
+          closing_type?: string
           created_at?: string
+          declared_cash?: number | null
+          discrepancy?: number | null
           id?: string
           net_balance?: number
+          notes?: string | null
           pharmacy_id?: string
           starting_balance?: number
+          system_cash?: number | null
           total_cash_in?: number
           total_due?: number
           total_payments?: number
@@ -844,6 +904,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      submit_blind_closing: {
+        Args: { _declared: number; _notes?: string }
+        Returns: Json
       }
       touch_last_seen: { Args: never; Returns: undefined }
     }
