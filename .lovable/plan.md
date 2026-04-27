@@ -1,43 +1,64 @@
-# Role-Based Access for Transactions & Dashboard
+# Role-Based Dashboard & Personal Report
 
-Implement strict role gates across the More menu, Daily Transactions page, route guard, and Dashboard's Cash in Hand card.
+Apply different chart scope, time-range filter options, and summary cards per role. Add a new "My Sales" personal report page for Owner/Manager.
 
-## Roles recap
-- **Owner** (`role: 'owner'`): unrestricted.
-- **Manager** (`role: 'manager'`): can use the page, but date filter limited to last 7 days.
-- **Salesman** (`role: 'salesman'`): cannot access the page at all; Cash in Hand on Dashboard is frozen.
+## Behavior Matrix
+
+| Capability | Owner | Manager | Salesman |
+|---|---|---|---|
+| Sales-trend chart scope | Shop-wide (all users) | Shop-wide (all users) | Personal only (own user_id) |
+| Time-range options | Today / 7 / 15 / 30 days | Today / 7 days only | Today / 7 / 15 / 30 days |
+| Total Sales card | Shop-wide | Shop-wide | Personal only |
+| Cash in Hand card | Shop-wide value | Shop-wide value | "N/A" (unchanged) |
+| My Sales card | Visible → /personal-report | Visible → /personal-report | Hidden |
+| Active Staff / Short Items | Shop-wide | Shop-wide | Shop-wide (unchanged) |
+
+Role mapping uses existing `profile.role` values: `admin` (=Owner), `manager`, `salesman`.
 
 ## Changes
 
-### 1. `src/pages/More.tsx` — hide link for Salesman
-Filter `menuItems` so the "Daily Transactions" entry is omitted when `profile?.role === 'salesman'`.
+### 1. `src/pages/Index.tsx`
+- Compute `isOwner = role === 'admin'`, `isManager = role === 'manager'`, `isSalesman = role === 'salesman'`.
+- `rangeLabels`: build dynamically — managers get `{ today, 7days }` only. If a manager somehow has `15days`/`30days` selected, clamp back to `7days` in a `useEffect`.
+- `fetchStats` Total Sales query:
+  - Owner/Manager: drop the `.eq("user_id", userId)` filter (shop-wide).
+  - Salesman: keep `.eq("user_id", userId)` (personal).
+- Replace the 4-card grid:
+  - Owner/Manager cards: **Total Sales (shop)**, **Cash in Hand**, **My Sales** (new, navigates to `/personal-report`), **Short Items**. Drop "Active Staff" to keep the 2×2 grid clean (or keep and make 2×3 — see Open Question).
+  - Salesman cards: unchanged set with personal Total Sales + frozen Cash in Hand.
+- Pass a new `scope` prop to `<SalesTrendChart>`: `"shop"` for owner/manager, `"personal"` for salesman.
 
-### 2. `src/pages/DailyTransactions.tsx` — route-level guard + date restriction
-- At the top of the component, if `profile?.role === 'salesman'`, `<Navigate to="/more" replace />` (prevents direct URL access).
-- Date filter restriction for Manager:
-  - Compute `minDate = subDays(startOfDay(new Date()), 6)` (today + previous 6 days = 7-day window).
-  - Pass to `<Calendar disabled={(d) => d > new Date() || (isManager && d < minDate)} fromDate={isManager ? minDate : undefined} />`.
-  - Also clamp programmatic state: if `isManager && date < minDate`, reset to today on mount.
-- Keep the existing `canLogTransactions = profile?.role !== 'salesman'` check (already prevents the FAB; now redundant since salesman can't reach the page, but kept as defense-in-depth).
+### 2. `src/components/SalesTrendChart.tsx`
+- Add prop `scope: "shop" | "personal"`.
+- In `fetchChartData` and `handlePointClick`, only apply `.eq("user_id", userId)` when `scope === "personal"`.
+- Add a realtime subscription on `sales` filtered by `pharmacy_id` so shop-wide chart updates live when any teammate logs a sale (debounced 250ms, like Index).
 
-### 3. `src/pages/Index.tsx` — freeze Cash in Hand for Salesman
-- In `summaryCards`, when `profile?.role === 'salesman'`:
-  - Replace Cash in Hand value with `"N/A"`.
-  - Remove the `onClick` (so card isn't clickable / doesn't navigate to the blocked page).
-- Skip the `fetchCashInHand` call and the realtime subscription for cash data when role is `salesman` (small perf win, avoids unnecessary queries).
+### 3. New page `src/pages/PersonalReport.tsx`
+- Route: `/personal-report`. Guard so only `admin` and `manager` can access (redirect salesman → `/`).
+- Scoped strictly to `auth.uid()` + `pharmacy_id`.
+- Time-range selector (manager limited to today/7days, owner full 30d).
+- Sections:
+  - KPI cards: My Total Sales (৳), My Invoices (count), Avg. Invoice Value, My Discounts Given.
+  - Personal hourly/daily sales trend (reuses `SalesTrendChart` with `scope="personal"`).
+  - Top 5 medicines I sold (join `sale_items` via my `sales.id`).
+  - My recent invoices list (last 10) with link to `/invoice/:id`.
+- Uses `AppHeader` + standard page chrome; back button to `/`.
 
-### 4. `src/App.tsx` — defense-in-depth route guard
-Wrap `/more/daily-transactions` (and `/more/all-transactions`) with a small inline `RoleGuard` that redirects to `/more` if `profile?.role === 'salesman'`. Reuses the existing `useAuth()` hook.
+### 4. `src/App.tsx`
+- Register `/personal-report` route.
+- Add a `BlockSalesman`-style guard wrapping it (redirect salesman → `/`).
 
-### 5. Backend / RLS — security verification
-The existing RLS already restricts everything to `pharmacy_id = get_user_pharmacy_id()`, so a Salesman querying `sales`, `cash_transactions`, etc. only sees their own pharmacy's rows (same data, different page). The role-based date / page restriction is a UX/business policy, not a data-confidentiality boundary, so additional RLS is **not** required — UI guards plus the route guard are sufficient. **No DB migration needed.**
+## Data Isolation Notes
 
-If you later want to enforce "salesman cannot read cash_transactions at all" at the DB layer, we'd add a policy like `pharmacy_id = get_user_pharmacy_id() AND NOT has_role(auth.uid(), 'salesman')` — flag if you want this and I'll add it in a follow-up.
+- All queries continue to filter `pharmacy_id = profile.pharmacy_id`; RLS already enforces this server-side.
+- "Personal" scope adds `user_id = auth.uid()` client-side — RLS allows shop-wide reads, so the client filter is the enforcement layer for Salesman views (matches existing pattern in `SalesTrendChart`). No DB migration needed.
+- Manager 7-day limit is a UI restriction (consistent with Daily Transactions); RLS does not gate by date.
 
-## Files touched
-- `src/pages/More.tsx`
-- `src/pages/DailyTransactions.tsx`
-- `src/pages/Index.tsx`
-- `src/App.tsx`
+## Open Question
 
-No database migration. No new dependencies.
+The Owner/Manager dashboard now needs 5 cards (Total Sales, Cash in Hand, My Sales, Active Staff, Short Items). Options:
+- **A** — drop "Active Staff" from the dashboard (still available elsewhere).
+- **B** — keep all 5 in a 2-col grid (one row has a single card).
+- **C** — move "Active Staff" + "Short Items" into a compact secondary row.
+
+I'll go with **A** (drop Active Staff from main grid) unless you prefer otherwise.
