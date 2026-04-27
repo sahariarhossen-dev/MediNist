@@ -93,19 +93,18 @@ const Index = () => {
 
   const fetchCashInHand = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
-    const userId = profile?.id;
-    if (!pharmacyId || !userId) return;
+    if (!pharmacyId) return;
     const today = new Date();
     const from = startOfDay(today).toISOString();
     const to = endOfDay(today).toISOString();
     const dateStr = format(today, "yyyy-MM-dd");
 
+    // Mirrors the formula on Daily Transactions so both screens always agree.
     const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
       supabase
         .from("sales")
         .select("total")
         .eq("pharmacy_id", pharmacyId)
-        .eq("user_id", userId)
         .eq("status", "completed")
         .gte("created_at", from)
         .lte("created_at", to),
@@ -116,11 +115,12 @@ const Index = () => {
         .gte("occurred_at", from)
         .lte("occurred_at", to),
       supabase
-        .from("customer_dues")
-        .select("amount_due,amount_paid")
+        .from("customer_ledger")
+        .select("amount,entry_type")
         .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", from)
-        .lte("created_at", to),
+        .eq("entry_type", "due")
+        .gte("occurred_at", from)
+        .lte("occurred_at", to),
       supabase
         .from("pharmacy_settings")
         .select("starting_cash_balance")
@@ -138,19 +138,16 @@ const Index = () => {
 
     const salesToday = (salesRes.data ?? []).reduce((s, r) => s + Number(r.total || 0), 0);
     const duesToday = (duesRes.data ?? []).reduce(
-      (s, r: any) => s + (Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
+      (s, r: any) => s + Number(r.amount || 0),
       0,
     );
     const cashSalesToday = Math.max(0, salesToday - duesToday);
     const txs = txRes.data ?? [];
-    const manualCashIn = txs
-      .filter(
-        (t: any) =>
-          t.direction === "in" &&
-          (t.category === "sale_cash" ||
-            t.category === "due_collection" ||
-            t.category === "other_in"),
-      )
+    const cashInInvestments = txs
+      .filter((t: any) => t.direction === "in" && t.category === "other_in")
+      .reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const dueReceived = txs
+      .filter((t: any) => t.direction === "in" && t.category === "due_collection")
       .reduce((s: number, t: any) => s + Number(t.amount), 0);
     const paymentsToday = txs
       .filter((t: any) => t.direction === "out")
@@ -159,8 +156,10 @@ const Index = () => {
       ? Number(prevClosingRes.data.net_balance ?? 0)
       : Number(settingsRes.data?.starting_cash_balance ?? 0);
 
-    setCashInHand(startingBalance + manualCashIn + cashSalesToday - paymentsToday);
-  }, [profile?.pharmacy_id, profile?.id]);
+    setCashInHand(
+      startingBalance + cashSalesToday + dueReceived + cashInInvestments - paymentsToday,
+    );
+  }, [profile?.pharmacy_id]);
 
   useEffect(() => {
     fetchStats();
@@ -169,6 +168,33 @@ const Index = () => {
   useEffect(() => {
     fetchCashInHand();
   }, [fetchCashInHand]);
+
+  // Realtime: refresh Cash in Hand when any pharmacy member changes the
+  // underlying tables (sales, cash transactions, customer dues, closings).
+  useEffect(() => {
+    const pharmacyId = profile?.pharmacy_id;
+    if (!pharmacyId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounced = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        fetchCashInHand();
+        fetchStats();
+      }, 250);
+    };
+    const filter = `pharmacy_id=eq.${pharmacyId}`;
+    const channel = supabase
+      .channel(`dashboard-cash-${pharmacyId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_transactions", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_ledger", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_closings", filter }, debounced)
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats]);
 
   const summaryCards = [
     { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
