@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent, Link2, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
 interface PharmacyData {
@@ -32,6 +33,8 @@ interface StaffMember {
   role: string;
   status: string;
   created_at: string;
+  token?: string | null;
+  expires_at?: string | null;
 }
 
 const ShopProfile = () => {
@@ -52,6 +55,9 @@ const ShopProfile = () => {
   const [saving, setSaving] = useState(false);
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
+  const [linkDialog, setLinkDialog] = useState<{ open: boolean; email: string; role: string; url: string }>({
+    open: false, email: "", role: "", url: "",
+  });
 
   const isAdmin = profile?.role === "admin";
 
@@ -190,7 +196,12 @@ const ShopProfile = () => {
       toast({ title: "Invitation failed", description: data?.error || error?.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Invitation sent!", description: `Invitation sent to ${inviteEmail}!` });
+    setLinkDialog({
+      open: true,
+      email: data?.email ?? inviteEmail.trim(),
+      role: data?.role ?? inviteRole,
+      url: data?.acceptUrl ?? "",
+    });
     setInviteEmail("");
     fetchStaff();
   };
@@ -215,11 +226,37 @@ const ShopProfile = () => {
       toast({ title: "Resend failed", description: data?.error || error?.message, variant: "destructive" });
       return;
     }
-    toast({
-      title: data?.emailSent ? "Invitation re-sent!" : "Invitation refreshed",
-      description: data?.emailSent ? `New invitation sent to ${email}` : "Share the new link with the invitee.",
+    setLinkDialog({
+      open: true,
+      email: data?.email ?? email,
+      role: data?.role ?? role,
+      url: data?.acceptUrl ?? "",
     });
     fetchStaff();
+  };
+
+  const buildAcceptUrl = (token: string) => `${window.location.origin}/accept-invitation?token=${token}`;
+
+  const handleShowExistingLink = (s: StaffMember) => {
+    if (!s.token) {
+      toast({ title: "Link unavailable", description: "Resend the invitation to generate a new link.", variant: "destructive" });
+      return;
+    }
+    setLinkDialog({
+      open: true,
+      email: s.email,
+      role: s.role,
+      url: buildAcceptUrl(s.token),
+    });
+  };
+
+  const handleCopyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied!", description: "Share it with the invitee." });
+    } catch {
+      toast({ title: "Copy failed", description: "Select and copy the link manually.", variant: "destructive" });
+    }
   };
 
 
