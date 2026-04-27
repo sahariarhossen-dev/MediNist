@@ -418,6 +418,41 @@ const Invoice = () => {
         <p data-pdf-section="footer" className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
 
       </div>
+
+      {/* Owner: confirm delete */}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the sale and its items. This action is logged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busyAction}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={performDelete}
+              disabled={busyAction}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Manager / Salesman: request override */}
+      {sale && profile?.pharmacy_id && profile?.id && (
+        <OverrideRequestSheet
+          open={overrideOpen}
+          onOpenChange={setOverrideOpen}
+          pharmacyId={profile.pharmacy_id}
+          userId={profile.id}
+          entityType="sale"
+          entityId={sale.id}
+          action={overrideAction}
+        />
+      )}
     </div>
   );
 };
