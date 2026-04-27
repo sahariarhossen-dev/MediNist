@@ -6,7 +6,7 @@ import { Package, Settings, ChevronRight, Store, Wallet, Users, StickyNote } fro
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AppHeader from "@/components/AppHeader";
 
-const menuItems = [
+const allMenuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory", color: "text-blue-600" },
   { label: "Customers", icon: Users, path: "/more/customers", color: "text-purple-600" },
   { label: "Smart Notepad", icon: StickyNote, path: "/more/notes", color: "text-[#2563eb]" },
@@ -42,6 +42,10 @@ const More = () => {
     name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "S";
 
   const contactInfo = user?.email || profile?.phone || "—";
+
+  const menuItems = allMenuItems.filter(
+    (item) => !(profile?.role === "salesman" && item.path === "/more/daily-transactions"),
+  );
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
