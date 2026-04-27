@@ -33,6 +33,7 @@ import Notes from "./pages/Notes.tsx";
 import NoteEditor from "./pages/NoteEditor.tsx";
 import StaffActivity from "./pages/StaffActivity.tsx";
 import CashClosing from "./pages/CashClosing.tsx";
+import StaffMonitoring from "./pages/StaffMonitoring.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
