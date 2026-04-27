@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, endOfDay, format } from "date-fns";
-import { TrendingUp, Wallet, Users, AlertTriangle } from "lucide-react";
+import { TrendingUp, Wallet, Users, AlertTriangle, UserCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -35,11 +35,15 @@ function getStartDate(range: string): string {
   return now.toISOString();
 }
 
-const rangeLabels: Record<string, string> = {
+const fullRangeLabels: Record<string, string> = {
   today: "Today",
   "7days": "Last 7 Days",
   "15days": "Last 15 Days",
   "30days": "Last 30 Days",
+};
+const managerRangeLabels: Record<string, string> = {
+  today: "Today",
+  "7days": "Last 7 Days",
 };
 
 const formatBDT = (n: number) =>
@@ -54,6 +58,17 @@ const Index = () => {
   const [stats, setStats] = useState({ totalSales: 0, activeStaff: 0, stockAlerts: 0 });
   const [cashInHand, setCashInHand] = useState(0);
   const isSalesman = profile?.role === "salesman";
+  const isManager = profile?.role === "manager";
+  const isOwner = profile?.role === "admin";
+  const isShopScope = isOwner || isManager;
+  const rangeLabels = isManager ? managerRangeLabels : fullRangeLabels;
+
+  // Clamp manager to allowed ranges.
+  useEffect(() => {
+    if (isManager && !(timeRange in managerRangeLabels)) {
+      setTimeRange("7days");
+    }
+  }, [isManager, timeRange]);
 
   const fetchStats = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
@@ -62,14 +77,15 @@ const Index = () => {
 
     const startDate = getStartDate(timeRange);
 
+    const salesScopedQuery = supabase
+      .from("sales")
+      .select("total, id, user_id")
+      .eq("pharmacy_id", pharmacyId)
+      .eq("status", "completed")
+      .gte("created_at", startDate);
+
     const [salesRes, staffRes, alertsRes] = await Promise.all([
-      supabase
-        .from("sales")
-        .select("total, id, user_id")
-        .eq("pharmacy_id", pharmacyId)
-        .eq("user_id", userId)
-        .eq("status", "completed")
-        .gte("created_at", startDate),
+      isShopScope ? salesScopedQuery : salesScopedQuery.eq("user_id", userId),
       supabase
         .from("sales")
         .select("user_id")
@@ -90,7 +106,7 @@ const Index = () => {
     const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
 
     setStats({ totalSales, activeStaff, stockAlerts });
-  }, [profile?.pharmacy_id, profile?.id, timeRange]);
+  }, [profile?.pharmacy_id, profile?.id, timeRange, isShopScope]);
 
   const fetchCashInHand = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
@@ -198,18 +214,38 @@ const Index = () => {
     };
   }, [profile?.pharmacy_id, fetchCashInHand, fetchStats, isSalesman]);
 
-  const summaryCards = [
-    { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
-    {
-      title: "Cash in Hand",
-      value: isSalesman ? "N/A" : `৳${formatBDT(cashInHand)}`,
-      icon: Wallet,
-      color: "bg-blue-100 text-blue-600",
-      onClick: isSalesman ? undefined : () => navigate("/more/daily-transactions"),
-    },
-    { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
-    { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
-  ];
+  const totalSalesTitle = isShopScope ? "Total Sales" : "Total Sales";
+  const summaryCards = isShopScope
+    ? [
+        { title: totalSalesTitle, value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
+        {
+          title: "Cash in Hand",
+          value: `৳${formatBDT(cashInHand)}`,
+          icon: Wallet,
+          color: "bg-blue-100 text-blue-600",
+          onClick: () => navigate("/more/daily-transactions"),
+        },
+        {
+          title: "My Sales",
+          value: "View",
+          icon: UserCircle2,
+          color: "bg-emerald-100 text-emerald-600",
+          onClick: () => navigate("/personal-report"),
+        },
+        { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
+      ]
+    : [
+        { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
+        {
+          title: "Cash in Hand",
+          value: "N/A",
+          icon: Wallet,
+          color: "bg-blue-100 text-blue-600",
+          onClick: undefined as undefined | (() => void),
+        },
+        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
+        { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
+      ];
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
@@ -250,7 +286,11 @@ const Index = () => {
       </div>
 
       {/* Sales Trend Chart */}
-      <SalesTrendChart pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />
+      <SalesTrendChart
+        pharmacyId={profile?.pharmacy_id}
+        timeRange={timeRange}
+        scope={isShopScope ? "shop" : "personal"}
+      />
     </div>
   );
 };

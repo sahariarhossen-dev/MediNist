@@ -22,6 +22,7 @@ import {
 interface SalesTrendChartProps {
   pharmacyId: string | null | undefined;
   timeRange: string;
+  scope?: "shop" | "personal";
 }
 
 interface ChartPoint {
@@ -60,7 +61,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
+const SalesTrendChart = ({ pharmacyId, timeRange, scope = "personal" }: SalesTrendChartProps) => {
   const { profile } = useAuth();
   const userId = profile?.id;
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
@@ -89,13 +90,14 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       startDate = subDays(startOfDay(now), days);
     }
 
-    const { data: sales } = await supabase
+    let salesQuery = supabase
       .from("sales")
       .select("id, total, created_at")
       .eq("pharmacy_id", pharmacyId)
-      .eq("user_id", userId)
       .eq("status", "completed")
       .gte("created_at", startDate.toISOString());
+    if (scope === "personal") salesQuery = salesQuery.eq("user_id", userId);
+    const { data: sales } = await salesQuery;
 
     if (!sales) {
       setChartData([]);
@@ -143,11 +145,33 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       }));
       setChartData(points);
     }
-  }, [pharmacyId, userId, timeRange, isToday]);
+  }, [pharmacyId, userId, timeRange, isToday, scope]);
 
   useEffect(() => {
     fetchChartData();
   }, [fetchChartData]);
+
+  // Realtime: refresh chart when sales change in this pharmacy.
+  useEffect(() => {
+    if (!pharmacyId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounced = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => fetchChartData(), 250);
+    };
+    const channel = supabase
+      .channel(`sales-trend-${pharmacyId}-${scope}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sales", filter: `pharmacy_id=eq.${pharmacyId}` },
+        debounced,
+      )
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [pharmacyId, scope, fetchChartData]);
 
   const handlePointClick = async (data: any) => {
     if (!data?.activePayload?.length || !pharmacyId || !userId) return;
@@ -186,14 +210,15 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       endDate.setDate(endDate.getDate() + 1);
     }
 
-    const { data: periodSales } = await supabase
+    let periodQuery = supabase
       .from("sales")
       .select("id")
       .eq("pharmacy_id", pharmacyId)
-      .eq("user_id", userId)
       .eq("status", "completed")
       .gte("created_at", startDate.toISOString())
       .lt("created_at", endDate.toISOString());
+    if (scope === "personal") periodQuery = periodQuery.eq("user_id", userId);
+    const { data: periodSales } = await periodQuery;
 
     setModalData({
       label: point.label,

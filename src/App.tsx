@@ -26,6 +26,7 @@ import AIAssistant from "./pages/AIAssistant.tsx";
 import AcceptInvitation from "./pages/AcceptInvitation.tsx";
 import DailyTransactions from "./pages/DailyTransactions.tsx";
 import AllTransactions from "./pages/AllTransactions.tsx";
+import PersonalReport from "./pages/PersonalReport.tsx";
 import Customers from "./pages/Customers.tsx";
 import CustomerProfile from "./pages/CustomerProfile.tsx";
 import Notes from "./pages/Notes.tsx";
@@ -79,6 +80,7 @@ const App = () => (
             <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
             <Route path="/more/daily-transactions" element={<ProtectedRoute><BlockSalesman><DailyTransactions /></BlockSalesman></ProtectedRoute>} />
             <Route path="/more/all-transactions" element={<ProtectedRoute><BlockSalesman><AllTransactions /></BlockSalesman></ProtectedRoute>} />
+            <Route path="/personal-report" element={<ProtectedRoute><BlockSalesman><PersonalReport /></BlockSalesman></ProtectedRoute>} />
             <Route path="/more/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/more/customers/:id" element={<ProtectedRoute><CustomerProfile /></ProtectedRoute>} />
             <Route path="/more/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
