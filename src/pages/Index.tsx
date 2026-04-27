@@ -56,7 +56,8 @@ const Index = () => {
 
   const fetchStats = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
-    if (!pharmacyId) return;
+    const userId = profile?.id;
+    if (!pharmacyId || !userId) return;
 
     const startDate = getStartDate(timeRange);
 
@@ -65,6 +66,7 @@ const Index = () => {
         .from("sales")
         .select("total, id, user_id")
         .eq("pharmacy_id", pharmacyId)
+        .eq("user_id", userId)
         .eq("status", "completed")
         .gte("created_at", startDate),
       supabase
@@ -87,11 +89,12 @@ const Index = () => {
     const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
 
     setStats({ totalSales, activeStaff, stockAlerts });
-  }, [profile?.pharmacy_id, timeRange]);
+  }, [profile?.pharmacy_id, profile?.id, timeRange]);
 
   const fetchCashInHand = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
-    if (!pharmacyId) return;
+    const userId = profile?.id;
+    if (!pharmacyId || !userId) return;
     const today = new Date();
     const from = startOfDay(today).toISOString();
     const to = endOfDay(today).toISOString();
@@ -102,6 +105,7 @@ const Index = () => {
         .from("sales")
         .select("total")
         .eq("pharmacy_id", pharmacyId)
+        .eq("user_id", userId)
         .eq("status", "completed")
         .gte("created_at", from)
         .lte("created_at", to),
@@ -156,7 +160,7 @@ const Index = () => {
       : Number(settingsRes.data?.starting_cash_balance ?? 0);
 
     setCashInHand(startingBalance + manualCashIn + cashSalesToday - paymentsToday);
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, profile?.id]);
 
   useEffect(() => {
     fetchStats();
