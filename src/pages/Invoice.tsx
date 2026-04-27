@@ -288,14 +288,42 @@ const Invoice = () => {
         <button onClick={() => navigate("/sales")} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition text-sm">
           <X className="w-4 h-4" /> Close
         </button>
-        <button
-          onClick={handleDownloadPDF}
-          disabled={downloading}
-          className="flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-800 transition text-sm disabled:opacity-50"
-        >
-          <Download className="w-4 h-4" />
-          {downloading ? "Generating..." : "Download PDF"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleEdit}
+            disabled={busyAction}
+            title={isOwner ? "Edit invoice" : "Request admin override to edit"}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition disabled:opacity-50 ${
+              isOwner
+                ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            {isOwner ? <Pencil className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Edit</span>
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={busyAction}
+            title={isOwner ? "Delete invoice" : "Request admin override to delete"}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition disabled:opacity-50 ${
+              isOwner
+                ? "bg-red-100 text-red-700 hover:bg-red-200"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            {isOwner ? <Trash2 className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Delete</span>
+          </button>
+          <button
+            onClick={handleDownloadPDF}
+            disabled={downloading}
+            className="flex items-center gap-2 bg-red-700 text-white px-3 py-2 rounded-lg font-semibold hover:bg-red-800 transition text-sm disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">{downloading ? "Generating..." : "PDF"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Invoice content */}
