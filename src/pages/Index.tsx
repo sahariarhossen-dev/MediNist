@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, endOfDay, format } from "date-fns";
-import { TrendingUp, Wallet, Users, AlertTriangle, UserCircle2 } from "lucide-react";
+import { TrendingUp, Wallet, Users, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -217,7 +217,13 @@ const Index = () => {
   const totalSalesTitle = isShopScope ? "Total Sales" : "Total Sales";
   const summaryCards = isShopScope
     ? [
-        { title: totalSalesTitle, value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
+        {
+          title: totalSalesTitle,
+          value: `৳${stats.totalSales.toLocaleString()}`,
+          icon: TrendingUp,
+          color: "bg-blue-100 text-blue-600",
+          onClick: () => navigate("/personal-report"),
+        },
         {
           title: "Cash in Hand",
           value: `৳${formatBDT(cashInHand)}`,
@@ -225,13 +231,7 @@ const Index = () => {
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/more/daily-transactions"),
         },
-        {
-          title: "My Sales",
-          value: "View",
-          icon: UserCircle2,
-          color: "bg-emerald-100 text-emerald-600",
-          onClick: () => navigate("/personal-report"),
-        },
+        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
         { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [
