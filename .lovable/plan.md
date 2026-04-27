@@ -1,50 +1,69 @@
 ## Goal
 
-On the **Daily Transactions** page, every user (Owner, Manager, Salesman) sees identical pharmacy-wide totals. Salesmen can view but cannot create/edit transactions. The main **Dashboard** "Total Sale" stays user-scoped (unchanged from previous work).
+Make the Dashboard's "Cash in Hand" card show the exact same shop-wide value as the Daily Transactions page, and update both screens in real time when any user logs a sale, payment, expense, or investment.
+
+## Problem
+
+Today the two screens compute "Cash in Hand" with different inputs, so they disagree:
+
+| Input | Dashboard (`Index.tsx`) | Daily Transactions |
+|---|---|---|
+| Sales scope | filtered by current `user_id` | pharmacy-wide |
+| Dues source | `customer_dues` table | `customer_ledger` (entry_type='due') |
+| Cash-in categories | `sale_cash` + `due_collection` + `other_in` | only `other_in` for investments, plus `due_collection` separately |
+| Refresh | one-shot on mount | one-shot on mount |
+
+The Daily Transactions formula is the source of truth:
+`Cash in Hand = Starting Balance + Cash Sales (Total Sales − New Dues) + Due Received + Investments (other_in) − Total Payments (direction=out)`
 
 ## Changes
 
-### 1. `src/pages/DailyTransactions.tsx` — pharmacy-wide metrics
+### 1. `src/pages/Index.tsx` — rewrite `fetchCashInHand`
 
-- Remove the `.eq("user_id", profile.id)` filter from the `sales` query so totals include every user's completed sales for the selected date.
-- All other queries (`cash_transactions`, `customer_ledger`, `pharmacy_settings`, `daily_closings`) are already pharmacy-scoped — no change needed.
-- Result: Total Sales, Cash Sales, Total Payments, Today's Due, and Cash in Hand become identical for every member of the pharmacy.
+Replace the current implementation with the exact same query set and formula used in `DailyTransactions.tsx`:
 
-### 2. `src/pages/DailyTransactions.tsx` — role gating for write actions
+- Drop `.eq("user_id", userId)` from the sales query so the figure is pharmacy-wide.
+- Switch the dues source from `customer_dues` to `customer_ledger` (`pharmacy_id = ...`, `entry_type = 'due'`, today's range) — this matches `duesOpen` on Daily Transactions.
+- Compute `cashSalesTotal = max(0, salesTotal − duesOpen)`.
+- From today's `cash_transactions`:
+  - `cashInInvestments` = sum where `direction='in' AND category='other_in'`
+  - `dueReceived` = sum where `direction='in' AND category='due_collection'`
+  - `totalPayments` = sum where `direction='out'`
+- Starting balance: previous day's `daily_closings.net_balance` if present, else `pharmacy_settings.starting_cash_balance`.
+- Final: `startingBalance + cashSalesTotal + dueReceived + cashInInvestments − totalPayments`.
 
-- Treat `profile.role === 'salesman'` as **read-only** on this page.
-- Hide the floating "+" Log Transaction button and skip mounting `<LogTransactionSheet />` when the role is salesman.
-- Owner (`admin`) and Manager continue to see the FAB and can log transactions for today.
-- The existing "Read-only · Closed day" badge logic is unchanged; we simply add a parallel role-based gate.
+The "Total Sales" KPI on the Dashboard stays user-scoped (personal performance) — only "Cash in Hand" changes.
 
-### 3. `src/pages/AllTransactions.tsx` — consistent shop-wide view
+### 2. Real-time sync on both pages
 
-- This page already queries by `pharmacy_id` only — no filter change needed. Confirmed it stays shop-wide so the "See All" link from Daily Transactions remains consistent.
+Add a Supabase realtime subscription that re-runs the cash-in-hand fetch whenever relevant rows change for the user's pharmacy.
 
-### 4. Math verification — Cash in Hand
+- In `src/pages/Index.tsx`: subscribe to `postgres_changes` on `sales`, `cash_transactions`, `customer_ledger`, and `daily_closings` filtered by `pharmacy_id=eq.<id>`. On any insert/update/delete, call `fetchCashInHand()` (debounced via a small timeout to coalesce bursts). Clean up the channel on unmount / pharmacy change.
+- In `src/pages/DailyTransactions.tsx`: same subscription pattern, calling `loadData()` on changes. Only react when the change is for the currently viewed `date` (or always reload when viewing today).
 
-Current formula in code:
+No DB schema changes are required — RLS already lets pharmacy members read these tables, and Supabase realtime works with existing replication for `public` tables. If a table isn't in the realtime publication yet, we'll add it via a migration enabling `supabase_realtime` for `sales`, `cash_transactions`, `customer_ledger`, and `daily_closings`.
+
+### 3. Migration (only if needed)
+
+Add the four tables to the `supabase_realtime` publication so `postgres_changes` events fire:
+
+```sql
+alter publication supabase_realtime add table public.sales;
+alter publication supabase_realtime add table public.cash_transactions;
+alter publication supabase_realtime add table public.customer_ledger;
+alter publication supabase_realtime add table public.daily_closings;
 ```
-cashInHand = startingBalance + cashSalesTotal + dueReceived + cashInInvestments − totalPayments
-```
 
-Where:
-- `startingBalance` = previous day's `daily_closings.net_balance`, or `pharmacy_settings.starting_cash_balance` if no prior closing (Opening Cash ✓)
-- `cashSalesTotal` = `salesTotal − duesOpen` (the cash portion of today's sales ✓)
-- `dueReceived` = today's `due_collection` cash-in rows (customers paying old debts ✓)
-- `cashInInvestments` = today's `other_in` cash injections
-- `totalPayments` = sum of all `direction = 'out'` rows (expenses, supplier payments, other_out ✓)
+(Wrapped in `do $$ ... exception when duplicate_object then null; end $$;` blocks so re-runs are safe.)
 
-This matches the requested formula `(All Users' Sales [cash portion] + All Payments-in + Opening Cash) − All Expenses`, plus correctly separates the due portion of sales (no cash changes hands at sale time) and adds it back when actually collected. Once step 1 makes the queries shop-wide, the math automatically reflects all users.
+## Result
 
-No formula change required — only the data scope changes.
+- Dashboard "Cash in Hand" will exactly equal Daily Transactions' Net Cash Balance (e.g. ৳8,212).
+- Any sale, payment, expense, or investment logged by Owner / Manager updates the value live on both screens without a manual refresh.
+- Personal "Total Sales" on the Dashboard remains scoped to the logged-in user as before.
 
-### 5. Dashboard — unchanged
+## Files touched
 
-`src/pages/Index.tsx` keeps its existing `.eq("user_id", profile.id)` scope on the "Total Sale" KPI and personal "Cash in Hand" so each user still tracks their own performance from the home screen.
-
-## Files Edited
-
-- `src/pages/DailyTransactions.tsx` — drop user_id filter on sales query; gate FAB + sheet behind non-salesman role.
-
-No database, RLS, or edge-function changes. RLS already permits all pharmacy members to SELECT shop-wide totals; the salesman write block is a UI guard layered on top of existing INSERT policies.
+- `src/pages/Index.tsx` — rewrite `fetchCashInHand`, add realtime subscription
+- `src/pages/DailyTransactions.tsx` — add realtime subscription that re-runs `loadData`
+- New migration to ensure the four tables are in the `supabase_realtime` publication
