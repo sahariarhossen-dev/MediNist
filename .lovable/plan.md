@@ -1,81 +1,49 @@
-# Fix Invitation Error + Security Hardening
 
-## What's actually broken
+## What changes
 
-The "non-2xx" error from `accept-invitation` is **not** a SECURITY DEFINER or RLS issue. Edge function logs show the real error:
+Sales-related **list / aggregate** views in the UI will only show invoices created by the signed-in user (`auth.uid()`), regardless of whether the user is an admin/owner or a staff member. Database data, RLS policies, and the AI assistant's pharmacy-wide visibility are untouched.
 
-```
-new row for relation "profiles" violates check constraint "profiles_role_check"
-Failing row contains (..., manager, ...)
-```
+## Why
 
-**Root cause:** `profiles.role` has `CHECK (role IN ('admin', 'staff'))`, but the invite UI lets admins pick `manager` / `salesman`. When `accept_staff_invitation` writes those values into `profiles.role`, Postgres rejects the row.
+You want each user — including the owner — to see only their own sales in the day-to-day UI. Cross-user visibility is reserved for the AI assistant, which can still query all pharmacy sales when asked.
 
-The other security-scan findings are real but separate from the edge-function error.
+## Scope
 
-## Plan
+UI list/aggregate queries to filter:
 
-### 1. Fix the role system (unblocks invitation acceptance)
+1. `src/pages/Sales.tsx` — "Sales" history list + today's totals.
+2. `src/pages/Index.tsx` — Home dashboard cards: total sales (top KPI) and "Cash in Hand" today's-sales component.
+3. `src/pages/DailyTransactions.tsx` — Daily sales rows shown in the transactions sheet/list.
+4. `src/components/SalesTrendChart.tsx` — Sales trend chart (today / 7d / 30d) and its drill-down.
 
-Standardize on a real role taxonomy used by both `profiles` and `shop_staff`:
+Each of these will gain `.eq("user_id", profile.id)` (or `auth.uid()`) on the `sales` query, in addition to the existing `pharmacy_id` filter.
 
-- Create enum `public.app_role` with values: `admin`, `manager`, `salesman`.
-- Migrate existing `profiles.role`: keep `admin` as `admin`, map `staff` → `salesman`.
-- Drop the old `profiles_role_check` constraint and convert `profiles.role` to the new enum (default `salesman`).
-- Update `shop_staff.role` to the same enum (default `salesman`).
-- Update the `profiles INSERT` RLS policy to allow `role IS NULL OR role = 'salesman'` (instead of `'staff'`).
-- `is_pharmacy_admin()` keeps working (still checks `role = 'admin'`).
+## Explicitly NOT changed
 
-### 2. Tighten SECURITY DEFINER functions
+- **`sales` table, RLS policies, columns** — left as-is. All invoices remain in the database, the `user_id` column already records the creator, and the existing pharmacy-wide RLS still permits the owner to read everything when needed.
+- **Single-invoice views** — `Invoice.tsx` (open by id) and `CreateSale.tsx` draft loader stay pharmacy-wide, so an owner can still open a specific invoice link if they have one (or if the AI surfaces it).
+- **`active staff` count on the dashboard** — this is an aggregate count of distinct creators, not a list of their invoices. We'll keep the pharmacy-wide query for this single metric so the owner still sees how many staff are active. If you'd prefer to remove that card entirely, say so.
+- **`supabase/functions/ai-chat`** — uses the service role and queries by `pharmacy_id` only, so the AI already sees all pharmacy sales for the owner. No change needed for "Future AI Access".
+- **Customer dues, ledger, cash transactions** — out of scope; this request is specifically about sales/invoices.
 
-Currently every SECURITY DEFINER function in `public` is executable by `anon` (the default `=X` ACL). Lock them down:
+## Technical details
 
-- `REVOKE EXECUTE ... FROM PUBLIC, anon` on: `accept_staff_invitation`, `get_invitation_by_token`, `is_pharmacy_admin`, `get_user_pharmacy_id`, `get_my_pharmacy_public`, `get_pharmacy_member_names`, `handle_new_user`, `recalc_customer_total_due`, `prevent_role_change`, `prevent_pharmacy_id_change`, `ai_messages_after_insert`, `rls_auto_enable`.
-- `GRANT EXECUTE ... TO authenticated` only on the ones the app calls from the client / authed edge function: `accept_staff_invitation`, `get_invitation_by_token`, `is_pharmacy_admin`, `get_user_pharmacy_id`, `get_my_pharmacy_public`, `get_pharmacy_member_names`.
-- The accept-invitation edge function already calls `get_invitation_by_token` and `accept_staff_invitation` via the service role / authenticated user, so this won't break it.
+For each affected file, add a single chained filter on the existing Supabase query:
 
-### 3. Harden `accept_staff_invitation` token validation
-
-The function already validates pending status, expiration, and email match. Add one extra guard:
-
-- Re-confirm `auth.uid()` is non-null and the auth user's email is verified before mutating profiles.
-- Keep the `app.bypass_profile_guards` mechanism (it's the safe alternative to `session_replication_role`).
-
-### 4. Let non-admin staff read their own pharmacy row
-
-Add an additional SELECT policy on `pharmacies`:
-
-```
-CREATE POLICY "Members can view own pharmacy"
-ON public.pharmacies FOR SELECT TO authenticated
-USING (id = public.get_user_pharmacy_id());
+```ts
+.from("sales")
+.select(...)
+.eq("pharmacy_id", profile.pharmacy_id)
+.eq("user_id", profile.id)        // ← new
+...
 ```
 
-The existing admin-only policy stays (admins still see everything they need; PostgreSQL ORs permissive policies).
+`profile.id` is already available from `useAuth()` in every affected component (it's the authenticated user's id).
 
-### 5. Lock down Realtime on `notes`
+`SalesTrendChart.tsx` accepts `pharmacyId` as a prop today; we'll add a similar reliance on the auth context's `profile.id` (or accept it as a prop from the parent). Both `sales` queries inside that file (chart data + drill-down) get the same filter.
 
-`public.notes` is in the `supabase_realtime` publication, so any authenticated user can subscribe to its topic and receive change events from other pharmacies. Fix:
+No backend migration, no RLS change, no edge-function change. Pure client-side scoping.
 
-- Enable RLS on `realtime.messages` (Supabase-managed table; safe to add policies to).
-- Add a policy that only allows subscribing to a topic of the form `pharmacy:<their pharmacy_id>`.
-- Update the client (`useNotes` hook if it uses Realtime) to subscribe to `pharmacy:${pharmacy_id}` rather than the raw table channel. If the app does not currently use Realtime for notes, we'll simply remove `notes` from the `supabase_realtime` publication instead — that's the cleaner fix.
+## Optional follow-up (not part of this change)
 
-We'll inspect `useNotes.ts` during implementation and pick the right option (remove from publication vs. scoped channel).
-
-### 6. Redeploy & verify
-
-- Run a migration covering steps 1–5.
-- Redeploy `accept-invitation` (no code change required, but redeploy to confirm clean state).
-- Manually walk through: invite manager → open link → create account → confirm `profiles.role = 'manager'` and `shop_staff.status = 'accepted'`.
-
-## Files to change
-
-- New SQL migration (roles enum, RLS policy, function GRANTs, realtime fix)
-- `supabase/functions/invite-staff/index.ts` — keep allowed roles `['admin','manager','salesman']` (already aligned, but verify after enum change)
-- `supabase/functions/accept-invitation/index.ts` — minor: surface the underlying RPC error code for easier future debugging (optional)
-- Possibly `src/hooks/useNotes.ts` — only if it uses a Realtime subscription that needs rescoping
-
-## Why the previous "fix" didn't work
-
-The last round addressed `session_replication_role` (a real issue) but the actual blocker was a check-constraint violation that only showed up *after* that fix let the RPC run. The logs make this unambiguous.
+If later you want a toggle on the home dashboard like "Show all staff sales (owner)" we can add a small admin-only switch that drops the `user_id` filter — easy to bolt on once the base behaviour is in place.
