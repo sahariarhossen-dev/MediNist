@@ -123,7 +123,7 @@ const DailyTransactions = () => {
       prev ? prev.net_balance : Number(settingsRes.data?.starting_cash_balance ?? 0),
     );
     setLoading(false);
-  }, [profile?.pharmacy_id, date]);
+  }, [profile?.pharmacy_id, profile?.id, date]);
 
   useEffect(() => {
     loadData();
