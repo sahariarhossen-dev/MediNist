@@ -173,12 +173,20 @@ const DailyTransactions = () => {
     [salesTotal, duesOpen],
   );
 
-  // Operational feed: hide due_collection rows so the list focuses on
-  // shop investments (other_in) and expenses (direction=out).
+  // Operational feed: only manual cash-flow entries logged by Owner/Manager.
+  // Auto-generated rows (sale_cash from Medicine Sale, due_collection from
+  // Due Payment) are excluded — they still feed the totals and Daily Closing
+  // Summary via the dedicated memos below.
+  const MANUAL_FEED_CATEGORIES = new Set([
+    "other_in",
+    "expense",
+    "supplier_payment",
+    "other_out",
+  ]);
   const feedItems = useMemo(
     () =>
       txs
-        .filter((t) => t.category !== "due_collection")
+        .filter((t) => MANUAL_FEED_CATEGORIES.has(t.category))
         .sort(
           (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
         ),
