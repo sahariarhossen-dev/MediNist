@@ -256,7 +256,7 @@ const Index = () => {
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/more/daily-transactions"),
         },
-        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
+        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600", onClick: () => navigate("/staff-monitoring") },
         { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [
