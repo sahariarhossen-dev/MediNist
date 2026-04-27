@@ -57,6 +57,7 @@ const Index = () => {
   const [timeRange, setTimeRange] = useState("today");
   const [stats, setStats] = useState({ totalSales: 0, activeStaff: 0, stockAlerts: 0 });
   const [cashInHand, setCashInHand] = useState(0);
+  const [myTodaySales, setMyTodaySales] = useState(0);
   const isSalesman = profile?.role === "salesman";
   const isManager = profile?.role === "manager";
   const isOwner = profile?.role === "admin";
@@ -107,6 +108,25 @@ const Index = () => {
 
     setStats({ totalSales, activeStaff, stockAlerts });
   }, [profile?.pharmacy_id, profile?.id, timeRange, isShopScope]);
+
+  const fetchMyTodaySales = useCallback(async () => {
+    const pharmacyId = profile?.pharmacy_id;
+    const userId = profile?.id;
+    if (!pharmacyId || !userId) return;
+    const today = new Date();
+    const from = startOfDay(today).toISOString();
+    const to = endOfDay(today).toISOString();
+    const res = await supabase
+      .from("sales")
+      .select("total")
+      .eq("pharmacy_id", pharmacyId)
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .gte("created_at", from)
+      .lte("created_at", to);
+    const sum = (res.data ?? []).reduce((s, r: any) => s + Number(r.total || 0), 0);
+    setMyTodaySales(sum);
+  }, [profile?.pharmacy_id, profile?.id]);
 
   const fetchCashInHand = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
@@ -183,6 +203,10 @@ const Index = () => {
   }, [fetchStats]);
 
   useEffect(() => {
+    fetchMyTodaySales();
+  }, [fetchMyTodaySales]);
+
+  useEffect(() => {
     if (isSalesman) return;
     fetchCashInHand();
   }, [fetchCashInHand, isSalesman]);
@@ -191,13 +215,14 @@ const Index = () => {
   // underlying tables (sales, cash transactions, customer dues, closings).
   useEffect(() => {
     const pharmacyId = profile?.pharmacy_id;
-    if (!pharmacyId || isSalesman) return;
+    if (!pharmacyId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debounced = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        fetchCashInHand();
+        if (!isSalesman) fetchCashInHand();
         fetchStats();
+        fetchMyTodaySales();
       }, 250);
     };
     const filter = `pharmacy_id=eq.${pharmacyId}`;
@@ -212,14 +237,13 @@ const Index = () => {
       if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats, isSalesman]);
+  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats, fetchMyTodaySales, isSalesman]);
 
-  const totalSalesTitle = isShopScope ? "Total Sales" : "Total Sales";
   const summaryCards = isShopScope
     ? [
         {
-          title: totalSalesTitle,
-          value: `৳${stats.totalSales.toLocaleString()}`,
+          title: "Today's My Sale",
+          value: `৳${formatBDT(myTodaySales)}`,
           icon: TrendingUp,
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/personal-report"),
@@ -235,7 +259,7 @@ const Index = () => {
         { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [
-        { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
+        { title: "Today's My Sale", value: `৳${formatBDT(myTodaySales)}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
         {
           title: "Cash in Hand",
           value: "N/A",

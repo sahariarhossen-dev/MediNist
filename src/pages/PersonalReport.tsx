@@ -38,10 +38,6 @@ const fullRangeLabels: Record<string, string> = {
   "15days": "Last 15 Days",
   "30days": "Last 30 Days",
 };
-const managerRangeLabels: Record<string, string> = {
-  today: "Today",
-  "7days": "Last 7 Days",
-};
 
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
@@ -61,17 +57,12 @@ interface TopMedicine {
 const PersonalReport = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const isManager = profile?.role === "manager";
-  const rangeLabels = isManager ? managerRangeLabels : fullRangeLabels;
+  const rangeLabels = fullRangeLabels;
 
   const [timeRange, setTimeRange] = useState("today");
   const [kpi, setKpi] = useState({ totalSales: 0, invoices: 0, avg: 0, discount: 0 });
   const [recent, setRecent] = useState<RecentSale[]>([]);
   const [topItems, setTopItems] = useState<TopMedicine[]>([]);
-
-  useEffect(() => {
-    if (isManager && !(timeRange in managerRangeLabels)) setTimeRange("7days");
-  }, [isManager, timeRange]);
 
   const fetchData = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;

@@ -1,51 +1,43 @@
-# Finalize Dashboard: 4-card layout + role-based logic
+## Goal
 
-Most of the requested behavior is already implemented from prior turns (Salesman block on Daily Transactions, Cash in Hand "N/A" for Salesman, Manager 7-day clamp, scoped chart via `scope` prop, Cash in Hand formula matching Daily Transactions). This plan finalizes the visual layout and the new Total Sales click behavior.
+Reframe the Dashboard's primary sales card as a personal-only metric (today's sales for the logged-in user) while keeping shop-wide filtering on the rest of the Dashboard. Allow Owners and Managers to filter their personal report for the full last 30 days, independent of the Manager's 7-day cap on shop-wide data.
 
 ## Changes
 
-### 1. `src/pages/Index.tsx` — restore 4-card layout
-- **Remove** the "My Sales" card from the Owner/Manager `summaryCards` array.
-- **Restore "Active Staff"** as the 3rd card for Owner/Manager (same as Salesman view).
-- Final card order for **Owner/Manager**:
-  1. Total Sales (shop-wide) — **clickable → navigates to `/personal-report`**
-  2. Cash in Hand (shop-wide formula) — clickable → `/more/daily-transactions`
-  3. Active Staff
-  4. Short Items → `/short-items`
-- Final card order for **Salesman** (unchanged):
-  1. Total Sales (personal, scoped by `user_id`)
-  2. Cash in Hand → **"N/A"**, not clickable
-  3. Active Staff
-  4. Short Items
-- Keep `isShopScope` logic, manager date clamp, and realtime cash subscription as-is.
+### 1. `src/pages/Index.tsx` — "Total Sales" becomes "Today's My Sale"
 
-### 2. `src/pages/More.tsx` — already correct
-"Daily Transactions" is already filtered out for Salesman. No change.
+- Add a second stat fetch dedicated to the logged-in user, scoped to today only:
+  - Filter: `pharmacy_id = profile.pharmacy_id`, `user_id = profile.id`, `status = 'completed'`, `created_at >= startOfDay(today)`, `<= endOfDay(today)`.
+  - Store as `myTodaySales` in state.
+  - Re-fetch on the same realtime `sales` channel that already drives Cash in Hand.
+- The existing shop-scope `totalSales` query (driven by the dashboard time-range selector) still powers Active Staff and stays in place — but it is no longer surfaced on the 4-card grid for Owner/Manager. (Salesman already only sees their own data in that query.)
+- First card in the 4-card grid (all roles):
+  - Title: **"Today's My Sale"**
+  - Value: `৳{formatBDT(myTodaySales)}` for everyone (Owner, Manager, Salesman) — always personal, always today.
+  - `onClick` for Owner/Manager → `navigate("/personal-report")`.
+  - For Salesman: no navigation (card stays static, matching existing salesman behaviour).
+- Other 3 cards unchanged: Cash in Hand (shop-wide formula for Owner/Manager, "N/A" for Salesman), Active Staff, Short Items.
+- Dashboard time-range selector keeps current behaviour:
+  - Owner: today / 7 / 15 / 30 days.
+  - Manager: today / 7 days only (existing clamp stays).
+  - The selector now only affects Active Staff and the shop-wide Sales Trend chart for Owner/Manager (and the personal chart for Salesman). It no longer drives the first card.
 
-### 3. `src/components/SalesTrendChart.tsx` — already correct
-The `scope` prop already drives shop-vs-personal chart data. No change.
+### 2. `src/pages/PersonalReport.tsx` — Manager gets full 30-day range
 
-### 4. `src/App.tsx` — already correct
-`/personal-report` is registered with `BlockSalesman` guard. No change.
+- Remove the `managerRangeLabels` restriction on this page. Both Owner and Manager use `fullRangeLabels` (today / 7 / 15 / 30 days).
+- Drop the `useEffect` that clamps the manager's range. The page is personal data only, so the 7-day shop-wide rule does not apply here.
+- Salesman is already blocked from this route by the existing `BlockSalesman` guard in `App.tsx` — no change needed there.
 
-### 5. `src/pages/DailyTransactions.tsx` — already correct
-Salesman redirect + Manager 7-day calendar clamp already in place. No change.
+### 3. Preserved behaviour (no code changes required, just verifying)
 
-## Backend / data isolation
-Already enforced — no migration needed:
-- All queries filter by `pharmacy_id` (RLS already restricts to `get_user_pharmacy_id()`).
-- Salesman sales/chart queries add `.eq("user_id", userId)` on the client; RLS additionally prevents cross-pharmacy reads.
-- Salesman cannot reach `/more/daily-transactions` or `/personal-report` due to `BlockSalesman` route guard + in-page redirect.
+- `src/pages/More.tsx`: Daily Transactions still hidden for Salesman.
+- `src/pages/DailyTransactions.tsx` + `src/App.tsx`: Manager 7-day clamp + Salesman route guard intact.
+- `src/components/SalesTrendChart.tsx`: `scope="shop"` for Owner/Manager Dashboard, `scope="personal"` for Salesman Dashboard and Personal Report.
+- Cash in Hand formula on the Dashboard already mirrors Daily Transactions (starting balance + cash sales + dues received + investments − payments) and refreshes via realtime — kept as-is so the ৳8,212 stays in sync.
 
-## Cash in Hand formula (Owner/Manager)
-Already implemented in `fetchCashInHand` and matches Daily Transactions:
-```
-startingBalance (from prev day's closing OR pharmacy_settings.starting_cash_balance)
-+ cashSalesToday  (= salesToday − duesToday)
-+ dueReceived
-+ cashInInvestments
-− paymentsToday
-```
+## Files touched
 
-## Summary of net code changes
-Only **`src/pages/Index.tsx`** is edited: swap `My Sales` → `Active Staff` in the Owner/Manager card array, and add `onClick: () => navigate("/personal-report")` to the Total Sales card for Owner/Manager.
+- Edit `src/pages/Index.tsx`
+- Edit `src/pages/PersonalReport.tsx`
+
+No backend / RLS changes. All new queries are already covered by existing `pharmacy_id` + `user_id` row-level policies on `sales`.
