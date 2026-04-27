@@ -32,7 +32,7 @@ const Sales = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile?.pharmacy_id) return;
+    if (!profile?.pharmacy_id || !profile?.id) return;
     const fetchSales = async () => {
       setLoading(true);
       const todayStart = new Date();
@@ -42,6 +42,7 @@ const Sales = () => {
         .from("sales")
         .select("id, total, subtotal, discount_amount, discount_percent, created_at, status, sale_type")
         .eq("pharmacy_id", profile.pharmacy_id!)
+        .eq("user_id", profile.id)
         .gte("created_at", todayStart.toISOString())
         .order("created_at", { ascending: false });
 
@@ -49,7 +50,7 @@ const Sales = () => {
       setLoading(false);
     };
     fetchSales();
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, profile?.id]);
 
   const todayTotal = sales
     .filter((s) => s.status === "completed")
