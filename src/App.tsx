@@ -49,6 +49,13 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const BlockSalesman = ({ children }: { children: React.ReactNode }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
+  if (profile?.role === "salesman") return <Navigate to="/more" replace />;
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -70,8 +77,8 @@ const App = () => (
             <Route path="/catalog-search" element={<ProtectedRoute><CatalogSearch /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
-            <Route path="/more/daily-transactions" element={<ProtectedRoute><DailyTransactions /></ProtectedRoute>} />
-            <Route path="/more/all-transactions" element={<ProtectedRoute><AllTransactions /></ProtectedRoute>} />
+            <Route path="/more/daily-transactions" element={<ProtectedRoute><BlockSalesman><DailyTransactions /></BlockSalesman></ProtectedRoute>} />
+            <Route path="/more/all-transactions" element={<ProtectedRoute><BlockSalesman><AllTransactions /></BlockSalesman></ProtectedRoute>} />
             <Route path="/more/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/more/customers/:id" element={<ProtectedRoute><CustomerProfile /></ProtectedRoute>} />
             <Route path="/more/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />

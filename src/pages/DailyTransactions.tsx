@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
+import { useNavigate, Navigate } from "react-router-dom";
+import { format, startOfDay, endOfDay, isSameDay, subDays } from "date-fns";
 import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,17 @@ type PreviousClosing = {
 const DailyTransactions = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const isManager = profile?.role === "manager";
+  const isSalesman = profile?.role === "salesman";
+  const minManagerDate = useMemo(() => subDays(startOfDay(new Date()), 6), []);
   const [date, setDate] = useState<Date>(new Date());
+
+  // Clamp date for managers if it falls outside the 7-day window.
+  useEffect(() => {
+    if (isManager && date < minManagerDate) {
+      setDate(new Date());
+    }
+  }, [isManager, date, minManagerDate]);
   const [loading, setLoading] = useState(true);
   const [salesRows, setSalesRows] = useState<SaleRow[]>([]);
   const [txs, setTxs] = useState<CashTx[]>([]);
@@ -208,6 +218,11 @@ const DailyTransactions = () => {
   const isToday = isSameDay(date, new Date());
   const canLogTransactions = profile?.role !== "salesman";
 
+  // Defense-in-depth: salesmen cannot access this page even via direct URL.
+  if (isSalesman) {
+    return <Navigate to="/more" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
       <AppHeader />
@@ -233,7 +248,8 @@ const DailyTransactions = () => {
               mode="single"
               selected={date}
               onSelect={(d) => d && setDate(d)}
-              disabled={(d) => d > new Date()}
+              disabled={(d) => d > new Date() || (isManager && d < minManagerDate)}
+              fromDate={isManager ? minManagerDate : undefined}
               initialFocus
               className={cn("p-3 pointer-events-auto")}
             />
