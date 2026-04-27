@@ -248,7 +248,8 @@ const DailyTransactions = () => {
               mode="single"
               selected={date}
               onSelect={(d) => d && setDate(d)}
-              disabled={(d) => d > new Date()}
+              disabled={(d) => d > new Date() || (isManager && d < minManagerDate)}
+              fromDate={isManager ? minManagerDate : undefined}
               initialFocus
               className={cn("p-3 pointer-events-auto")}
             />
