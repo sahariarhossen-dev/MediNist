@@ -59,7 +59,7 @@ const DailyTransactions = () => {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!profile?.pharmacy_id) return;
+    if (!profile?.pharmacy_id || !profile?.id) return;
     setLoading(true);
     const from = startOfDay(date).toISOString();
     const to = endOfDay(date).toISOString();
@@ -70,6 +70,7 @@ const DailyTransactions = () => {
         .from("sales")
         .select("id,created_at,total,sale_type")
         .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("user_id", profile.id)
         .eq("status", "completed")
         .gte("created_at", from)
         .lte("created_at", to)
