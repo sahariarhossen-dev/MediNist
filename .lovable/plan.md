@@ -1,104 +1,81 @@
-# Professional Staff Invitation & RBAC System
+# Fix Invitation Error + Security Hardening
 
-Upgrade the existing staff invite flow into a proper token-based invitation system. The current `invite-staff` edge function relies on Supabase's generic "invite by email" and never links the new user to the pharmacy or role — invited users sign up but land in the app with no `pharmacy_id`. We'll fix that end-to-end.
+## What's actually broken
 
-## What changes for the user
+The "non-2xx" error from `accept-invitation` is **not** a SECURITY DEFINER or RLS issue. Edge function logs show the real error:
 
-- Owner/admin sends invite from **Shop Profile → Manage Staff** (UI already exists; we'll add Revoke + branded confirmation).
-- Invitee receives a **branded MediNist email** with a secure link: `/accept-invitation?token=…`.
-- Invitee opens the link, sees the **shop name + assigned role**, sets their **full name + password**, and is dropped straight into the dashboard — automatically linked to the correct pharmacy with the correct role.
-- Pending invites list shows status (Pending / Accepted) with Revoke action.
-- Users cannot self-assign to a pharmacy — enforced at the database level.
+```
+new row for relation "profiles" violates check constraint "profiles_role_check"
+Failing row contains (..., manager, ...)
+```
 
-## Database changes (migration)
+**Root cause:** `profiles.role` has `CHECK (role IN ('admin', 'staff'))`, but the invite UI lets admins pick `manager` / `salesman`. When `accept_staff_invitation` writes those values into `profiles.role`, Postgres rejects the row.
 
-Reuse the existing `shop_staff` table (it already has `pharmacy_id`, `email`, `role`, `status`, `invited_by`) and extend it:
+The other security-scan findings are real but separate from the edge-function error.
 
-- Add `token uuid not null default gen_random_uuid() unique`
-- Add `expires_at timestamptz not null default (now() + interval '7 days')`
-- Add `accepted_at timestamptz`
-- Tighten the `status` check to `'pending' | 'accepted' | 'revoked' | 'expired'`
-- Index on `token` for fast lookup
-- Update existing `pending` rows with fresh tokens
+## Plan
 
-Add a **SECURITY DEFINER RPC** `accept_staff_invitation(_token uuid)` that:
-1. Looks up the invitation by token (bypassing RLS so the just-signed-up user can read it).
-2. Validates it belongs to `auth.users.email = auth.uid()`'s email, is `pending`, and not expired.
-3. Updates `profiles` for `auth.uid()` with `pharmacy_id` and `role` from the invitation.
-4. Marks `shop_staff` row as `accepted`, sets `user_id = auth.uid()` and `accepted_at = now()`.
-5. Returns `{ pharmacy_id, role, pharmacy_name }`.
+### 1. Fix the role system (unblocks invitation acceptance)
 
-This is the **only** path that can set a non-null `pharmacy_id` on a profile after signup. The existing `prevent_pharmacy_id_change` trigger plus the `Users can insert their own profile` RLS policy (which already forces `pharmacy_id IS NULL` on insert) prevent any client-side bypass.
+Standardize on a real role taxonomy used by both `profiles` and `shop_staff`:
 
-Add a public RPC `get_invitation_by_token(_token uuid)` (SECURITY DEFINER, returns shop name + role + email + expiry) so the acceptance page can show details before the user signs in.
+- Create enum `public.app_role` with values: `admin`, `manager`, `salesman`.
+- Migrate existing `profiles.role`: keep `admin` as `admin`, map `staff` → `salesman`.
+- Drop the old `profiles_role_check` constraint and convert `profiles.role` to the new enum (default `salesman`).
+- Update `shop_staff.role` to the same enum (default `salesman`).
+- Update the `profiles INSERT` RLS policy to allow `role IS NULL OR role = 'salesman'` (instead of `'staff'`).
+- `is_pharmacy_admin()` keeps working (still checks `role = 'admin'`).
 
-## Edge function changes
+### 2. Tighten SECURITY DEFINER functions
 
-**`invite-staff`** (rewrite):
-- Validate caller is admin of a pharmacy (existing logic).
-- Validate email + role (`manager`, `salesman`, `owner`).
-- Upsert into `shop_staff` with a fresh `token` and `expires_at`. Reset status to `pending` if re-inviting.
-- Send a **branded HTML email via Lovable Cloud's built-in email infrastructure** (uses `send-transactional-email`) with the link `https://<app-url>/accept-invitation?token=<token>`. Email content includes pharmacy name, assigned role, and 7-day expiry notice.
-- Stop calling `supabase.auth.admin.inviteUserByEmail` — the new flow doesn't need it.
+Currently every SECURITY DEFINER function in `public` is executable by `anon` (the default `=X` ACL). Lock them down:
 
-**`accept-invitation`** (new edge function):
-- Public endpoint (no auth required for the lookup step).
-- `GET ?token=…` → calls `get_invitation_by_token` and returns shop name, role, email, expiry status.
-- `POST { token, fullName, password }` → 
-  1. Calls `get_invitation_by_token`, validates not expired/accepted.
-  2. Creates auth user with `supabase.auth.admin.createUser({ email: invitation.email, password, email_confirm: true })`.
-  3. Updates `profiles.full_name` for the new user.
-  4. Signs the user in via `signInWithPassword` to get a session.
-  5. Calls `accept_staff_invitation(token)` using the new user's session — this sets `pharmacy_id` + `role`.
-  6. Returns the session.
+- `REVOKE EXECUTE ... FROM PUBLIC, anon` on: `accept_staff_invitation`, `get_invitation_by_token`, `is_pharmacy_admin`, `get_user_pharmacy_id`, `get_my_pharmacy_public`, `get_pharmacy_member_names`, `handle_new_user`, `recalc_customer_total_due`, `prevent_role_change`, `prevent_pharmacy_id_change`, `ai_messages_after_insert`, `rls_auto_enable`.
+- `GRANT EXECUTE ... TO authenticated` only on the ones the app calls from the client / authed edge function: `accept_staff_invitation`, `get_invitation_by_token`, `is_pharmacy_admin`, `get_user_pharmacy_id`, `get_my_pharmacy_public`, `get_pharmacy_member_names`.
+- The accept-invitation edge function already calls `get_invitation_by_token` and `accept_staff_invitation` via the service role / authenticated user, so this won't break it.
 
-This server-side flow guarantees the email matches the invitation and the user can never end up linked to a different pharmacy.
+### 3. Harden `accept_staff_invitation` token validation
 
-## Email infrastructure (Lovable Cloud built-in)
+The function already validates pending status, expiration, and email match. Add one extra guard:
 
-- Set up email domain via the email setup dialog (one-time, prompts the user).
-- Scaffold transactional emails (creates `send-transactional-email` + queue + unsubscribe).
-- Create one branded React Email template `staff-invitation.tsx` with: MediNist header, "You've been invited to join **{pharmacyName}** on MediNist as **{role}**", CTA button → acceptance link, expiry notice, fallback plain link.
-- `invite-staff` invokes `send-transactional-email` with template `staff-invitation`.
+- Re-confirm `auth.uid()` is non-null and the auth user's email is verified before mutating profiles.
+- Keep the `app.bypass_profile_guards` mechanism (it's the safe alternative to `session_replication_role`).
 
-## Frontend changes
+### 4. Let non-admin staff read their own pharmacy row
 
-**`src/App.tsx`**:
-- Add public route `/accept-invitation` (rendered without `ProtectedRoute`).
+Add an additional SELECT policy on `pharmacies`:
 
-**`src/pages/AcceptInvitation.tsx` (new)**:
-- Reads `?token=` from URL.
-- On mount: calls `accept-invitation` GET to fetch shop name, role, email.
-- States: loading → invalid token → expired → already accepted → ready-to-accept → submitting → success.
-- Shows a card matching the Register page style: "You've been invited to join **{shopName}** as **{role}**" with the locked email field, plus inputs for **Full Name** and **Password** (with show/hide), and a "Create Account & Join" button.
-- On submit: calls `accept-invitation` POST, sets the returned session via `supabase.auth.setSession`, navigates to `/`.
+```
+CREATE POLICY "Members can view own pharmacy"
+ON public.pharmacies FOR SELECT TO authenticated
+USING (id = public.get_user_pharmacy_id());
+```
 
-**`src/pages/ShopProfile.tsx` — Manage Staff section**:
-- Keep the existing email + role + Send UI (already clean).
-- Add a **Revoke** action on `pending` rows (updates `shop_staff.status = 'revoked'`).
-- Show three status states with badges: **Pending** (amber), **Accepted** (emerald), **Revoked** (gray).
-- For pending rows, show **"Resend invite"** button that re-calls `invite-staff` (regenerates token, resends email).
-- Hide the "owner" option from the role dropdown (only admin/owner can invite, and we don't want owner-invites-owner footguns) — keep `manager` and `salesman` only, per the spec.
-- Show a small "Invitation expires in 7 days" hint under the form.
+The existing admin-only policy stays (admins still see everything they need; PostgreSQL ORs permissive policies).
 
-## Security guarantees
+### 5. Lock down Realtime on `notes`
 
-1. **No self-elevation**: `profiles` RLS blocks users from setting their own `pharmacy_id` or `role` (existing policy + `prevent_pharmacy_id_change` + `prevent_role_change` triggers). The only path to populate these is `accept_staff_invitation`, which validates the token + email match.
-2. **Token unguessable**: 128-bit UUIDs.
-3. **Token single-use + expiring**: 7-day expiry, marked `accepted` on use.
-4. **Email match enforced server-side**: invitation email must equal the authenticated user's email.
-5. **Invite RLS**: only admins of the same pharmacy can list/create/revoke invites for their `pharmacy_id` (existing policies cover this).
-6. **Edge function input validation**: zod-style checks on email, role, password, fullName, token format.
+`public.notes` is in the `supabase_realtime` publication, so any authenticated user can subscribe to its topic and receive change events from other pharmacies. Fix:
 
-## Files touched
+- Enable RLS on `realtime.messages` (Supabase-managed table; safe to add policies to).
+- Add a policy that only allows subscribing to a topic of the form `pharmacy:<their pharmacy_id>`.
+- Update the client (`useNotes` hook if it uses Realtime) to subscribe to `pharmacy:${pharmacy_id}` rather than the raw table channel. If the app does not currently use Realtime for notes, we'll simply remove `notes` from the `supabase_realtime` publication instead — that's the cleaner fix.
 
-- **New migration**: extend `shop_staff` (token, expires_at, accepted_at, status check), add `accept_staff_invitation` + `get_invitation_by_token` RPCs.
-- **New edge function**: `supabase/functions/accept-invitation/index.ts`.
-- **Rewrite edge function**: `supabase/functions/invite-staff/index.ts`.
-- **New email template**: `supabase/functions/_shared/transactional-email-templates/staff-invitation.tsx` + register in `registry.ts`.
-- **New page**: `src/pages/AcceptInvitation.tsx`.
-- **Edit**: `src/App.tsx` (public route), `src/pages/ShopProfile.tsx` (revoke + resend + status badges).
+We'll inspect `useNotes.ts` during implementation and pick the right option (remove from publication vs. scoped channel).
 
-## What we'll need from you during implementation
+### 6. Redeploy & verify
 
-When the email setup dialog appears, you'll be asked to choose your sender domain (e.g. `notify.medi-nist.lovable.app` works out of the box, or your custom domain). Everything else is automated.
+- Run a migration covering steps 1–5.
+- Redeploy `accept-invitation` (no code change required, but redeploy to confirm clean state).
+- Manually walk through: invite manager → open link → create account → confirm `profiles.role = 'manager'` and `shop_staff.status = 'accepted'`.
+
+## Files to change
+
+- New SQL migration (roles enum, RLS policy, function GRANTs, realtime fix)
+- `supabase/functions/invite-staff/index.ts` — keep allowed roles `['admin','manager','salesman']` (already aligned, but verify after enum change)
+- `supabase/functions/accept-invitation/index.ts` — minor: surface the underlying RPC error code for easier future debugging (optional)
+- Possibly `src/hooks/useNotes.ts` — only if it uses a Realtime subscription that needs rescoping
+
+## Why the previous "fix" didn't work
+
+The last round addressed `session_replication_role` (a real issue) but the actual blocker was a check-constraint violation that only showed up *after* that fix let the RPC run. The logs make this unambiguous.
