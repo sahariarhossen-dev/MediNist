@@ -567,6 +567,7 @@ export type Database = {
           avatar_url: string | null
           full_name: string | null
           id: string
+          last_seen: string | null
           pharmacy_id: string | null
           phone: string | null
           role: string | null
@@ -576,6 +577,7 @@ export type Database = {
           avatar_url?: string | null
           full_name?: string | null
           id: string
+          last_seen?: string | null
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
@@ -585,6 +587,7 @@ export type Database = {
           avatar_url?: string | null
           full_name?: string | null
           id?: string
+          last_seen?: string | null
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
@@ -728,6 +731,45 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_activity_logs: {
+        Row: {
+          action_type: string
+          amount: number | null
+          created_at: string
+          description: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          metadata: Json
+          pharmacy_id: string
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          amount?: number | null
+          created_at?: string
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          pharmacy_id: string
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          amount?: number | null
+          created_at?: string
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          pharmacy_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -803,6 +845,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      touch_last_seen: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

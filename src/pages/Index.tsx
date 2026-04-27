@@ -85,13 +85,15 @@ const Index = () => {
       .eq("status", "completed")
       .gte("created_at", startDate);
 
+    // Active staff = profiles with last_seen within the last 5 minutes
+    const activeSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const [salesRes, staffRes, alertsRes] = await Promise.all([
       isShopScope ? salesScopedQuery : salesScopedQuery.eq("user_id", userId),
       supabase
-        .from("sales")
-        .select("user_id")
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
         .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", startDate),
+        .gte("last_seen", activeSince),
       supabase
         .from("medicines")
         .select("id, stock_quantity, stock_alert, product_type, strip_per_pack, pcs_per_strip")
@@ -101,8 +103,7 @@ const Index = () => {
     const sales = salesRes.data ?? [];
     const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
 
-    const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
-    const activeStaff = staffIds.size;
+    const activeStaff = staffRes.count ?? 0;
 
     const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
 
