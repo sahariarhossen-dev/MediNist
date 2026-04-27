@@ -1,70 +1,87 @@
-## Blind Cash Closing & Invoice Action Lock
+# Staff Monitoring UI/UX
 
-Two related security features:
-1. A blind cash-counting flow so staff can never see the system total before declaring their drawer cash, and any mismatch is logged.
-2. Lock destructive actions on completed invoices behind an Owner-only path, with a Manager "Admin Override Request" workflow.
+A focused Owner-facing monitoring page accessible from the Dashboard, with a real-time Pulse Feed, live staff presence, and an owner-only Discrepancy Report.
 
-### 1. Database changes (migration)
+## 1. Dashboard Entry
 
-**Extend `daily_closings`** with shift/blind-count fields:
-- `closed_by_user_id uuid null` — who submitted the count.
-- `declared_cash numeric null` — physical cash entered by staff.
-- `system_cash numeric null` — server-computed expected cash at submit time.
-- `discrepancy numeric null` — `declared_cash - system_cash` (signed; positive = surplus, negative = shortage).
-- `notes text null` — optional staff note.
-- `closing_type text not null default 'auto'` — `'auto'` (cron) or `'manual'` (shift end).
+In `src/pages/Index.tsx`, make the **Active Staff** card clickable (Owner only) by adding `onClick: () => navigate("/staff-monitoring")` to its summary card definition. Other roles remain non-interactive (no navigation).
 
-The cron-written rows continue using defaults; manual shift-ends populate the new columns.
+## 2. New Route
 
-**New table `admin_override_requests`** (audit trail for "I need to edit/delete invoice X"):
-- `id`, `pharmacy_id`, `requested_by uuid`, `entity_type text` (`'sale'`), `entity_id uuid`, `action text` (`'edit'` | `'delete'`), `reason text`, `status text default 'pending'` (`pending` | `approved` | `denied`), `resolved_by uuid null`, `resolved_at timestamptz null`, `created_at`.
-- RLS: pharmacy admins can SELECT/UPDATE all rows in their pharmacy; members can INSERT their own request and SELECT their own rows.
+In `src/App.tsx`:
+- Import `StaffMonitoring` page.
+- Add route: `/staff-monitoring` wrapped in `ProtectedRoute` + `AppLayout` (so bottom nav shows). The page itself enforces owner-only access and redirects others to `/more`.
 
-**New RPC `submit_blind_closing(_declared numeric, _notes text)`** — SECURITY DEFINER. Steps:
-1. Resolve caller's pharmacy_id; require auth.
-2. Compute `system_cash` for today using the same formula already in `DailyTransactions`/`Index` (starting balance + cash sales today + due received + cash-in investments − payments).
-3. Upsert into `daily_closings` for today with `closing_type='manual'`, set `declared_cash`, `discrepancy`, `closed_by_user_id`, `notes`, `closed_at = now()`. Keep auto-calculated totals (sales/cash_in/payments/due/net_balance) consistent with the formula.
-4. Insert a `staff_activity_logs` row: `action_type = 'blind_closing'`, `amount = declared_cash`, `metadata = { system_cash, discrepancy, notes }`. (The audit row is the "notification" to the Owner — already surfaces on the Staff Activity page in real time.) If `abs(discrepancy) >= 1`, also insert `action_type = 'closing_discrepancy'` so it stands out.
-5. Return `{ ok: true }` (do NOT return system_cash → blind input requirement).
+## 3. New Page: `src/pages/StaffMonitoring.tsx`
 
-**RLS on the new RPC**: granted to authenticated. The RPC itself enforces "manager or salesman role only" — owners are not blocked, but they have access to the totals on the Daily Transactions page anyway.
+Owner-only page (`profile.role === "admin"`). Layout uses the established mobile shell (`bg-[#F4F6FB]`, `max-w-md mx-auto`, sticky header with back arrow), generous spacing, and clean typography matching `StaffActivity.tsx`.
 
-**Sales delete RLS**: already restricted to admin (`is_pharmacy_admin()`). Add a matching restriction to ensure UPDATE on completed sales is admin-only as well, so even API-level edits by a manager are denied:
-- Replace the existing `Creator or admin can update sales` policy with one that allows updates only when `status <> 'completed'` OR caller is admin. This protects against direct API edits.
+### Sections (top to bottom)
 
-### 2. Frontend
+**A. Header**
+- Sticky white header with back button + title "Staff Monitoring" + subtle subtitle "Real-time activity & presence".
 
-**New page `src/pages/CashClosing.tsx`** at `/more/cash-closing`:
-- Header "Shift End — Cash Closing".
-- Big-number input asking "Count the physical cash in the drawer right now and enter the total" (BDT, integer, validated 0–10,000,000 with zod).
-- Optional notes textarea.
-- A single "Submit Closing" button. NO running totals, NO sales summary, NO "expected cash" hint anywhere on the page.
-- After submit:
-  - Calls `submit_blind_closing` RPC.
-  - Shows a confirmation card: "Closing recorded. Owner has been notified." Owner sees the breakdown (declared vs system vs discrepancy) on a separate review card; staff only see "submitted".
-  - If Owner navigates here, they instead see a "Today's Closing Review" view listing today's manual closing with declared, system, discrepancy, who submitted, and notes, plus link back to Daily Transactions.
+**B. Active Staff strip**
+- Loads `profiles` for the pharmacy (id, full_name, avatar_url, role, last_seen) via a new `get_pharmacy_member_presence()` RPC (security definer) so non-admin profile rows are exposed only via this controlled function, returning the same fields plus `last_seen`.
+  - *Why an RPC*: the existing `profiles` SELECT policy only allows users to view their own row. We need the owner to see every member's `last_seen`. RPC keeps the table policy intact.
+- Renders a horizontal scroll row of avatar chips. Each chip:
+  - Avatar (initials fallback)
+  - Small green pulsing dot (top-right) if `last_seen` is within the last 5 minutes; gray dot otherwise.
+  - Name + "Active now" / "Active 12m ago" caption.
+- Re-evaluates "active" every 30s via a tick interval.
 
-Add a More-menu entry "Shift End / Cash Closing" (icon `LockKeyhole`) visible to all roles.
+**C. Discrepancy Report (Owner Insight) — owner only, already enforced by page**
+- Card titled "Discrepancy Report" with a small "Owner only" pill.
+- Pulls last 7 days of `daily_closings` where `closing_type = 'manual'` and `discrepancy IS NOT NULL`, joined with member names from the presence map.
+- For each row shows: date, staff name, Declared, System Total, and **Variance** (color-coded: red for shortage, amber for surplus, green for exact match), plus optional notes.
+- Empty state: "No discrepancies recorded".
+- Minimalist: white card, 1px dividers, lots of padding, tabular-nums for amounts.
 
-**Action lock on Sales/Invoice (`src/pages/Invoice.tsx`)**:
-- Add an "Edit Invoice" and "Delete Invoice" button to the invoice toolbar.
-  - Owner (`profile.role === 'admin'`): buttons enabled. Edit re-routes to `/create-sale?draft={id}` (we'll allow editing completed sales for owner by reverting status to draft on click after confirmation), Delete shows a confirm dialog and removes via existing RLS.
-  - Manager / Salesman: both buttons present but visually locked (lock icon). Tapping opens a small "Request Admin Override" sheet asking for a reason; submitting inserts a row in `admin_override_requests` and shows a toast "Request sent to Owner". This also writes a `staff_activity_logs` row (`action_type = 'override_request'`) so it shows live to the Owner.
-- The Sales list (`src/pages/Sales.tsx`) is unchanged (entries open the Invoice page, where the locked actions live).
+**D. The Pulse Feed (Timeline)**
+- Real-time vertical timeline driven by `staff_activity_logs` (last 100 entries, current pharmacy), already in place from the audit logging system.
+- Visual: a left vertical guide line with circular icon nodes; each node colored per category:
+  - **Green** — sales (`sale_create`, `payment_received`)
+  - **Red** — expenses (`transaction_create` where direction is `out` per metadata; also `sale_delete`, `transaction_delete`, `closing_discrepancy`)
+  - **Blue** — logins (`login`, `logout`)
+  - **Amber** — edits/overrides (`sale_update`, `transaction_update`, `override_request`)
+  - **Indigo** — closings
+- Each item: icon node • staff name + relative time on top row • description on second row • amount on right (when present, tabular-nums, in BDT).
+- Uses Supabase realtime channel on `staff_activity_logs` filtered by `pharmacy_id` to prepend new entries instantly.
+- Filters (compact pill row above feed): All / Sales / Expenses / Logins.
+- Empty state: subtle illustration with "Quiet day so far".
 
-**Owner override-request inbox**:
-- Add a section "Pending Override Requests" at the top of the Staff Activity page (admin-only) listing pending rows with Approve / Deny buttons.
-  - Approve: marks request `approved`, logs `override_approved`, and (for `delete` requests) does not auto-delete — owner still performs the action; it merely permits the manager to retry. For `edit`, sets a short-lived flag (we'll use the `approved` status itself; manager UI checks for an open approved request before unlocking).
-  - Deny: marks `denied`, logs `override_denied`.
+### Design tokens
+- Background `#F4F6FB`, cards white with `rounded-2xl shadow-sm`.
+- Typography: `text-base` titles, `text-xs` muted labels, `tabular-nums` for currency.
+- Generous `p-4`/`gap-4` spacing, dividers `divide-gray-100`.
+- Use lucide icons: `ShoppingCart`, `Wallet`, `LogIn`, `LogOut`, `AlertTriangle`, `LockKeyhole`, `ShieldAlert`, `HandCoins`, `Trash2`, `Pencil`.
 
-(Initial release: Manager UI does NOT auto-unlock on approval — per spec it's "for now, just log the request". The Approve/Deny UI is a thin owner-side response; can be wired into manager unlock later.)
+## 4. Database
 
-### 3. Files touched
-- New migration: `daily_closings` columns, `admin_override_requests` table + RLS, `submit_blind_closing` RPC, updated sales UPDATE policy.
-- New: `src/pages/CashClosing.tsx`.
-- Edit: `src/App.tsx` (route), `src/pages/More.tsx` (menu item), `src/pages/Invoice.tsx` (Edit/Delete + override sheet), `src/pages/StaffActivity.tsx` (override-request inbox + new action_type icons), `src/pages/CreateSale.tsx` (allow loading a completed sale as draft when caller is admin).
+Add one migration:
 
-### 4. Security notes
-- Blind input: the RPC is the only place `system_cash` is computed for the closing; the page never queries totals, so a salesman cannot peek even by inspecting the DOM/network.
-- Discrepancies are written via the SECURITY DEFINER RPC and the `staff_activity_logs` triggers — both are immutable from the client (no UPDATE/DELETE policies).
-- Sales UPDATE is hardened at the DB level so even a crafted client request from a manager cannot edit a completed sale.
+```sql
+create or replace function public.get_pharmacy_member_presence()
+returns table(user_id uuid, full_name text, avatar_url text, role text, last_seen timestamptz)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.full_name, p.avatar_url, p.role, p.last_seen
+  from public.profiles p
+  where p.pharmacy_id = public.get_user_pharmacy_id();
+$$;
+```
+
+This is read-only and scoped to the caller's pharmacy via `get_user_pharmacy_id()`, so it's safe to expose to all members but the page itself only renders for owners.
+
+## 5. Files
+
+**Create**
+- `src/pages/StaffMonitoring.tsx`
+- `supabase/migrations/<ts>_member_presence_rpc.sql`
+
+**Edit**
+- `src/pages/Index.tsx` — make Active Staff card clickable for owners.
+- `src/App.tsx` — register `/staff-monitoring` route.
+
+## Out of scope
+- No changes to existing `StaffActivity` page (kept as the detailed audit log).
+- No new write paths; presence is read-only and already updated by `touch_last_seen()`.
