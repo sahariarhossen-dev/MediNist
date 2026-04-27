@@ -63,14 +63,28 @@ Deno.serve(async (req) => {
     }
 
     // 1. Look up + validate invitation
+    console.log("[accept-invitation] Looking up token:", token.substring(0, 8) + "...");
     const { data: inviteRows, error: lookupErr } = await admin.rpc("get_invitation_by_token", { _token: token });
-    if (lookupErr) return json({ error: lookupErr.message }, 500);
+    if (lookupErr) {
+      console.error("[accept-invitation] Lookup error:", lookupErr.message);
+      return json({ error: lookupErr.message }, 500);
+    }
     const invite = Array.isArray(inviteRows) ? inviteRows[0] : inviteRows;
-    if (!invite) return json({ error: "Invitation not found" }, 404);
-    if (invite.status !== "pending") return json({ error: `Invitation is ${invite.status}` }, 410);
-    if (invite.is_expired) return json({ error: "Invitation has expired" }, 410);
+    if (!invite) {
+      console.error("[accept-invitation] Invitation not found");
+      return json({ error: "Invitation not found" }, 404);
+    }
+    if (invite.status !== "pending") {
+      console.error("[accept-invitation] Status not pending:", invite.status);
+      return json({ error: `Invitation is ${invite.status}` }, 410);
+    }
+    if (invite.is_expired) {
+      console.error("[accept-invitation] Invitation expired");
+      return json({ error: "Invitation has expired" }, 410);
+    }
 
     const email = (invite.email as string).toLowerCase();
+    console.log("[accept-invitation] Valid invite for:", email, "role:", invite.role);
 
     // 2. Create auth user (or detect already exists)
     let userId: string | null = null;
@@ -82,6 +96,7 @@ Deno.serve(async (req) => {
     });
 
     if (createErr) {
+      console.error("[accept-invitation] createUser error:", createErr.message);
       const msg = createErr.message?.toLowerCase() ?? "";
       if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
         return json(
@@ -93,15 +108,19 @@ Deno.serve(async (req) => {
     }
     userId = created.user?.id ?? null;
     if (!userId) return json({ error: "Failed to create account" }, 500);
+    console.log("[accept-invitation] Created auth user:", userId);
 
     // 3. Set full_name on profile (created by handle_new_user trigger)
-    await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
+    const { error: nameErr } = await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
+    if (nameErr) console.error("[accept-invitation] Profile name update warning:", nameErr.message);
 
     // 4. Sign in to get session
     const { data: signIn, error: signInErr } = await admin.auth.signInWithPassword({ email, password });
     if (signInErr || !signIn.session) {
+      console.error("[accept-invitation] Sign-in failed:", signInErr?.message);
       return json({ error: "Account created but sign-in failed. Please log in manually." }, 500);
     }
+    console.log("[accept-invitation] Signed in, calling accept_staff_invitation RPC");
 
     // 5. Run accept_staff_invitation as the new user (so auth.uid() works)
     const userClient = createClient(supabaseUrl, anonKey, {
@@ -109,10 +128,11 @@ Deno.serve(async (req) => {
     });
     const { data: acceptRows, error: acceptErr } = await userClient.rpc("accept_staff_invitation", { _token: token });
     if (acceptErr) {
-      console.error("Accept error:", acceptErr.message);
+      console.error("[accept-invitation] RPC error:", acceptErr.message, "details:", JSON.stringify(acceptErr));
       return json({ error: "Failed to link account to pharmacy: " + acceptErr.message }, 500);
     }
     const accepted = Array.isArray(acceptRows) ? acceptRows[0] : acceptRows;
+    console.log("[accept-invitation] Success! Linked to pharmacy:", accepted?.pharmacy_name);
 
     return json({
       success: true,
