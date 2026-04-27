@@ -98,17 +98,31 @@ Deno.serve(async (req) => {
     if (createErr) {
       console.error("[accept-invitation] createUser error:", createErr.message);
       const msg = createErr.message?.toLowerCase() ?? "";
-      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+      const looksExisting =
+        msg.includes("already") || msg.includes("registered") || msg.includes("exists");
+      if (!looksExisting) {
+        return json({ error: "Failed to create account: " + createErr.message }, 400);
+      }
+      // Account exists from a previous failed attempt — try to recover by signing in.
+      console.log("[accept-invitation] User already exists, attempting recovery sign-in");
+      const { data: existingSignIn, error: existingSignInErr } =
+        await admin.auth.signInWithPassword({ email, password });
+      if (existingSignInErr || !existingSignIn.user) {
         return json(
-          { error: "An account with this email already exists. Please sign in and contact your admin." },
+          {
+            error:
+              "An account with this email already exists. Sign in with your existing password, or ask your admin to remove the account so you can re-register.",
+          },
           409
         );
       }
-      return json({ error: "Failed to create account: " + createErr.message }, 400);
+      userId = existingSignIn.user.id;
+      console.log("[accept-invitation] Recovered existing user:", userId);
+    } else {
+      userId = created.user?.id ?? null;
+      if (!userId) return json({ error: "Failed to create account" }, 500);
+      console.log("[accept-invitation] Created auth user:", userId);
     }
-    userId = created.user?.id ?? null;
-    if (!userId) return json({ error: "Failed to create account" }, 500);
-    console.log("[accept-invitation] Created auth user:", userId);
 
     // 3. Set full_name on profile (created by handle_new_user trigger)
     const { error: nameErr } = await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
@@ -129,7 +143,13 @@ Deno.serve(async (req) => {
     const { data: acceptRows, error: acceptErr } = await userClient.rpc("accept_staff_invitation", { _token: token });
     if (acceptErr) {
       console.error("[accept-invitation] RPC error:", acceptErr.message, "details:", JSON.stringify(acceptErr));
-      return json({ error: "Failed to link account to pharmacy: " + acceptErr.message }, 500);
+      return json(
+        {
+          error: "Failed to link account to pharmacy: " + acceptErr.message,
+          code: (acceptErr as { code?: string }).code ?? null,
+        },
+        500
+      );
     }
     const accepted = Array.isArray(acceptRows) ? acceptRows[0] : acceptRows;
     console.log("[accept-invitation] Success! Linked to pharmacy:", accepted?.pharmacy_name);
