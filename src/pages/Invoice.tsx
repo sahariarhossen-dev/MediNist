@@ -2,7 +2,19 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, Download, FileText } from "lucide-react";
+import { X, Download, FileText, Pencil, Trash2, Lock } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import OverrideRequestSheet from "@/components/sales/OverrideRequestSheet";
+import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -52,6 +64,59 @@ const Invoice = () => {
   const [sellerPhone, setSellerPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideAction, setOverrideAction] = useState<"edit" | "delete">("edit");
+  const [busyAction, setBusyAction] = useState(false);
+
+  const isOwner = profile?.role === "admin";
+
+  const handleEdit = async () => {
+    if (!sale) return;
+    if (!isOwner) {
+      setOverrideAction("edit");
+      setOverrideOpen(true);
+      return;
+    }
+    // Owner: revert to draft so CreateSale can load it
+    setBusyAction(true);
+    const { error } = await supabase
+      .from("sales")
+      .update({ status: "draft" })
+      .eq("id", sale.id);
+    setBusyAction(false);
+    if (error) {
+      toast.error(error.message || "Could not open invoice for editing");
+      return;
+    }
+    navigate(`/create-sale?draft=${sale.id}`);
+  };
+
+  const handleDelete = async () => {
+    if (!sale) return;
+    if (!isOwner) {
+      setOverrideAction("delete");
+      setOverrideOpen(true);
+      return;
+    }
+    setConfirmDelete(true);
+  };
+
+  const performDelete = async () => {
+    if (!sale) return;
+    setBusyAction(true);
+    // Remove sale items first, then sale (RLS allows admin)
+    await supabase.from("sale_items").delete().eq("sale_id", sale.id);
+    const { error } = await supabase.from("sales").delete().eq("id", sale.id);
+    setBusyAction(false);
+    setConfirmDelete(false);
+    if (error) {
+      toast.error(error.message || "Could not delete invoice");
+      return;
+    }
+    toast.success("Invoice deleted");
+    navigate("/sales");
+  };
 
   useEffect(() => {
     if (!saleId) return;
