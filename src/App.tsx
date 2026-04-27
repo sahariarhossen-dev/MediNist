@@ -23,6 +23,7 @@ import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AIAssistant from "./pages/AIAssistant.tsx";
+import AcceptInvitation from "./pages/AcceptInvitation.tsx";
 import DailyTransactions from "./pages/DailyTransactions.tsx";
 import AllTransactions from "./pages/AllTransactions.tsx";
 import Customers from "./pages/Customers.tsx";
@@ -79,6 +80,7 @@ const App = () => (
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
