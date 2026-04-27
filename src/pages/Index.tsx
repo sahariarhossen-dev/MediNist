@@ -53,6 +53,7 @@ const Index = () => {
   const [timeRange, setTimeRange] = useState("today");
   const [stats, setStats] = useState({ totalSales: 0, activeStaff: 0, stockAlerts: 0 });
   const [cashInHand, setCashInHand] = useState(0);
+  const isSalesman = profile?.role === "salesman";
 
   const fetchStats = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
@@ -93,7 +94,7 @@ const Index = () => {
 
   const fetchCashInHand = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
-    if (!pharmacyId) return;
+    if (!pharmacyId || isSalesman) return;
     const today = new Date();
     const from = startOfDay(today).toISOString();
     const to = endOfDay(today).toISOString();
@@ -159,21 +160,22 @@ const Index = () => {
     setCashInHand(
       startingBalance + cashSalesToday + dueReceived + cashInInvestments - paymentsToday,
     );
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, isSalesman]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
   useEffect(() => {
+    if (isSalesman) return;
     fetchCashInHand();
-  }, [fetchCashInHand]);
+  }, [fetchCashInHand, isSalesman]);
 
   // Realtime: refresh Cash in Hand when any pharmacy member changes the
   // underlying tables (sales, cash transactions, customer dues, closings).
   useEffect(() => {
     const pharmacyId = profile?.pharmacy_id;
-    if (!pharmacyId) return;
+    if (!pharmacyId || isSalesman) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debounced = () => {
       if (timer) clearTimeout(timer);
@@ -194,11 +196,17 @@ const Index = () => {
       if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats]);
+  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats, isSalesman]);
 
   const summaryCards = [
     { title: "Total Sales", value: `৳${stats.totalSales.toLocaleString()}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
-    { title: "Cash in Hand", value: `৳${formatBDT(cashInHand)}`, icon: Wallet, color: "bg-blue-100 text-blue-600", onClick: () => navigate("/more/daily-transactions") },
+    {
+      title: "Cash in Hand",
+      value: isSalesman ? "N/A" : `৳${formatBDT(cashInHand)}`,
+      icon: Wallet,
+      color: "bg-blue-100 text-blue-600",
+      onClick: isSalesman ? undefined : () => navigate("/more/daily-transactions"),
+    },
     { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
     { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
   ];
