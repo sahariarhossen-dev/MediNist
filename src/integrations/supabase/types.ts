@@ -688,33 +688,42 @@ export type Database = {
       }
       shop_staff: {
         Row: {
+          accepted_at: string | null
           created_at: string | null
           email: string
+          expires_at: string
           id: string
           invited_by: string
           pharmacy_id: string
           role: string
           status: string
+          token: string
           user_id: string | null
         }
         Insert: {
+          accepted_at?: string | null
           created_at?: string | null
           email: string
+          expires_at?: string
           id?: string
           invited_by: string
           pharmacy_id: string
           role?: string
           status?: string
+          token?: string
           user_id?: string | null
         }
         Update: {
+          accepted_at?: string | null
           created_at?: string | null
           email?: string
+          expires_at?: string
           id?: string
           invited_by?: string
           pharmacy_id?: string
           role?: string
           status?: string
+          token?: string
           user_id?: string | null
         }
         Relationships: []
@@ -724,6 +733,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_staff_invitation: {
+        Args: { _token: string }
+        Returns: {
+          pharmacy_id: string
+          pharmacy_name: string
+          role: string
+        }[]
+      }
+      get_invitation_by_token: {
+        Args: { _token: string }
+        Returns: {
+          email: string
+          expires_at: string
+          is_expired: boolean
+          pharmacy_id: string
+          pharmacy_name: string
+          role: string
+          status: string
+        }[]
+      }
       get_my_pharmacy_public: {
         Args: never
         Returns: {
