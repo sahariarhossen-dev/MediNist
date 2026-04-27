@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -60,6 +61,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
+  const { profile } = useAuth();
+  const userId = profile?.id;
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalData, setModalData] = useState<ModalData | null>(null);
@@ -74,7 +77,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
   const subtitle = isToday ? "(8AM - 12AM)" : "";
 
   const fetchChartData = useCallback(async () => {
-    if (!pharmacyId) return;
+    if (!pharmacyId || !userId) return;
 
     const now = new Date();
     let startDate: Date;
@@ -90,6 +93,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       .from("sales")
       .select("id, total, created_at")
       .eq("pharmacy_id", pharmacyId)
+      .eq("user_id", userId)
       .eq("status", "completed")
       .gte("created_at", startDate.toISOString());
 
@@ -139,14 +143,14 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       }));
       setChartData(points);
     }
-  }, [pharmacyId, timeRange, isToday]);
+  }, [pharmacyId, userId, timeRange, isToday]);
 
   useEffect(() => {
     fetchChartData();
   }, [fetchChartData]);
 
   const handlePointClick = async (data: any) => {
-    if (!data?.activePayload?.length || !pharmacyId) return;
+    if (!data?.activePayload?.length || !pharmacyId || !userId) return;
     const point = data.activePayload[0].payload as ChartPoint;
 
     setLoadingModal(true);
@@ -186,6 +190,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange }: SalesTrendChartProps) => {
       .from("sales")
       .select("id")
       .eq("pharmacy_id", pharmacyId)
+      .eq("user_id", userId)
       .eq("status", "completed")
       .gte("created_at", startDate.toISOString())
       .lt("created_at", endDate.toISOString());
