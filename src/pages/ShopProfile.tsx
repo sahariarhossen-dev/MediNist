@@ -203,6 +203,26 @@ const ShopProfile = () => {
     toast({ title: "Staff member removed" });
   };
 
+  const handleRevokeInvite = async (id: string) => {
+    const { error } = await supabase.from("shop_staff").update({ status: "revoked" } as any).eq("id", id);
+    if (error) { toast({ title: "Revoke failed", description: error.message, variant: "destructive" }); return; }
+    setStaff(staff.map((s) => (s.id === id ? { ...s, status: "revoked" } : s)));
+    toast({ title: "Invitation revoked" });
+  };
+
+  const handleResendInvite = async (email: string, role: string) => {
+    const { data, error } = await supabase.functions.invoke("invite-staff", { body: { email, role } });
+    if (error || data?.error) {
+      toast({ title: "Resend failed", description: data?.error || error?.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: data?.emailSent ? "Invitation re-sent!" : "Invitation refreshed",
+      description: data?.emailSent ? `New invitation sent to ${email}` : "Share the new link with the invitee.",
+    });
+    fetchStaff();
+  };
+
 
   const infoFields = [
     { label: "Pharmacy Name", key: "name" as const },
