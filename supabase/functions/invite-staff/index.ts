@@ -1,9 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const APP_URL = Deno.env.get("APP_URL") ?? "https://medi-nist.lovable.app";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -23,7 +25,6 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify caller identity
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -35,7 +36,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check caller is admin
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: profile } = await adminClient
       .from("profiles")
@@ -50,51 +50,105 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, role } = await req.json();
-    if (!email || !role || !["owner", "manager", "salesman"].includes(role)) {
-      return new Response(JSON.stringify({ error: "Invalid email or role" }), {
+    const body = await req.json().catch(() => ({}));
+    const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const role = typeof body.role === "string" ? body.role : "";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(rawEmail) || rawEmail.length > 255) {
+      return new Response(JSON.stringify({ error: "Invalid email address" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!["owner", "manager", "salesman"].includes(role)) {
+      return new Response(JSON.stringify({ error: "Invalid role" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Send invitation email
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email);
-    if (inviteError && !inviteError.message.includes("already been registered")) {
-      console.error("Invite error:", inviteError.message);
-      return new Response(JSON.stringify({ error: "Failed to send invitation. Please try again." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Get pharmacy name for the email
+    const { data: pharmacy } = await adminClient
+      .from("pharmacies")
+      .select("name")
+      .eq("id", profile.pharmacy_id)
+      .single();
+    const pharmacyName = pharmacy?.name ?? "your pharmacy";
 
-    // Insert into shop_staff
-    const { error: insertError } = await adminClient.from("shop_staff").upsert(
+    // Generate fresh token + 7 day expiry
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Upsert invitation — re-inviting refreshes token, expiry, and resets status
+    const { error: upsertError } = await adminClient.from("shop_staff").upsert(
       {
         pharmacy_id: profile.pharmacy_id,
-        email,
+        email: rawEmail,
         role,
         status: "pending",
         invited_by: user.id,
+        token,
+        expires_at: expiresAt,
+        accepted_at: null,
+        user_id: null,
       },
       { onConflict: "pharmacy_id,email" }
     );
 
-    if (insertError) {
-      console.error("Insert error:", insertError.message);
-      return new Response(JSON.stringify({ error: "Failed to register staff invitation. Please try again." }), {
+    if (upsertError) {
+      console.error("Upsert error:", upsertError.message);
+      return new Response(JSON.stringify({ error: "Failed to record invitation." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ success: true, message: `Invitation sent to ${email}!` }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Send branded email via Lovable transactional email infrastructure.
+    // If email infra isn't set up yet, the invocation will fail — we still
+    // return success with the link so the admin can share it manually.
+    const acceptUrl = `${APP_URL}/accept-invitation?token=${token}`;
+    let emailSent = false;
+    let emailError: string | null = null;
+
+    try {
+      const emailRes = await adminClient.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "staff-invitation",
+          recipientEmail: rawEmail,
+          idempotencyKey: `staff-invite-${token}`,
+          templateData: {
+            pharmacyName,
+            role,
+            acceptUrl,
+            expiresInDays: 7,
+          },
+        },
+      });
+      if (emailRes.error) {
+        emailError = emailRes.error.message ?? "Email service unavailable";
+      } else {
+        emailSent = true;
+      }
+    } catch (e) {
+      emailError = (e as Error).message;
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        emailSent,
+        emailError,
+        acceptUrl,
+        message: emailSent
+          ? `Invitation sent to ${rawEmail}!`
+          : `Invitation created. Share this link with ${rawEmail}: ${acceptUrl}`,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (err) {
-    console.error("Unexpected error:", err.message);
-    return new Response(JSON.stringify({ error: "An unexpected error occurred. Please try again." }), {
+    console.error("Unexpected error:", (err as Error).message);
+    return new Response(JSON.stringify({ error: "An unexpected error occurred." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
