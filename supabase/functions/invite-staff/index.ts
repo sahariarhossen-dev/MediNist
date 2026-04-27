@@ -108,41 +108,16 @@ Deno.serve(async (req) => {
     // If email infra isn't set up yet, the invocation will fail — we still
     // return success with the link so the admin can share it manually.
     const acceptUrl = `${APP_URL}/accept-invitation?token=${token}`;
-    let emailSent = false;
-    let emailError: string | null = null;
-
-    try {
-      const emailRes = await adminClient.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: "staff-invitation",
-          recipientEmail: rawEmail,
-          idempotencyKey: `staff-invite-${token}`,
-          templateData: {
-            pharmacyName,
-            role,
-            acceptUrl,
-            expiresInDays: 7,
-          },
-        },
-      });
-      if (emailRes.error) {
-        emailError = emailRes.error.message ?? "Email service unavailable";
-      } else {
-        emailSent = true;
-      }
-    } catch (e) {
-      emailError = (e as Error).message;
-    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        emailSent,
-        emailError,
+        emailSent: false,
         acceptUrl,
-        message: emailSent
-          ? `Invitation sent to ${rawEmail}!`
-          : `Invitation created. Share this link with ${rawEmail}: ${acceptUrl}`,
+        email: rawEmail,
+        role,
+        pharmacyName,
+        message: `Invitation link generated for ${rawEmail}. Copy and share it manually.`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
