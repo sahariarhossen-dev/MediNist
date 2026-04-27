@@ -85,15 +85,13 @@ const Index = () => {
       .eq("status", "completed")
       .gte("created_at", startDate);
 
-    // Active staff = profiles with last_seen within the last 5 minutes
-    const activeSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const [salesRes, staffRes, alertsRes] = await Promise.all([
       isShopScope ? salesScopedQuery : salesScopedQuery.eq("user_id", userId),
       supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
+        .from("sales")
+        .select("user_id")
         .eq("pharmacy_id", pharmacyId)
-        .gte("last_seen", activeSince),
+        .gte("created_at", startDate),
       supabase
         .from("medicines")
         .select("id, stock_quantity, stock_alert, product_type, strip_per_pack, pcs_per_strip")
@@ -103,7 +101,8 @@ const Index = () => {
     const sales = salesRes.data ?? [];
     const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
 
-    const activeStaff = staffRes.count ?? 0;
+    const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
+    const activeStaff = staffIds.size;
 
     const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
 
@@ -256,7 +255,7 @@ const Index = () => {
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/more/daily-transactions"),
         },
-        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600", onClick: () => navigate("/staff-monitoring") },
+        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
         { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [

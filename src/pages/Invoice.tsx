@@ -2,19 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, Download, FileText, Pencil, Trash2, Lock } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import OverrideRequestSheet from "@/components/sales/OverrideRequestSheet";
-import { toast } from "sonner";
+import { X, Download, FileText } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -64,59 +52,6 @@ const Invoice = () => {
   const [sellerPhone, setSellerPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideAction, setOverrideAction] = useState<"edit" | "delete">("edit");
-  const [busyAction, setBusyAction] = useState(false);
-
-  const isOwner = profile?.role === "admin";
-
-  const handleEdit = async () => {
-    if (!sale) return;
-    if (!isOwner) {
-      setOverrideAction("edit");
-      setOverrideOpen(true);
-      return;
-    }
-    // Owner: revert to draft so CreateSale can load it
-    setBusyAction(true);
-    const { error } = await supabase
-      .from("sales")
-      .update({ status: "draft" })
-      .eq("id", sale.id);
-    setBusyAction(false);
-    if (error) {
-      toast.error(error.message || "Could not open invoice for editing");
-      return;
-    }
-    navigate(`/create-sale?draft=${sale.id}`);
-  };
-
-  const handleDelete = async () => {
-    if (!sale) return;
-    if (!isOwner) {
-      setOverrideAction("delete");
-      setOverrideOpen(true);
-      return;
-    }
-    setConfirmDelete(true);
-  };
-
-  const performDelete = async () => {
-    if (!sale) return;
-    setBusyAction(true);
-    // Remove sale items first, then sale (RLS allows admin)
-    await supabase.from("sale_items").delete().eq("sale_id", sale.id);
-    const { error } = await supabase.from("sales").delete().eq("id", sale.id);
-    setBusyAction(false);
-    setConfirmDelete(false);
-    if (error) {
-      toast.error(error.message || "Could not delete invoice");
-      return;
-    }
-    toast.success("Invoice deleted");
-    navigate("/sales");
-  };
 
   useEffect(() => {
     if (!saleId) return;
@@ -288,42 +223,14 @@ const Invoice = () => {
         <button onClick={() => navigate("/sales")} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition text-sm">
           <X className="w-4 h-4" /> Close
         </button>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleEdit}
-            disabled={busyAction}
-            title={isOwner ? "Edit invoice" : "Request admin override to edit"}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition disabled:opacity-50 ${
-              isOwner
-                ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-            }`}
-          >
-            {isOwner ? <Pencil className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">Edit</span>
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={busyAction}
-            title={isOwner ? "Delete invoice" : "Request admin override to delete"}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-sm transition disabled:opacity-50 ${
-              isOwner
-                ? "bg-red-100 text-red-700 hover:bg-red-200"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-            }`}
-          >
-            {isOwner ? <Trash2 className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">Delete</span>
-          </button>
-          <button
-            onClick={handleDownloadPDF}
-            disabled={downloading}
-            className="flex items-center gap-2 bg-red-700 text-white px-3 py-2 rounded-lg font-semibold hover:bg-red-800 transition text-sm disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">{downloading ? "Generating..." : "PDF"}</span>
-          </button>
-        </div>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={downloading}
+          className="flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-800 transition text-sm disabled:opacity-50"
+        >
+          <Download className="w-4 h-4" />
+          {downloading ? "Generating..." : "Download PDF"}
+        </button>
       </div>
 
       {/* Invoice content */}
@@ -418,41 +325,6 @@ const Invoice = () => {
         <p data-pdf-section="footer" className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
 
       </div>
-
-      {/* Owner: confirm delete */}
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this invoice?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the sale and its items. This action is logged.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busyAction}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={performDelete}
-              disabled={busyAction}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Manager / Salesman: request override */}
-      {sale && profile?.pharmacy_id && profile?.id && (
-        <OverrideRequestSheet
-          open={overrideOpen}
-          onOpenChange={setOverrideOpen}
-          pharmacyId={profile.pharmacy_id}
-          userId={profile.id}
-          entityType="sale"
-          entityId={sale.id}
-          action={overrideAction}
-        />
-      )}
     </div>
   );
 };

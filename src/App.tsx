@@ -31,9 +31,6 @@ import Customers from "./pages/Customers.tsx";
 import CustomerProfile from "./pages/CustomerProfile.tsx";
 import Notes from "./pages/Notes.tsx";
 import NoteEditor from "./pages/NoteEditor.tsx";
-import StaffActivity from "./pages/StaffActivity.tsx";
-import CashClosing from "./pages/CashClosing.tsx";
-import StaffMonitoring from "./pages/StaffMonitoring.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -88,9 +85,6 @@ const App = () => (
             <Route path="/more/customers/:id" element={<ProtectedRoute><CustomerProfile /></ProtectedRoute>} />
             <Route path="/more/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
             <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
-            <Route path="/more/staff-activity" element={<ProtectedRoute><StaffActivity /></ProtectedRoute>} />
-            <Route path="/more/cash-closing" element={<ProtectedRoute><CashClosing /></ProtectedRoute>} />
-            <Route path="/staff-monitoring" element={<ProtectedRoute><AppLayout><StaffMonitoring /></AppLayout></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
