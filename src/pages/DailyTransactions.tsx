@@ -182,6 +182,7 @@ const DailyTransactions = () => {
     startingBalance + cashSalesTotal + dueReceived + cashInInvestments - totalPayments;
 
   const isToday = isSameDay(date, new Date());
+  const canLogTransactions = profile?.role !== "salesman";
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
@@ -340,7 +341,7 @@ const DailyTransactions = () => {
       </div>
 
       {/* Floating Action Button */}
-      {profile?.pharmacy_id && profile?.id && isToday && (
+      {profile?.pharmacy_id && profile?.id && isToday && canLogTransactions && (
         <>
           <button
             onClick={() => setSheetOpen(true)}
