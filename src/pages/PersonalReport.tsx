@@ -61,17 +61,12 @@ interface TopMedicine {
 const PersonalReport = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const isManager = profile?.role === "manager";
-  const rangeLabels = isManager ? managerRangeLabels : fullRangeLabels;
+  const rangeLabels = fullRangeLabels;
 
   const [timeRange, setTimeRange] = useState("today");
   const [kpi, setKpi] = useState({ totalSales: 0, invoices: 0, avg: 0, discount: 0 });
   const [recent, setRecent] = useState<RecentSale[]>([]);
   const [topItems, setTopItems] = useState<TopMedicine[]>([]);
-
-  useEffect(() => {
-    if (isManager && !(timeRange in managerRangeLabels)) setTimeRange("7days");
-  }, [isManager, timeRange]);
 
   const fetchData = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
