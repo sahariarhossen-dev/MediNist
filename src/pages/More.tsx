@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Settings, ChevronRight, Store, Wallet, Users, StickyNote, Activity } from "lucide-react";
+import { Package, Settings, ChevronRight, Store, Wallet, Users, StickyNote, Activity, LockKeyhole } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AppHeader from "@/components/AppHeader";
 
@@ -12,6 +12,7 @@ const allMenuItems = [
   { label: "Smart Notepad", icon: StickyNote, path: "/more/notes", color: "text-[#2563eb]" },
   { label: "Daily Transactions", icon: Wallet, path: "/more/daily-transactions", color: "text-teal-600" },
   { label: "Staff Activity", icon: Activity, path: "/more/staff-activity", color: "text-rose-600" },
+  { label: "Shift End / Cash Closing", icon: LockKeyhole, path: "/more/cash-closing", color: "text-indigo-600" },
   { label: "Shop Profile", icon: Store, path: "/shop-profile", color: "text-teal-600" },
   { label: "Settings", icon: Settings, path: null, color: "text-gray-500" },
 ];
