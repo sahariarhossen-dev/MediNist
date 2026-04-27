@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, ShoppingCart, Wallet, Trash2, Pencil, ArrowDownCircle, ArrowUpCircle, HandCoins } from "lucide-react";
+import { ArrowLeft, Activity, ShoppingCart, Wallet, Trash2, Pencil, ArrowDownCircle, ArrowUpCircle, HandCoins, LockKeyhole, AlertTriangle, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { format, formatDistanceToNow, startOfDay, subDays } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +50,22 @@ const ACTION_META: Record<string, { label: string; Icon: typeof Activity; color:
   payment_received: { label: "Payment Received", Icon: HandCoins, color: "bg-teal-100 text-teal-600" },
   login: { label: "Login", Icon: ArrowDownCircle, color: "bg-gray-100 text-gray-600" },
   logout: { label: "Logout", Icon: ArrowUpCircle, color: "bg-gray-100 text-gray-600" },
+  blind_closing: { label: "Shift Closing", Icon: LockKeyhole, color: "bg-indigo-100 text-indigo-600" },
+  closing_discrepancy: { label: "Cash Discrepancy", Icon: AlertTriangle, color: "bg-red-100 text-red-600" },
+  override_request: { label: "Override Requested", Icon: ShieldAlert, color: "bg-amber-100 text-amber-700" },
+  override_approved: { label: "Override Approved", Icon: ShieldCheck, color: "bg-green-100 text-green-600" },
+  override_denied: { label: "Override Denied", Icon: ShieldX, color: "bg-red-100 text-red-600" },
+};
+
+type OverrideRequest = {
+  id: string;
+  requested_by: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  reason: string | null;
+  created_at: string;
+  status: string;
 };
 
 const StaffActivity = () => {
@@ -58,6 +76,7 @@ const StaffActivity = () => {
   const [members, setMembers] = useState<Array<{ user_id: string; full_name: string | null }>>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [busy, setBusy] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState<OverrideRequest[]>([]);
 
   const isAdmin = profile?.role === "admin";
 
@@ -88,6 +107,39 @@ const StaffActivity = () => {
     setBusy(false);
   }, [profile?.pharmacy_id, range, staffFilter]);
 
+  const fetchPendingRequests = useCallback(async () => {
+    if (!profile?.pharmacy_id) return;
+    const { data } = await supabase
+      .from("admin_override_requests")
+      .select("id,requested_by,entity_type,entity_id,action,reason,created_at,status")
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setPendingRequests((data as any) ?? []);
+  }, [profile?.pharmacy_id]);
+
+  const resolveRequest = async (req: OverrideRequest, decision: "approved" | "denied") => {
+    const { error } = await supabase
+      .from("admin_override_requests")
+      .update({ status: decision, resolved_by: profile?.id ?? null, resolved_at: new Date().toISOString() })
+      .eq("id", req.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    await supabase.from("staff_activity_logs").insert({
+      pharmacy_id: profile!.pharmacy_id,
+      user_id: profile!.id,
+      action_type: decision === "approved" ? "override_approved" : "override_denied",
+      entity_type: req.entity_type,
+      entity_id: req.entity_id,
+      description: `${decision === "approved" ? "Approved" : "Denied"} ${req.action} request`,
+    });
+    toast.success(`Request ${decision}`);
+    fetchPendingRequests();
+  };
+
   useEffect(() => {
     if (isAdmin) fetchMembers();
   }, [isAdmin, fetchMembers]);
@@ -95,6 +147,10 @@ const StaffActivity = () => {
   useEffect(() => {
     if (isAdmin) fetchLogs();
   }, [isAdmin, fetchLogs]);
+
+  useEffect(() => {
+    if (isAdmin) fetchPendingRequests();
+  }, [isAdmin, fetchPendingRequests]);
 
   // Realtime
   useEffect(() => {
@@ -106,11 +162,16 @@ const StaffActivity = () => {
         { event: "INSERT", schema: "public", table: "staff_activity_logs", filter: `pharmacy_id=eq.${profile.pharmacy_id}` },
         () => fetchLogs(),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_override_requests", filter: `pharmacy_id=eq.${profile.pharmacy_id}` },
+        () => fetchPendingRequests(),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAdmin, profile?.pharmacy_id, fetchLogs]);
+  }, [isAdmin, profile?.pharmacy_id, fetchLogs, fetchPendingRequests]);
 
   if (loading) return null;
   if (!isAdmin) return <Navigate to="/more" replace />;
@@ -163,6 +224,49 @@ const StaffActivity = () => {
 
       {/* List */}
       <div className="px-page pt-4 space-y-5">
+        {pendingRequests.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-amber-700 px-1 mb-2 flex items-center gap-1.5">
+              <ShieldAlert size={14} /> Pending Override Requests
+            </p>
+            <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+              {pendingRequests.map((r) => (
+                <div key={r.id} className="p-3">
+                  <div className="flex items-baseline justify-between gap-2 mb-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {memberMap.get(r.requested_by) || "Unknown Staff"}
+                    </p>
+                    <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                      {formatDistanceToNow(new Date(r.created_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-700">
+                    Wants to <span className="font-semibold capitalize">{r.action}</span> {r.entity_type}{" "}
+                    <span className="font-mono text-gray-500">#{r.entity_id.slice(0, 6).toUpperCase()}</span>
+                  </p>
+                  {r.reason && <p className="text-xs text-gray-500 mt-1 italic line-clamp-2">"{r.reason}"</p>}
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => resolveRequest(r, "approved")}
+                      className="h-8 px-3 text-xs bg-green-600 hover:bg-green-700"
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resolveRequest(r, "denied")}
+                      className="h-8 px-3 text-xs"
+                    >
+                      Deny
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {busy && <p className="text-center text-xs text-gray-400 py-8">Loading…</p>}
         {!busy && grouped.length === 0 && (
           <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
