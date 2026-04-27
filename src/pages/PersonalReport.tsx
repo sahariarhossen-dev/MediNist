@@ -38,10 +38,6 @@ const fullRangeLabels: Record<string, string> = {
   "15days": "Last 15 Days",
   "30days": "Last 30 Days",
 };
-const managerRangeLabels: Record<string, string> = {
-  today: "Today",
-  "7days": "Last 7 Days",
-};
 
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
