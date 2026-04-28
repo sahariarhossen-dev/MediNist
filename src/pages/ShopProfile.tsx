@@ -459,6 +459,7 @@ const ShopProfile = () => {
           </AccordionItem>
 
           {/* Staff Management */}
+          {isAdmin && (
           <AccordionItem value="staff" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
             <AccordionTrigger className="px-5 py-4 hover:no-underline">
               <div className="flex items-center gap-3">
