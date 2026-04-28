@@ -1,41 +1,20 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown,
+  Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-
-const CircularProgress = ({ percent }: { percent: number }) => {
-  const r = 54;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (percent / 100) * circ;
-
-  return (
-    <svg width="140" height="140" viewBox="0 0 128 128">
-      <circle cx="64" cy="64" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="10" />
-      <circle
-        cx="64" cy="64" r={r} fill="none"
-        stroke="hsl(var(--primary))"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={offset}
-        transform="rotate(-90 64 64)"
-        className="transition-all duration-700"
-      />
-      <text x="64" y="58" textAnchor="middle" className="fill-foreground text-2xl font-bold" fontSize="22">
-        {percent}%
-      </text>
-      <text x="64" y="76" textAnchor="middle" className="fill-muted-foreground" fontSize="9">
-        Achieved
-      </text>
-    </svg>
-  );
-};
+import {
+  StatCard, BadgeTile, fmtBdt as fmt, startOfMonthIso, startOfWeekIso,
+} from "@/components/staff/PerformanceWidgets";
+import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -53,6 +32,133 @@ const Profile = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+
+  // ---- Personal performance analytics (self only) ----
+  const isAdmin = profile?.role === "admin";
+  const [monthSales, setMonthSales] = useState(0);
+  const [monthCount, setMonthCount] = useState(0);
+  const [weekSales, setWeekSales] = useState(0);
+  const [loyalty, setLoyalty] = useState(0);
+  const [monthlyTarget, setMonthlyTarget] = useState(0);
+  const [commissionPercent, setCommissionPercent] = useState(0);
+  const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [draftTarget, setDraftTarget] = useState(0);
+  const [savingTarget, setSavingTarget] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id || !profile?.pharmacy_id) return;
+    let cancelled = false;
+    (async () => {
+      const monthStart = startOfMonthIso();
+      const weekStart = startOfWeekIso();
+
+      // Settings (target + commission)
+      const { data: setData } = await supabase
+        .from("staff_settings" as any)
+        .select("monthly_target, commission_percent")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled && setData) {
+        const s = setData as unknown as { monthly_target: number; commission_percent: number };
+        setMonthlyTarget(Number(s.monthly_target || 0));
+        setDraftTarget(Number(s.monthly_target || 0));
+        setCommissionPercent(Number(s.commission_percent || 0));
+      }
+
+      // Pharmacy-wide month sales (needed both for personal totals + winners)
+      const { data: monthRows } = await supabase
+        .from("sales")
+        .select("id, total, created_at, user_id")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("status", "completed")
+        .gte("created_at", monthStart);
+      const mine = (monthRows || []).filter((r: any) => r.user_id === user.id);
+      if (!cancelled) {
+        setMonthSales(mine.reduce((s: number, r: any) => s + Number(r.total || 0), 0));
+        setMonthCount(mine.length);
+        setWeekSales(
+          mine.filter((r: any) => r.created_at >= weekStart)
+            .reduce((s: number, r: any) => s + Number(r.total || 0), 0),
+        );
+      }
+
+      const totals = new Map<string, { sales: number; count: number }>();
+      for (const r of monthRows || []) {
+        const t = totals.get((r as any).user_id) || { sales: 0, count: 0 };
+        t.sales += Number((r as any).total || 0);
+        t.count += 1;
+        totals.set((r as any).user_id, t);
+      }
+      const topSeller = [...totals.entries()].sort((a, b) => b[1].sales - a[1].sales)[0]?.[0];
+      const fastestBiller = [...totals.entries()].sort((a, b) => b[1].count - a[1].count)[0]?.[0];
+
+      // Customer favorite + loyalty via customer_ledger
+      const { data: ledgerRows } = await supabase
+        .from("customer_ledger")
+        .select("customer_id, occurred_at, user_id")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .gte("occurred_at", monthStart);
+
+      const distinctByUser = new Map<string, Set<string>>();
+      for (const r of ledgerRows || []) {
+        const u = (r as any).user_id;
+        const c = (r as any).customer_id;
+        if (!u || !c) continue;
+        if (!distinctByUser.has(u)) distinctByUser.set(u, new Set());
+        distinctByUser.get(u)!.add(c);
+      }
+      const customerFavorite =
+        [...distinctByUser.entries()].sort((a, b) => b[1].size - a[1].size)[0]?.[0];
+
+      const myCustomers = distinctByUser.get(user.id) || new Set<string>();
+      let loyaltyCount = 0;
+      if (myCustomers.size > 0) {
+        const { data: prior } = await supabase
+          .from("customer_ledger")
+          .select("customer_id")
+          .eq("pharmacy_id", profile.pharmacy_id)
+          .lt("occurred_at", monthStart)
+          .in("customer_id", [...myCustomers]);
+        const priorSet = new Set((prior || []).map((r: any) => r.customer_id));
+        for (const c of myCustomers) if (priorSet.has(c)) loyaltyCount++;
+      }
+
+      if (!cancelled) {
+        setLoyalty(loyaltyCount);
+        setWinners({ topSeller, fastestBiller, customerFavorite });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, profile?.pharmacy_id]);
+
+  const commission = useMemo(
+    () => (monthSales * (commissionPercent || 0)) / 100,
+    [monthSales, commissionPercent],
+  );
+  const targetPct = monthlyTarget > 0
+    ? Math.min(100, Math.round((monthSales / monthlyTarget) * 100))
+    : 0;
+
+  const saveTarget = async () => {
+    if (!user?.id || !profile?.pharmacy_id || !isAdmin) return;
+    setSavingTarget(true);
+    const { error } = await supabase
+      .from("staff_settings" as any)
+      .upsert(
+        { pharmacy_id: profile.pharmacy_id, user_id: user.id, monthly_target: draftTarget },
+        { onConflict: "pharmacy_id,user_id" },
+      );
+    setSavingTarget(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setMonthlyTarget(draftTarget);
+    setEditingTarget(false);
+    toast({ title: "Target updated" });
+  };
 
   const getPasswordStrength = (pw: string) => {
     if (!pw) return { label: "", color: "", percent: 0 };
@@ -169,10 +275,6 @@ const Profile = () => {
     navigate("/login");
   };
 
-  const monthlyTarget = 500000;
-  const achievement = 400000;
-  const percent = Math.round((achievement / monthlyTarget) * 100);
-
   return (
     <div className="min-h-screen bg-background max-w-md mx-auto pb-10">
       {/* Header */}
@@ -257,22 +359,85 @@ const Profile = () => {
         </Card>
       </div>
 
-      {/* Monthly Target */}
+      {/* Personal performance — analytics grid */}
+      <div className="px-5 pb-4 grid grid-cols-2 gap-3">
+        <StatCard icon={<TrendingUp size={16} />} iconBg="bg-emerald-100 text-emerald-700"
+          label="This Month" value={fmt(monthSales)} sub={`${monthCount} sales`} />
+        <StatCard icon={<Calendar size={16} />} iconBg="bg-sky-100 text-sky-700"
+          label="This Week" value={fmt(weekSales)} />
+        <StatCard icon={<Coins size={16} />} iconBg="bg-amber-100 text-amber-700"
+          label="Commission" value={fmt(commission)} sub={`${commissionPercent || 0}% of sales`} />
+        <StatCard icon={<UsersIcon size={16} />} iconBg="bg-violet-100 text-violet-700"
+          label="Loyalty Score" value={String(loyalty)} sub="repeat customers" />
+      </div>
+
+      {/* Monthly Target — circular progress */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Monthly Target</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-foreground">Monthly Target</h2>
+            {isAdmin && !editingTarget && (
+              <button
+                onClick={() => { setDraftTarget(monthlyTarget); setEditingTarget(true); }}
+                className="p-1.5 rounded-full hover:bg-muted transition"
+                aria-label="Edit target"
+              >
+                <Pencil size={14} className="text-muted-foreground" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-5">
-            <CircularProgress percent={percent} />
+            <CircularProgress percent={targetPct} />
             <div className="flex-1 space-y-2">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Target</p>
-                <p className="text-sm font-bold text-foreground">৳{monthlyTarget.toLocaleString("en-IN")}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Achievement</p>
-                <p className="text-sm font-bold text-primary">৳{achievement.toLocaleString("en-IN")} ({percent}%)</p>
-              </div>
+              {editingTarget ? (
+                <>
+                  <Input
+                    type="number"
+                    value={draftTarget}
+                    onChange={(e) => setDraftTarget(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="h-9 rounded-xl"
+                    placeholder="Monthly target ৳"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={savingTarget} onClick={saveTarget}
+                      className="rounded-xl h-8 flex-1 bg-primary">
+                      <Check size={14} /> Save
+                    </Button>
+                    <Button size="sm" variant="outline" className="rounded-xl h-8"
+                      onClick={() => { setDraftTarget(monthlyTarget); setEditingTarget(false); }}>
+                      <X size={14} />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Target</p>
+                    <p className="text-sm font-bold text-foreground">৳{monthlyTarget.toLocaleString("en-IN")}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Achievement</p>
+                    <p className="text-sm font-bold text-primary">৳{Math.round(monthSales).toLocaleString("en-IN")} ({targetPct}%)</p>
+                  </div>
+                </>
+              )}
             </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Achievements */}
+      <div className="px-5 pb-4">
+        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Achievements</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <BadgeTile icon={<Award size={20} />} label="Top Seller"
+              earned={winners.topSeller === user?.id} color="amber" />
+            <BadgeTile icon={<Zap size={20} />} label="Fastest Biller"
+              earned={winners.fastestBiller === user?.id} color="sky" />
+            <BadgeTile icon={<Star size={20} />} label="Customer Favorite"
+              earned={winners.customerFavorite === user?.id} color="rose" />
           </div>
         </Card>
       </div>

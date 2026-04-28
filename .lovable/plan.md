@@ -1,68 +1,73 @@
-# Staff Management Dashboard
+## Goal
 
-Transform the current invite-only staff list into a performance hub with per-staff details, badges, targets, commission, and a pharmacy-wide broadcast.
+Make personal performance analytics part of every staff member's own **Profile** page (showing only their own data), and restrict **Manage Staff** strictly to admins.
 
-## What you'll see
+---
 
-**Manage Staff section (ShopProfile)**
-- A "Top Performer of the Month" card pinned at the top (gold accent, name + total sales).
-- An "Internal Broadcast" composer (admin only) with a single active notice — also visible to all staff on the home dashboard as a dismissible banner.
-- Staff cards now show: avatar, name (falls back to email), role, this month's sales total, a target progress bar, and a status dot (green = top performer, yellow = average, gray = pending invite).
-- Tapping a staff card navigates to `/staff/:userId`.
-- Existing invite/resend/revoke/remove controls are preserved.
+## 1. Personal Profile Page (`src/pages/Profile.tsx`)
 
-**Staff Performance Details page (`/staff/:userId`)**
-- Header: avatar, full name, role chip, Call + WhatsApp buttons (uses profile.phone).
-- Stat cards row: Monthly Sales, Weekly Sales, Commission Earned (auto), Loyalty Score (repeat customers count).
-- Circular Monthly Target tracker with current achievement %; admin sees an inline edit pencil to set target.
-- Badges grid: Gold Medal (Top Seller of month), Flash (Fastest Biller — most sale count), Star (Customer Favorite — most unique repeat customers). Computed from sales data; earned ones are colored, others are muted.
-- Earnings Summary: Basic Salary + Commission − Advances = Net Payable. Admin can edit basic salary, commission %, and advances inline.
-- Access: pharmacy admin OR the staff member themselves (read-only for the staff member).
+Replace the static "Monthly Target" card with a live analytics block — same visual language as the Staff Performance Details page, but always scoped to the logged-in user.
 
-## Database changes
+Keep:
+- Header, avatar uploader, name/pharmacy line
+- "User Identity" card
+- Security/password accordion
+- Log Out button
 
-Two new tables (RLS, no triggers, no destructive changes):
+Remove:
+- Hard-coded "Monthly Target" card (`monthlyTarget = 500000`, `achievement = 400000`)
 
-1. `staff_settings` — per-staff performance config
-   - Columns: `id uuid pk`, `pharmacy_id uuid not null`, `user_id uuid not null`, `monthly_target numeric default 0`, `commission_percent numeric default 0`, `basic_salary numeric default 0`, `advances numeric default 0`, `created_at`, `updated_at`. Unique `(pharmacy_id, user_id)`.
-   - RLS: SELECT for any pharmacy member (so the staff member can see their own settings); INSERT/UPDATE/DELETE only for `is_pharmacy_admin()` within the same pharmacy.
+Insert (directly under User Identity, in this order):
 
-2. `pharmacy_broadcasts` — single active notice per pharmacy
-   - Columns: `id uuid pk`, `pharmacy_id uuid not null`, `message text not null`, `created_by uuid not null`, `is_active boolean default true`, `created_at`, `updated_at`.
-   - RLS: SELECT for any pharmacy member; INSERT/UPDATE/DELETE only for admins of that pharmacy.
-   - Convention: only the latest `is_active = true` row per pharmacy is shown; saving a new one deactivates the previous one (handled in app code).
+1. **Analytics grid (2×2)** — same `StatCard` style:
+   - This Month — sum of `sales.total` where `user_id = me.id`, status `completed`, current month
+   - This Week — same filter, current ISO week (Mon-start)
+   - Commission — `monthSales × staff_settings.commission_percent / 100`
+   - Loyalty Score — count of distinct customers handled this month who also appear in `customer_ledger` before this month (same logic already in StaffPerformanceDetails)
 
-No changes to existing tables.
+2. **Monthly Target circular progress card** — large `CircularProgress` matching current Profile design, value = `monthSales / monthly_target`. Pencil/edit icon **only when `profile.role === 'admin'`** (non-admins see read-only).
 
-## Code changes
+3. **Achievements card** — three `BadgeTile`s (Top Seller, Fastest Biller, Customer Favorite) with the same auto-calculation rules as `StaffPerformanceDetails`. Earned-state determined by comparing the user against pharmacy-wide month winners.
 
-- **`src/pages/ShopProfile.tsx`** — replace the staff list rendering inside the existing accordion:
-  - Add broadcast composer (admin) at top of accordion content.
-  - Add Top Performer card.
-  - Replace each staff row with an enhanced card (avatar, name, role, monthly total, target progress bar, status dot). Whole card is clickable → `navigate('/staff/:userId')`. Existing invite/resend/revoke/remove icons stay on the right for pending rows.
-  - For pending invites (no user_id yet), keep the current minimal row — they have no metrics.
-  - Fetch profiles (`full_name`, `avatar_url`, `phone`) for accepted staff via `get_pharmacy_member_names` is name-only; we'll query `profiles` directly filtered by `pharmacy_id` (allowed by existing pharmacy-scoped logic isn't present — fall back to admin-only metric fetch). Since profile RLS only allows self-read, we'll add a new SECURITY DEFINER RPC `get_pharmacy_staff_overview()` returning `(user_id, full_name, avatar_url, phone, role, month_sales, month_count, target)` for the calling pharmacy. This avoids RLS pain and keeps one round trip.
+Data fetching: one effect on mount that runs the same queries as `StaffPerformanceDetails` but hard-coded to `userId = user.id`. Reuse the existing `staff_settings` row (read via `select` already permitted by current RLS — all pharmacy members can read pharmacy staff_settings rows; if we want stricter per-user reads, see "RLS notes" below).
 
-- **`src/pages/StaffPerformanceDetails.tsx`** (new) — full details page.
-  - Loads: staff profile (via new RPC `get_pharmacy_staff_profile(_user_id uuid)`), `staff_settings` row (auto-create on first admin save), aggregated sales for current month/week, repeat-customer count, badge winners.
-  - Aggregations done client-side from `sales` + `sale_items` + `customer_ledger` filtered by `user_id` and date range.
-  - Admin-only inline editors save to `staff_settings`.
-  - Guards: redirect non-admin users who aren't viewing their own row.
+To avoid duplication, extract the small visual helpers (`StatCard`, `CircularProgress`, `BadgeTile`) into a tiny shared module `src/components/staff/PerformanceWidgets.tsx` and import them from both `Profile.tsx` and `StaffPerformanceDetails.tsx`.
 
-- **`src/App.tsx`** — add route `/staff/:userId` → `StaffPerformanceDetails` inside `ProtectedRoute` (no `BlockSalesman` so a salesman can view their own page; the page itself enforces who can view).
+---
 
-- **`src/pages/Index.tsx`** — render a small dismissible broadcast banner at the top when an active broadcast exists for the pharmacy. Dismissal stored in `localStorage` keyed by broadcast id.
+## 2. Manage Staff (`src/pages/ShopProfile.tsx`)
 
-- **New RPCs (security definer)**:
-  - `get_pharmacy_staff_overview()` → list for the manage staff section.
-  - `get_pharmacy_staff_profile(_user_id uuid)` → single profile for details page (also enforces same-pharmacy check).
+The Shop Profile page itself stays accessible to everyone (shop info is useful to all staff), but the **Manage Staff accordion section is admin-only**:
 
-## Technical notes
+- Wrap the entire `AccordionItem value="manage-staff"` (and the surrounding "Top Performer" card / invite form / staff list) in `{isAdmin && ( … )}`.
+- Non-admins simply don't see the section.
 
-- Aesthetics: Tailwind, white cards, `rounded-2xl`/`rounded-xl`, soft `shadow-sm`, generous whitespace, emerald accents matching the existing ShopProfile look. Status dot is a 2.5×2.5 circle. Progress bar uses existing `Progress` component; circular target uses inline SVG.
-- Top performer = staff with highest current-month total. Status dots: top performer green; staff at ≥60% of personal target yellow; below = no dot. Pending invites: gray dot.
-- Commission Earned = `month_sales * commission_percent / 100` from `staff_settings`.
-- Loyalty Score = count of distinct customers in `customer_ledger` (entry_type='due' or sale_id-linked) handled by this user this month who also appear in any prior month.
-- Fastest Biller = highest count of completed sales this month. Customer Favorite = highest distinct customer count this month.
-- Mobile-first: stat cards stack 2-up on mobile, 4-up on `sm:`. Details page uses a sticky header with back button matching other pages.
-- No changes to invitation flow, no permission toggles, no audit logs.
+Direct route protection for `/staff/:userId`:
+- In `StaffPerformanceDetails.tsx` the existing guard already redirects when the visitor is neither admin nor the staff themselves. Update it to additionally redirect non-admins to `/profile` (instead of `navigate(-1)`) — so a salesman who hits `/staff/<someone-else-id>` lands on their own profile.
+- Salesmen/managers no longer need to click into `/staff/:userId` for themselves; their analytics live on `/profile`. We'll keep the route working (admins use it to view any staff member; a staff member viewing their own ID still works as a fallback).
+
+---
+
+## 3. RLS / data access
+
+Current state already supports the requirements:
+
+- `sales` SELECT policy: `pharmacy_id = get_user_pharmacy_id()` — every member can read pharmacy sales. We rely on **client-side filtering by `user_id = auth.uid()`** for the personal Profile cards. This matches how `StaffPerformanceDetails` already aggregates.
+- `staff_settings` SELECT policy: any pharmacy member can read; **only admins can INSERT/UPDATE/DELETE**. ✓ matches "non-admins read-only".
+- `customer_ledger` SELECT policy: pharmacy members can read — needed for loyalty / customer-favorite calculation. ✓
+
+No schema or policy changes are required. The "personal data only" rule is enforced in the UI (we never display other users' rows on `/profile`), and write-protection on targets/commissions is already enforced by RLS on `staff_settings`.
+
+---
+
+## Files
+
+**Edited**
+- `src/pages/Profile.tsx` — remove static target, add analytics grid + dynamic target + achievements
+- `src/pages/ShopProfile.tsx` — wrap Manage Staff accordion in `isAdmin` guard
+- `src/pages/StaffPerformanceDetails.tsx` — redirect denied users to `/profile`; import shared widgets
+
+**Created**
+- `src/components/staff/PerformanceWidgets.tsx` — shared `StatCard`, `CircularProgress`, `BadgeTile` (extracted from current `StaffPerformanceDetails.tsx` to avoid duplication)
+
+No DB migrations, no new RPCs, no edge functions.
