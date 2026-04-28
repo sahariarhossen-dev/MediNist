@@ -604,6 +604,36 @@ export type Database = {
         }
         Relationships: []
       }
+      pharmacy_broadcasts: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          is_active: boolean
+          message: string
+          pharmacy_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          is_active?: boolean
+          message: string
+          pharmacy_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_active?: boolean
+          message?: string
+          pharmacy_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pharmacy_settings: {
         Row: {
           pharmacy_id: string
@@ -830,6 +860,42 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_settings: {
+        Row: {
+          advances: number
+          basic_salary: number
+          commission_percent: number
+          created_at: string
+          id: string
+          monthly_target: number
+          pharmacy_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          advances?: number
+          basic_salary?: number
+          commission_percent?: number
+          created_at?: string
+          id?: string
+          monthly_target?: number
+          pharmacy_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          advances?: number
+          basic_salary?: number
+          commission_percent?: number
+          created_at?: string
+          id?: string
+          monthly_target?: number
+          pharmacy_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -886,6 +952,30 @@ export type Database = {
           last_seen: string
           role: string
           user_id: string
+        }[]
+      }
+      get_pharmacy_staff_overview: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          full_name: string
+          month_count: number
+          month_sales: number
+          monthly_target: number
+          phone: string
+          role: string
+          user_id: string
+        }[]
+      }
+      get_pharmacy_staff_profile: {
+        Args: { _user_id: string }
+        Returns: {
+          avatar_url: string
+          full_name: string
+          id: string
+          pharmacy_id: string
+          phone: string
+          role: string
         }[]
       }
       get_user_pharmacy_id: { Args: never; Returns: string }
