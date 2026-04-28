@@ -1,13 +1,19 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown,
+  Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  StatCard, BadgeTile, fmtBdt as fmt, startOfMonthIso, startOfWeekIso,
+} from "@/components/staff/PerformanceWidgets";
 
 const CircularProgress = ({ percent }: { percent: number }) => {
   const r = 54;
@@ -53,6 +59,133 @@ const Profile = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+
+  // ---- Personal performance analytics (self only) ----
+  const isAdmin = profile?.role === "admin";
+  const [monthSales, setMonthSales] = useState(0);
+  const [monthCount, setMonthCount] = useState(0);
+  const [weekSales, setWeekSales] = useState(0);
+  const [loyalty, setLoyalty] = useState(0);
+  const [monthlyTarget, setMonthlyTarget] = useState(0);
+  const [commissionPercent, setCommissionPercent] = useState(0);
+  const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [draftTarget, setDraftTarget] = useState(0);
+  const [savingTarget, setSavingTarget] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id || !profile?.pharmacy_id) return;
+    let cancelled = false;
+    (async () => {
+      const monthStart = startOfMonthIso();
+      const weekStart = startOfWeekIso();
+
+      // Settings (target + commission)
+      const { data: setData } = await supabase
+        .from("staff_settings" as any)
+        .select("monthly_target, commission_percent")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled && setData) {
+        const s = setData as unknown as { monthly_target: number; commission_percent: number };
+        setMonthlyTarget(Number(s.monthly_target || 0));
+        setDraftTarget(Number(s.monthly_target || 0));
+        setCommissionPercent(Number(s.commission_percent || 0));
+      }
+
+      // Pharmacy-wide month sales (needed both for personal totals + winners)
+      const { data: monthRows } = await supabase
+        .from("sales")
+        .select("id, total, created_at, user_id")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("status", "completed")
+        .gte("created_at", monthStart);
+      const mine = (monthRows || []).filter((r: any) => r.user_id === user.id);
+      if (!cancelled) {
+        setMonthSales(mine.reduce((s: number, r: any) => s + Number(r.total || 0), 0));
+        setMonthCount(mine.length);
+        setWeekSales(
+          mine.filter((r: any) => r.created_at >= weekStart)
+            .reduce((s: number, r: any) => s + Number(r.total || 0), 0),
+        );
+      }
+
+      const totals = new Map<string, { sales: number; count: number }>();
+      for (const r of monthRows || []) {
+        const t = totals.get((r as any).user_id) || { sales: 0, count: 0 };
+        t.sales += Number((r as any).total || 0);
+        t.count += 1;
+        totals.set((r as any).user_id, t);
+      }
+      const topSeller = [...totals.entries()].sort((a, b) => b[1].sales - a[1].sales)[0]?.[0];
+      const fastestBiller = [...totals.entries()].sort((a, b) => b[1].count - a[1].count)[0]?.[0];
+
+      // Customer favorite + loyalty via customer_ledger
+      const { data: ledgerRows } = await supabase
+        .from("customer_ledger")
+        .select("customer_id, occurred_at, user_id")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .gte("occurred_at", monthStart);
+
+      const distinctByUser = new Map<string, Set<string>>();
+      for (const r of ledgerRows || []) {
+        const u = (r as any).user_id;
+        const c = (r as any).customer_id;
+        if (!u || !c) continue;
+        if (!distinctByUser.has(u)) distinctByUser.set(u, new Set());
+        distinctByUser.get(u)!.add(c);
+      }
+      const customerFavorite =
+        [...distinctByUser.entries()].sort((a, b) => b[1].size - a[1].size)[0]?.[0];
+
+      const myCustomers = distinctByUser.get(user.id) || new Set<string>();
+      let loyaltyCount = 0;
+      if (myCustomers.size > 0) {
+        const { data: prior } = await supabase
+          .from("customer_ledger")
+          .select("customer_id")
+          .eq("pharmacy_id", profile.pharmacy_id)
+          .lt("occurred_at", monthStart)
+          .in("customer_id", [...myCustomers]);
+        const priorSet = new Set((prior || []).map((r: any) => r.customer_id));
+        for (const c of myCustomers) if (priorSet.has(c)) loyaltyCount++;
+      }
+
+      if (!cancelled) {
+        setLoyalty(loyaltyCount);
+        setWinners({ topSeller, fastestBiller, customerFavorite });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, profile?.pharmacy_id]);
+
+  const commission = useMemo(
+    () => (monthSales * (commissionPercent || 0)) / 100,
+    [monthSales, commissionPercent],
+  );
+  const targetPct = monthlyTarget > 0
+    ? Math.min(100, Math.round((monthSales / monthlyTarget) * 100))
+    : 0;
+
+  const saveTarget = async () => {
+    if (!user?.id || !profile?.pharmacy_id || !isAdmin) return;
+    setSavingTarget(true);
+    const { error } = await supabase
+      .from("staff_settings" as any)
+      .upsert(
+        { pharmacy_id: profile.pharmacy_id, user_id: user.id, monthly_target: draftTarget },
+        { onConflict: "pharmacy_id,user_id" },
+      );
+    setSavingTarget(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setMonthlyTarget(draftTarget);
+    setEditingTarget(false);
+    toast({ title: "Target updated" });
+  };
 
   const getPasswordStrength = (pw: string) => {
     if (!pw) return { label: "", color: "", percent: 0 };
@@ -168,10 +301,6 @@ const Profile = () => {
     await signOut();
     navigate("/login");
   };
-
-  const monthlyTarget = 500000;
-  const achievement = 400000;
-  const percent = Math.round((achievement / monthlyTarget) * 100);
 
   return (
     <div className="min-h-screen bg-background max-w-md mx-auto pb-10">
