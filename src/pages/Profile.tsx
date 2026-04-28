@@ -14,34 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   StatCard, BadgeTile, fmtBdt as fmt, startOfMonthIso, startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
-
-const CircularProgress = ({ percent }: { percent: number }) => {
-  const r = 54;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (percent / 100) * circ;
-
-  return (
-    <svg width="140" height="140" viewBox="0 0 128 128">
-      <circle cx="64" cy="64" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="10" />
-      <circle
-        cx="64" cy="64" r={r} fill="none"
-        stroke="hsl(var(--primary))"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={offset}
-        transform="rotate(-90 64 64)"
-        className="transition-all duration-700"
-      />
-      <text x="64" y="58" textAnchor="middle" className="fill-foreground text-2xl font-bold" fontSize="22">
-        {percent}%
-      </text>
-      <text x="64" y="76" textAnchor="middle" className="fill-muted-foreground" fontSize="9">
-        Achieved
-      </text>
-    </svg>
-  );
-};
+import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
 
 const Profile = () => {
   const navigate = useNavigate();
