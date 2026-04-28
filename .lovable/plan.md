@@ -1,35 +1,24 @@
 ## Goal
+Make the quantity input on the New Sale page auto-select its current value when focused/clicked, so typing a new number replaces the existing one (e.g., typing "20" when "1" is shown results in "20", not "120").
 
-On the Daily Transactions page, the middle "Transactions" list should only show **manual cash flow** entries logged by Owner/Manager. Auto-generated `Medicine Sale` (`sale_cash`) and `Due Payment` (`due_collection`) rows must be hidden from this list, but must still flow into the header totals (Total Sales, Cash Sales, Cash in Hand) and the Daily Closing Summary.
+## Change
+**File:** `src/pages/CreateSale.tsx` (line ~657–663)
 
-## Scope of change
+Add `onFocus` and `onClick` handlers to the quantity `<input>` that call `e.currentTarget.select()`. This highlights all existing text the moment the field gains focus or is tapped, both on desktop and mobile.
 
-Single file: `src/pages/DailyTransactions.tsx`
+```tsx
+<input
+  type="number"
+  min={1}
+  value={item.quantity}
+  onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
+  onFocus={(e) => e.currentTarget.select()}
+  onClick={(e) => e.currentTarget.select()}
+  className="w-9 font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1 text-xs text-center"
+/>
+```
 
-Currently `feedItems` only filters out `due_collection`, so any `cash_transactions` row with category `sale_cash` (e.g. the "Md Sahariar Hossen · Medicine Sale" row in the screenshot) still appears in the middle list. Calculations already live on separate memos (`salesTotal`, `cashSalesTotal`, `dueReceived`, `cashInInvestments`, `totalPayments`, `cashInHand`) that read from `salesRows` and `txs` directly, so tightening the feed filter won't affect any totals.
-
-## Changes
-
-1. **Tighten the feed filter** (`feedItems` memo, ~line 178):
-   - Exclude both `sale_cash` and `due_collection` categories.
-   - Keep the remaining categories visible: `other_in` (manual cash in / investments), `expense`, `supplier_payment`, `other_out` (manual payments).
-
-   Effective allow-list: `other_in`, `expense`, `supplier_payment`, `other_out`.
-
-2. **Update "See All" link gating** so it stays consistent with the new filter (still based on `feedItems.length > 5`, no logic change needed beyond the filter above).
-
-3. **Update the empty-state copy** (already says "No manual transactions logged for this date." — keep as-is, it now matches the behavior precisely).
-
-4. **No changes** to:
-   - `salesRows` query or `salesTotal` (Total Sales card and Closing Summary stay correct).
-   - `cashSalesTotal`, `dueReceived`, `cashInInvestments`, `totalPayments`, `cashInHand` formulas.
-   - Daily Closing Summary block.
-   - `AllTransactions.tsx` page — the "See All" view continues to show the full unfiltered manual ledger including auto entries, since it's the audit view. (If you'd prefer it filtered too, say so and I'll mirror the filter there.)
-
-## Verification
-
-- The "Medicine Sale" row from the screenshot disappears from the middle list.
-- Header "Total Sales" still shows ৳963 and "Cash Sales" ৳787.
-- "Cash in Hand" remains ৳6,732 (unchanged formula).
-- Daily Closing Summary totals unchanged.
-- Logging a manual investment/expense via the + button still appears in the list.
+## Notes
+- No other logic, styling, or layout is touched.
+- `onClick` is added in addition to `onFocus` because some mobile browsers place the caret on tap without re-triggering selection from `onFocus` alone.
+- The +/- buttons and `updateQuantity` behavior remain unchanged.
