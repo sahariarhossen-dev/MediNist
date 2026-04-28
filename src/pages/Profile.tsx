@@ -386,22 +386,85 @@ const Profile = () => {
         </Card>
       </div>
 
-      {/* Monthly Target */}
+      {/* Personal performance — analytics grid */}
+      <div className="px-5 pb-4 grid grid-cols-2 gap-3">
+        <StatCard icon={<TrendingUp size={16} />} iconBg="bg-emerald-100 text-emerald-700"
+          label="This Month" value={fmt(monthSales)} sub={`${monthCount} sales`} />
+        <StatCard icon={<Calendar size={16} />} iconBg="bg-sky-100 text-sky-700"
+          label="This Week" value={fmt(weekSales)} />
+        <StatCard icon={<Coins size={16} />} iconBg="bg-amber-100 text-amber-700"
+          label="Commission" value={fmt(commission)} sub={`${commissionPercent || 0}% of sales`} />
+        <StatCard icon={<UsersIcon size={16} />} iconBg="bg-violet-100 text-violet-700"
+          label="Loyalty Score" value={String(loyalty)} sub="repeat customers" />
+      </div>
+
+      {/* Monthly Target — circular progress */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Monthly Target</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-foreground">Monthly Target</h2>
+            {isAdmin && !editingTarget && (
+              <button
+                onClick={() => { setDraftTarget(monthlyTarget); setEditingTarget(true); }}
+                className="p-1.5 rounded-full hover:bg-muted transition"
+                aria-label="Edit target"
+              >
+                <Pencil size={14} className="text-muted-foreground" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-5">
-            <CircularProgress percent={percent} />
+            <CircularProgress percent={targetPct} />
             <div className="flex-1 space-y-2">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Target</p>
-                <p className="text-sm font-bold text-foreground">৳{monthlyTarget.toLocaleString("en-IN")}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Achievement</p>
-                <p className="text-sm font-bold text-primary">৳{achievement.toLocaleString("en-IN")} ({percent}%)</p>
-              </div>
+              {editingTarget ? (
+                <>
+                  <Input
+                    type="number"
+                    value={draftTarget}
+                    onChange={(e) => setDraftTarget(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="h-9 rounded-xl"
+                    placeholder="Monthly target ৳"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={savingTarget} onClick={saveTarget}
+                      className="rounded-xl h-8 flex-1 bg-primary">
+                      <Check size={14} /> Save
+                    </Button>
+                    <Button size="sm" variant="outline" className="rounded-xl h-8"
+                      onClick={() => { setDraftTarget(monthlyTarget); setEditingTarget(false); }}>
+                      <X size={14} />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Target</p>
+                    <p className="text-sm font-bold text-foreground">৳{monthlyTarget.toLocaleString("en-IN")}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Achievement</p>
+                    <p className="text-sm font-bold text-primary">৳{Math.round(monthSales).toLocaleString("en-IN")} ({targetPct}%)</p>
+                  </div>
+                </>
+              )}
             </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Achievements */}
+      <div className="px-5 pb-4">
+        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Achievements</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <BadgeTile icon={<Award size={20} />} label="Top Seller"
+              earned={winners.topSeller === user?.id} color="amber" />
+            <BadgeTile icon={<Zap size={20} />} label="Fastest Biller"
+              earned={winners.fastestBiller === user?.id} color="sky" />
+            <BadgeTile icon={<Star size={20} />} label="Customer Favorite"
+              earned={winners.customerFavorite === user?.id} color="rose" />
           </div>
         </Card>
       </div>
