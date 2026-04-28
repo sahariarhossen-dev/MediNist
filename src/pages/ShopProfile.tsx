@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent, Link2, Copy } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent, Link2, Copy, Megaphone, Trophy, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
@@ -35,6 +36,18 @@ interface StaffMember {
   created_at: string;
   token?: string | null;
   expires_at?: string | null;
+  user_id?: string | null;
+}
+
+interface StaffOverviewRow {
+  user_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  phone: string | null;
+  role: string | null;
+  month_sales: number;
+  month_count: number;
+  monthly_target: number;
 }
 
 const ShopProfile = () => {
@@ -42,6 +55,10 @@ const ShopProfile = () => {
   const { profile } = useAuth();
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [overview, setOverview] = useState<StaffOverviewRow[]>([]);
+  const [broadcast, setBroadcast] = useState<{ id: string; message: string } | null>(null);
+  const [broadcastDraft, setBroadcastDraft] = useState("");
+  const [savingBroadcast, setSavingBroadcast] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "", proprietor_name: "", address: "", phone: "", email: "",
@@ -64,7 +81,11 @@ const ShopProfile = () => {
   useEffect(() => {
     if (profile?.pharmacy_id) {
       fetchPharmacy();
-      if (isAdmin) fetchStaff();
+      if (isAdmin) {
+        fetchStaff();
+      }
+      fetchOverview();
+      fetchBroadcast();
     }
   }, [profile?.pharmacy_id, isAdmin]);
 
@@ -124,6 +145,83 @@ const ShopProfile = () => {
       .eq("pharmacy_id", profile!.pharmacy_id!)
       .order("created_at", { ascending: false });
     if (data) setStaff(data as unknown as StaffMember[]);
+  };
+
+  const fetchOverview = async () => {
+    const { data } = await supabase.rpc("get_pharmacy_staff_overview" as any);
+    if (data) {
+      const rows = (data as unknown as StaffOverviewRow[])
+        .map((r) => ({
+          ...r,
+          month_sales: Number(r.month_sales || 0),
+          monthly_target: Number(r.monthly_target || 0),
+          month_count: Number(r.month_count || 0),
+        }))
+        .sort((a, b) => b.month_sales - a.month_sales);
+      setOverview(rows);
+    }
+  };
+
+  const fetchBroadcast = async () => {
+    const { data } = await supabase
+      .from("pharmacy_broadcasts" as any)
+      .select("id, message")
+      .eq("pharmacy_id", profile!.pharmacy_id!)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      const b = data[0] as { id: string; message: string };
+      setBroadcast(b);
+      setBroadcastDraft(b.message);
+    } else {
+      setBroadcast(null);
+      setBroadcastDraft("");
+    }
+  };
+
+  const handleSaveBroadcast = async () => {
+    if (!profile?.pharmacy_id || !profile?.id) return;
+    const msg = broadcastDraft.trim();
+    if (!msg) {
+      toast({ title: "Notice is empty", variant: "destructive" });
+      return;
+    }
+    setSavingBroadcast(true);
+    // Deactivate existing active broadcasts first
+    await supabase
+      .from("pharmacy_broadcasts" as any)
+      .update({ is_active: false } as any)
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .eq("is_active", true);
+    const { error } = await supabase.from("pharmacy_broadcasts" as any).insert({
+      pharmacy_id: profile.pharmacy_id,
+      created_by: profile.id,
+      message: msg,
+      is_active: true,
+    });
+    setSavingBroadcast(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Notice posted to all staff" });
+    fetchBroadcast();
+  };
+
+  const handleClearBroadcast = async () => {
+    if (!broadcast) return;
+    const { error } = await supabase
+      .from("pharmacy_broadcasts" as any)
+      .update({ is_active: false } as any)
+      .eq("id", broadcast.id);
+    if (error) {
+      toast({ title: "Failed to clear", description: error.message, variant: "destructive" });
+      return;
+    }
+    setBroadcast(null);
+    setBroadcastDraft("");
+    toast({ title: "Notice cleared" });
   };
 
   const handleImageUpload = async (type: "logo" | "cover", e: React.ChangeEvent<HTMLInputElement>) => {
