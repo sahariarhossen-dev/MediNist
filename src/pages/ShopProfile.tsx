@@ -171,7 +171,7 @@ const ShopProfile = () => {
       .order("created_at", { ascending: false })
       .limit(1);
     if (data && data.length > 0) {
-      const b = data[0] as { id: string; message: string };
+      const b = data[0] as unknown as { id: string; message: string };
       setBroadcast(b);
       setBroadcastDraft(b.message);
     } else {
