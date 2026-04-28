@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
 import AppHeader from "@/components/AppHeader";
+import BroadcastBanner from "@/components/BroadcastBanner";
 import { isLowStock } from "@/lib/stockUtils";
 
 
@@ -275,6 +276,8 @@ const Index = () => {
     <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
       <AppHeader />
+
+      <BroadcastBanner />
 
       {/* Business Insights */}
       <div className="px-page pt-3 pb-2">

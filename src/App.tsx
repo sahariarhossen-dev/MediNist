@@ -19,6 +19,7 @@ import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
 import Profile from "./pages/Profile.tsx";
 import ShopProfile from "./pages/ShopProfile.tsx";
+import StaffPerformanceDetails from "./pages/StaffPerformanceDetails.tsx";
 import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
@@ -78,6 +79,7 @@ const App = () => (
             <Route path="/catalog-search" element={<ProtectedRoute><CatalogSearch /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
+            <Route path="/staff/:userId" element={<ProtectedRoute><StaffPerformanceDetails /></ProtectedRoute>} />
             <Route path="/more/daily-transactions" element={<ProtectedRoute><BlockSalesman><DailyTransactions /></BlockSalesman></ProtectedRoute>} />
             <Route path="/more/all-transactions" element={<ProtectedRoute><BlockSalesman><AllTransactions /></BlockSalesman></ProtectedRoute>} />
             <Route path="/personal-report" element={<ProtectedRoute><BlockSalesman><PersonalReport /></BlockSalesman></ProtectedRoute>} />
