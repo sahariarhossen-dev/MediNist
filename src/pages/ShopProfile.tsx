@@ -678,6 +678,7 @@ const ShopProfile = () => {
               </div>
             </AccordionContent>
           </AccordionItem>
+          )}
 
           {/* Billing Customization */}
           <AccordionItem value="billing" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
