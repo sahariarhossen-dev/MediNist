@@ -11,6 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import {
+  StatCard,
+  SmallCircularProgress as CircularProgress,
+  BadgeTile,
+  fmtBdt as fmt,
+  startOfMonthIso,
+  startOfWeekIso,
+} from "@/components/staff/PerformanceWidgets";
 
 interface StaffProfile {
   id: string;
@@ -33,20 +41,6 @@ interface BadgeWinners {
   fastestBiller?: string;
   customerFavorite?: string;
 }
-
-const fmt = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
-
-const startOfMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
-};
-const startOfWeek = () => {
-  const d = new Date();
-  const diff = (d.getDay() + 6) % 7; // Monday-start
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
 
 const StaffPerformanceDetails = () => {
   const { userId } = useParams<{ userId: string }>();
@@ -75,7 +69,7 @@ const StaffPerformanceDetails = () => {
     if (!userId || !me?.pharmacy_id) return;
     if (!isAdmin && !isSelf) {
       toast({ title: "Access denied", variant: "destructive" });
-      navigate(-1);
+      navigate("/profile", { replace: true });
       return;
     }
     let cancelled = false;
@@ -110,8 +104,8 @@ const StaffPerformanceDetails = () => {
         setDraft(s);
       }
 
-      const monthStart = startOfMonth();
-      const weekStart = startOfWeek();
+      const monthStart = startOfMonthIso();
+      const weekStart = startOfWeekIso();
 
       // 3. Month sales for this user
       const { data: monthRows } = await supabase
