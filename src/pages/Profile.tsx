@@ -478,13 +478,22 @@ const Profile = () => {
               <p className="text-sm font-semibold tabular-nums text-emerald-700">+ {fmt(commission)}</p>
             </div>
             <div className="flex items-center justify-between py-1">
-              <p className="text-sm text-muted-foreground">Advances</p>
-              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(advances)}</p>
+              <p className="text-sm text-muted-foreground">Advances (This Month)</p>
+              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(monthAdvanceTotal)}</p>
             </div>
+            {user?.id && profile?.pharmacy_id && (
+              <button
+                type="button"
+                onClick={() => setAdvancesSheetOpen(true)}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View advance history →
+              </button>
+            )}
             <div className="border-t border-border mt-2 pt-3 flex items-center justify-between">
               <p className="text-sm font-bold text-foreground">Remaining Salary</p>
               <p className="text-lg font-bold text-primary tabular-nums">
-                {fmt(basicSalary + commission - advances)}
+                {fmt(basicSalary + commission - monthAdvanceTotal)}
               </p>
             </div>
           </div>
