@@ -500,14 +500,27 @@ const StaffPerformanceDetails = () => {
                 value={draft.commission_percent}
                 onChange={(v) => setDraft({ ...draft, commission_percent: v })}
               />
-              <LabeledInput
-                label="Advances"
-                value={draft.advances}
-                onChange={(v) => setDraft({ ...draft, advances: v })}
-              />
+              <div className="rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 flex items-center justify-between">
+                <p className="text-[11px] text-rose-700">Total Advances Taken (This Month)</p>
+                <p className="text-sm font-semibold tabular-nums text-rose-600">
+                  − {fmt(monthAdvanceTotal)}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground w-32 shrink-0">New Advance</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={newAdvance}
+                  placeholder="e.g. 500"
+                  onChange={(e) => setNewAdvance(e.target.value)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="h-9 rounded-xl flex-1"
+                />
+              </div>
               <button
                 type="button"
-                onClick={() => navigate("/more/all-transactions")}
+                onClick={() => setAdvancesSheetOpen(true)}
                 className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
               >
                 View in Transactions →
@@ -525,7 +538,7 @@ const StaffPerformanceDetails = () => {
                   size="sm"
                   variant="outline"
                   className="rounded-xl h-9"
-                  onClick={() => { setDraft(settings); setEditing(null); }}
+                  onClick={() => { setDraft(settings); setNewAdvance(""); setEditing(null); }}
                 >
                   <X size={14} />
                 </Button>
@@ -535,16 +548,14 @@ const StaffPerformanceDetails = () => {
             <>
               <Row label="Basic Salary" value={fmt(settings.basic_salary || 0)} />
               <Row label={`Commission (${settings.commission_percent || 0}%)`} value={`+ ${fmt(commission)}`} positive />
-              <Row label="Advances" value={`− ${fmt(settings.advances || 0)}`} negative />
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => navigate("/more/all-transactions")}
-                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
-                >
-                  View in Transactions →
-                </button>
-              )}
+              <Row label="Advances (This Month)" value={`− ${fmt(monthAdvanceTotal)}`} negative />
+              <button
+                type="button"
+                onClick={() => setAdvancesSheetOpen(true)}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View in Transactions →
+              </button>
               <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between">
                 <p className="text-sm font-bold text-gray-900">Net Payable</p>
                 <p className="text-lg font-bold text-emerald-700 tabular-nums">{fmt(netPayable)}</p>
@@ -579,6 +590,16 @@ const StaffPerformanceDetails = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {staff && me?.pharmacy_id && userId && (
+        <StaffAdvancesSheet
+          open={advancesSheetOpen}
+          onOpenChange={setAdvancesSheetOpen}
+          staffName={staff.full_name || "Staff"}
+          userId={userId}
+          pharmacyId={me.pharmacy_id}
+        />
+      )}
     </div>
   );
 };
