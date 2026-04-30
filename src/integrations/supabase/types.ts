@@ -652,6 +652,54 @@ export type Database = {
         }
         Relationships: []
       }
+      product_targets: {
+        Row: {
+          achieved_at: string | null
+          created_at: string
+          created_by: string
+          current_progress: number
+          id: string
+          incentive_description: string
+          medicine_id: string
+          medicine_name: string
+          pharmacy_id: string
+          target_month: string
+          target_quantity: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          achieved_at?: string | null
+          created_at?: string
+          created_by: string
+          current_progress?: number
+          id?: string
+          incentive_description: string
+          medicine_id: string
+          medicine_name: string
+          pharmacy_id: string
+          target_month: string
+          target_quantity: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          achieved_at?: string | null
+          created_at?: string
+          created_by?: string
+          current_progress?: number
+          id?: string
+          incentive_description?: string
+          medicine_id?: string
+          medicine_name?: string
+          pharmacy_id?: string
+          target_month?: string
+          target_quantity?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -979,6 +1027,16 @@ export type Database = {
         }[]
       }
       get_user_pharmacy_id: { Args: never; Returns: string }
+      increment_product_target_progress: {
+        Args: {
+          _medicine_id: string
+          _occurred_at: string
+          _pharmacy_id: string
+          _qty: number
+          _user_id: string
+        }
+        Returns: undefined
+      }
       is_pharmacy_admin: { Args: never; Returns: boolean }
       search_medicines: {
         Args: { _pharmacy_id: string; _query: string }
