@@ -449,6 +449,33 @@ const Profile = () => {
         </Card>
       </div>
 
+      {/* Earnings This Month */}
+      <div className="px-5 pb-4">
+        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Earnings This Month</h2>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Basic Salary</p>
+              <p className="text-sm font-semibold tabular-nums text-foreground">{fmt(basicSalary)}</p>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Commission ({commissionPercent || 0}%)</p>
+              <p className="text-sm font-semibold tabular-nums text-emerald-700">+ {fmt(commission)}</p>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Advances</p>
+              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(advances)}</p>
+            </div>
+            <div className="border-t border-border mt-2 pt-3 flex items-center justify-between">
+              <p className="text-sm font-bold text-foreground">Remaining Salary</p>
+              <p className="text-lg font-bold text-primary tabular-nums">
+                {fmt(basicSalary + commission - advances)}
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       {/* Security & Password */}
       <div className="px-5 pb-4">
         <Card className="border-0 shadow-sm rounded-2xl bg-card overflow-hidden">
