@@ -16,6 +16,7 @@ import {
 } from "@/components/staff/PerformanceWidgets";
 import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
 import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
+import ProductTargetsList from "@/components/staff/ProductTargetsList";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -448,6 +449,18 @@ const Profile = () => {
           </div>
         </Card>
       </div>
+
+      {/* My Product Targets */}
+      {user?.id && profile?.pharmacy_id && (
+        <div className="px-5 pb-4">
+          <ProductTargetsList
+            pharmacyId={profile.pharmacy_id}
+            userId={user.id}
+            isAdmin={false}
+            hideWhenEmpty
+          />
+        </div>
+      )}
 
       {/* Achievements */}
       <div className="px-5 pb-4">
