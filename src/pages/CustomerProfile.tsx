@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus, ShoppingCart, MapPin, FileText, MinusCircle } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import QuickAddCustomerSheet, { type CustomerLite } from "@/components/customers/QuickAddCustomerSheet";
 import ReceivePaymentSheet from "@/components/customers/ReceivePaymentSheet";
+import AddManualDueSheet from "@/components/customers/AddManualDueSheet";
 import AddPrescriptionSheet, { type Prescription } from "@/components/customers/AddPrescriptionSheet";
 import LedgerTimeline, { type LedgerEntry } from "@/components/customers/LedgerTimeline";
 import PrescriptionCard from "@/components/customers/PrescriptionCard";
@@ -28,6 +29,7 @@ const CustomerProfile = () => {
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [dueOpen, setDueOpen] = useState(false);
   const [prescOpen, setPrescOpen] = useState(false);
   const [editingPresc, setEditingPresc] = useState<Prescription | null>(null);
   const [selectedPrescIds, setSelectedPrescIds] = useState<Set<string>>(new Set());
@@ -81,14 +83,20 @@ const CustomerProfile = () => {
     navigate(`/create-sale?customer=${customer.id}&prescribe=${ids}`);
   };
 
-  const totals = ledger.reduce(
+  const now = new Date();
+  const monthYear = now.getFullYear();
+  const monthIdx = now.getMonth();
+  const monthly = ledger.reduce(
     (acc, e) => {
-      if (e.entry_type === "due") acc.due += Number(e.amount);
-      else acc.payment += Number(e.amount);
+      const d = new Date(e.occurred_at);
+      if (d.getFullYear() !== monthYear || d.getMonth() !== monthIdx) return acc;
+      if (e.entry_type === "due") acc.sales += Number(e.amount);
+      else acc.paid += Number(e.amount);
       return acc;
     },
-    { due: 0, payment: 0 },
+    { sales: 0, paid: 0 },
   );
+  const monthLabel = now.toLocaleString("en-US", { month: "long" });
 
   const handleDeletePresc = async (p: Prescription) => {
     if (!confirm(`Delete "${p.medicine_name}"?`)) return;
@@ -133,39 +141,75 @@ const CustomerProfile = () => {
       <AppHeader />
 
       <div className="flex items-center justify-between px-page pt-3 pb-2">
-        <button onClick={() => navigate("/more/customers")} className="flex items-center gap-2 text-gray-800">
+        <button onClick={() => navigate("/more/customers")} className="flex items-center gap-1.5 text-gray-700">
           <ArrowLeft size={20} />
-          <span className="font-semibold text-fluid-base truncate max-w-[200px]">{customer.name}</span>
-        </button>
-        <button onClick={() => setEditOpen(true)} className="p-2 rounded-lg hover:bg-white">
-          <Pencil size={16} className="text-gray-500" />
+          <span className="text-sm font-medium">Customers</span>
         </button>
       </div>
 
-      {customer.phone && (
-        <div className="px-page">
-          <a href={`tel:${customer.phone}`} className="inline-flex items-center gap-1 text-fluid-xs text-gray-500">
-            <Phone className="w-3.5 h-3.5" /> {customer.phone}
-          </a>
-        </div>
-      )}
-
-      {/* Balance Card */}
-      <div className="mx-page mt-3 bg-white rounded-2xl p-4 shadow-sm">
+      {/* Identity Card */}
+      <div className="mx-page mt-1 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-fluid-xs text-gray-500">{dueLabel}</p>
-            <p className={`text-fluid-xl font-extrabold tabular-nums ${dueColor}`}>৳{formatBDT(Math.abs(due))}</p>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-[11px] text-red-600 font-semibold">Sales ৳{formatBDT(totals.due)}</span>
-              <span className="text-[11px] text-green-600 font-semibold">Paid ৳{formatBDT(totals.payment)}</span>
-            </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-bold text-gray-900 truncate">{customer.name}</p>
+            {customer.phone && (
+              <a href={`tel:${customer.phone}`} className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700">
+                <Phone className="w-3.5 h-3.5" /> {customer.phone}
+              </a>
+            )}
           </div>
+          <button onClick={() => setEditOpen(true)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50">
+            <Pencil size={15} />
+          </button>
+        </div>
+        {(customer.address || customer.notes) && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+            {customer.address && (
+              <div className="flex items-start gap-2 text-xs text-gray-600">
+                <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <span className="break-words">{customer.address}</span>
+              </div>
+            )}
+            {customer.notes && (
+              <div className="flex items-start gap-2 bg-gray-50 rounded-lg p-2">
+                <FileText className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <span className="text-[11px] italic text-gray-600 break-words">{customer.notes}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Financial Card */}
+      <div className="mx-page mt-3 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{dueLabel}</p>
+          <p className={`text-3xl font-extrabold tabular-nums ${dueColor} mt-0.5`}>৳{formatBDT(Math.abs(due))}</p>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2">
+          <div className="bg-red-50/60 rounded-xl px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-red-600/80">{monthLabel} Sales</p>
+            <p className="text-base font-bold tabular-nums text-red-700 mt-0.5">৳{formatBDT(monthly.sales)}</p>
+          </div>
+          <div className="bg-green-50/60 rounded-xl px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700/80">{monthLabel} Paid</p>
+            <p className="text-base font-bold tabular-nums text-green-700 mt-0.5">৳{formatBDT(monthly.paid)}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             onClick={() => setPayOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold whitespace-nowrap shadow-sm"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm"
           >
             <HandCoins className="w-4 h-4" /> Receive Payment
+          </button>
+          <button
+            onClick={() => setDueOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold"
+          >
+            <MinusCircle className="w-4 h-4" /> Add Manual Due
           </button>
         </div>
       </div>
@@ -256,6 +300,15 @@ const CustomerProfile = () => {
                 pharmacyId={profile.pharmacy_id}
                 userId={profile.id}
                 totalDue={due}
+                onSaved={() => load()}
+              />
+              <AddManualDueSheet
+                open={dueOpen}
+                onOpenChange={setDueOpen}
+                customerId={customer.id}
+                customerName={customer.name}
+                pharmacyId={profile.pharmacy_id}
+                userId={profile.id}
                 onSaved={() => load()}
               />
               <AddPrescriptionSheet
