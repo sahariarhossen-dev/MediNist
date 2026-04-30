@@ -23,6 +23,7 @@ import {
   startOfMonthIso,
   startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
+import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
 
 interface StaffProfile {
   id: string;
@@ -37,7 +38,7 @@ interface StaffSettings {
   monthly_target: number;
   commission_percent: number;
   basic_salary: number;
-  advances: number;
+  advances: number; // legacy, unused for math
 }
 
 interface BadgeWinners {
@@ -62,12 +63,15 @@ const StaffPerformanceDetails = () => {
   const [monthCount, setMonthCount] = useState(0);
   const [weekSales, setWeekSales] = useState(0);
   const [loyalty, setLoyalty] = useState(0);
+  const [monthAdvanceTotal, setMonthAdvanceTotal] = useState(0);
+  const [advancesSheetOpen, setAdvancesSheetOpen] = useState(false);
   const [winners, setWinners] = useState<BadgeWinners>({});
   const [loading, setLoading] = useState(true);
 
   // Inline editor state
   const [editing, setEditing] = useState<null | "target" | "earnings">(null);
   const [draft, setDraft] = useState<StaffSettings>(settings);
+  const [newAdvance, setNewAdvance] = useState<string>("");
   const [confirmAdvance, setConfirmAdvance] = useState<{
     open: boolean; delta: number; pending?: Partial<StaffSettings>;
   }>({ open: false, delta: 0 });
@@ -114,6 +118,20 @@ const StaffPerformanceDetails = () => {
 
       const monthStart = startOfMonthIso();
       const weekStart = startOfWeekIso();
+
+      // Monthly advance transactions for this staff
+      const { data: advRows } = await supabase
+        .from("cash_transactions")
+        .select("amount")
+        .eq("pharmacy_id", me.pharmacy_id)
+        .eq("category", "expense")
+        .like("note", `STAFF_ADVANCE:${userId}%`)
+        .gte("occurred_at", monthStart);
+      if (!cancelled) {
+        setMonthAdvanceTotal(
+          (advRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+        );
+      }
 
       // 3. Month sales for this user
       const { data: monthRows } = await supabase
@@ -192,8 +210,8 @@ const StaffPerformanceDetails = () => {
     [monthSales, settings.commission_percent],
   );
   const netPayable = useMemo(
-    () => (settings.basic_salary || 0) + commission - (settings.advances || 0),
-    [settings.basic_salary, commission, settings.advances],
+    () => (settings.basic_salary || 0) + commission - monthAdvanceTotal,
+    [settings.basic_salary, commission, monthAdvanceTotal],
   );
   const targetPct = settings.monthly_target > 0
     ? Math.min(100, (monthSales / settings.monthly_target) * 100)
@@ -224,15 +242,14 @@ const StaffPerformanceDetails = () => {
 
   const handleSaveEarnings = async () => {
     if (!me?.pharmacy_id || !userId || !me.id) return;
-    const delta = (draft.advances || 0) - (settings.advances || 0);
+    const advanceAmount = parseFloat(newAdvance);
+    const hasAdvance = !isNaN(advanceAmount) && advanceAmount > 0;
     const pending: Partial<StaffSettings> = {
       basic_salary: draft.basic_salary,
       commission_percent: draft.commission_percent,
-      advances: draft.advances,
     };
-    if (delta > 0) {
-      // Need confirmation before deducting from shop balance
-      setConfirmAdvance({ open: true, delta, pending });
+    if (hasAdvance) {
+      setConfirmAdvance({ open: true, delta: advanceAmount, pending });
       return;
     }
     setSavingEarnings(true);
@@ -248,11 +265,13 @@ const StaffPerformanceDetails = () => {
     if (!me?.pharmacy_id || !userId || !me.id) return;
     const { delta, pending } = confirmAdvance;
     setSavingEarnings(true);
-    const ok = await persistSettings(pending || {});
-    if (!ok) {
-      setSavingEarnings(false);
-      setConfirmAdvance({ open: false, delta: 0 });
-      return;
+    if (pending && Object.keys(pending).length > 0) {
+      const ok = await persistSettings(pending);
+      if (!ok) {
+        setSavingEarnings(false);
+        setConfirmAdvance({ open: false, delta: 0 });
+        return;
+      }
     }
     const today = new Date().toISOString().slice(0, 10);
     const staffName = staff?.full_name || "Staff";
@@ -263,7 +282,7 @@ const StaffPerformanceDetails = () => {
       category: "expense",
       party_name: `Staff Advance: ${staffName}`,
       amount: delta,
-      note: `Advance paid on ${today}`,
+      note: `STAFF_ADVANCE:${userId} | Cash Advance - Approved by Owner (${today})`,
       occurred_at: new Date().toISOString(),
     });
     setSavingEarnings(false);
@@ -276,6 +295,8 @@ const StaffPerformanceDetails = () => {
       });
       return;
     }
+    setMonthAdvanceTotal((p) => p + delta);
+    setNewAdvance("");
     toast({
       title: "Advance recorded",
       description: `৳${delta.toLocaleString("en-IN")} deducted from shop balance.`,
@@ -479,14 +500,27 @@ const StaffPerformanceDetails = () => {
                 value={draft.commission_percent}
                 onChange={(v) => setDraft({ ...draft, commission_percent: v })}
               />
-              <LabeledInput
-                label="Advances"
-                value={draft.advances}
-                onChange={(v) => setDraft({ ...draft, advances: v })}
-              />
+              <div className="rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 flex items-center justify-between">
+                <p className="text-[11px] text-rose-700">Total Advances Taken (This Month)</p>
+                <p className="text-sm font-semibold tabular-nums text-rose-600">
+                  − {fmt(monthAdvanceTotal)}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground w-32 shrink-0">New Advance</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={newAdvance}
+                  placeholder="e.g. 500"
+                  onChange={(e) => setNewAdvance(e.target.value)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="h-9 rounded-xl flex-1"
+                />
+              </div>
               <button
                 type="button"
-                onClick={() => navigate("/more/all-transactions")}
+                onClick={() => setAdvancesSheetOpen(true)}
                 className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
               >
                 View in Transactions →
@@ -504,7 +538,7 @@ const StaffPerformanceDetails = () => {
                   size="sm"
                   variant="outline"
                   className="rounded-xl h-9"
-                  onClick={() => { setDraft(settings); setEditing(null); }}
+                  onClick={() => { setDraft(settings); setNewAdvance(""); setEditing(null); }}
                 >
                   <X size={14} />
                 </Button>
@@ -514,16 +548,14 @@ const StaffPerformanceDetails = () => {
             <>
               <Row label="Basic Salary" value={fmt(settings.basic_salary || 0)} />
               <Row label={`Commission (${settings.commission_percent || 0}%)`} value={`+ ${fmt(commission)}`} positive />
-              <Row label="Advances" value={`− ${fmt(settings.advances || 0)}`} negative />
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => navigate("/more/all-transactions")}
-                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
-                >
-                  View in Transactions →
-                </button>
-              )}
+              <Row label="Advances (This Month)" value={`− ${fmt(monthAdvanceTotal)}`} negative />
+              <button
+                type="button"
+                onClick={() => setAdvancesSheetOpen(true)}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View in Transactions →
+              </button>
               <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between">
                 <p className="text-sm font-bold text-gray-900">Net Payable</p>
                 <p className="text-lg font-bold text-emerald-700 tabular-nums">{fmt(netPayable)}</p>
@@ -558,6 +590,16 @@ const StaffPerformanceDetails = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {staff && me?.pharmacy_id && userId && (
+        <StaffAdvancesSheet
+          open={advancesSheetOpen}
+          onOpenChange={setAdvancesSheetOpen}
+          staffName={staff.full_name || "Staff"}
+          userId={userId}
+          pharmacyId={me.pharmacy_id}
+        />
+      )}
     </div>
   );
 };

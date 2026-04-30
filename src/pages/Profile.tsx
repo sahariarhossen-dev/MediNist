@@ -15,6 +15,7 @@ import {
   StatCard, BadgeTile, fmtBdt as fmt, startOfMonthIso, startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
 import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
+import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -42,7 +43,8 @@ const Profile = () => {
   const [monthlyTarget, setMonthlyTarget] = useState(0);
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [basicSalary, setBasicSalary] = useState(0);
-  const [advances, setAdvances] = useState(0);
+  const [monthAdvanceTotal, setMonthAdvanceTotal] = useState(0);
+  const [advancesSheetOpen, setAdvancesSheetOpen] = useState(false);
   const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
   const [editingTarget, setEditingTarget] = useState(false);
   const [draftTarget, setDraftTarget] = useState(0);
@@ -71,7 +73,20 @@ const Profile = () => {
         setDraftTarget(Number(s.monthly_target || 0));
         setCommissionPercent(Number(s.commission_percent || 0));
         setBasicSalary(Number(s.basic_salary || 0));
-        setAdvances(Number(s.advances || 0));
+      }
+
+      // Monthly advance transactions for me (sourced from cash_transactions)
+      const { data: advRows } = await supabase
+        .from("cash_transactions")
+        .select("amount")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("category", "expense")
+        .like("note", `STAFF_ADVANCE:${user.id}%`)
+        .gte("occurred_at", startOfMonthIso());
+      if (!cancelled) {
+        setMonthAdvanceTotal(
+          (advRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+        );
       }
 
       // Pharmacy-wide month sales (needed both for personal totals + winners)
@@ -463,13 +478,22 @@ const Profile = () => {
               <p className="text-sm font-semibold tabular-nums text-emerald-700">+ {fmt(commission)}</p>
             </div>
             <div className="flex items-center justify-between py-1">
-              <p className="text-sm text-muted-foreground">Advances</p>
-              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(advances)}</p>
+              <p className="text-sm text-muted-foreground">Advances (This Month)</p>
+              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(monthAdvanceTotal)}</p>
             </div>
+            {user?.id && profile?.pharmacy_id && (
+              <button
+                type="button"
+                onClick={() => setAdvancesSheetOpen(true)}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View advance history →
+              </button>
+            )}
             <div className="border-t border-border mt-2 pt-3 flex items-center justify-between">
               <p className="text-sm font-bold text-foreground">Remaining Salary</p>
               <p className="text-lg font-bold text-primary tabular-nums">
-                {fmt(basicSalary + commission - advances)}
+                {fmt(basicSalary + commission - monthAdvanceTotal)}
               </p>
             </div>
           </div>
@@ -570,6 +594,15 @@ const Profile = () => {
           <span className="font-semibold text-destructive">Log Out</span>
         </button>
       </div>
+      {user?.id && profile?.pharmacy_id && (
+        <StaffAdvancesSheet
+          open={advancesSheetOpen}
+          onOpenChange={setAdvancesSheetOpen}
+          staffName={profile?.full_name || "You"}
+          userId={user.id}
+          pharmacyId={profile.pharmacy_id}
+        />
+      )}
     </div>
   );
 };

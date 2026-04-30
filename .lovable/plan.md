@@ -1,58 +1,109 @@
-## Goal
-Wire the Admin's "Earnings Summary" editor on `StaffPerformanceDetails` to the shop's central cash flow, and surface remaining salary on the staff's own `Profile`.
+# Standardize Advances as Recurring Transactions
 
-## What changes
+## Concept Shift
 
-### 1. Commission % (already partially done)
-- Commission % field already exists in `staff_settings` and the editor in `StaffPerformanceDetails.tsx`. Keep as is — confirm it's saved on "Save" (it already calls `saveSettings({ commission_percent })`) and used as `(monthSales * commission_percent) / 100`.
-- No DB schema change needed.
+Today, the **Advances** field stores a single cumulative number on `staff_settings.advances` and is overwritten each save. We move to a transaction-driven model:
 
-### 2. Automated Advance → cash transaction
-When the Admin edits "Advances" and clicks Save in `StaffPerformanceDetails.tsx`:
+- **Source of truth** for advances = `cash_transactions` rows tagged for that staff member.
+- The input field is always blank — saving creates one new transaction row.
+- "Total Advances (Current Month)" is computed by summing those rows for the month.
+- "Net Payable" uses this monthly sum (not the stale `staff_settings.advances` column).
 
-1. Compute `delta = newAdvances - oldAdvances`.
-2. If `delta > 0`, show an AlertDialog:
-   > "This will deduct ৳{delta} from the shop's current balance. Do you want to proceed?"
-3. On confirm:
-   - Upsert `staff_settings` with the new `advances`.
-   - Insert into `cash_transactions`:
-     - `pharmacy_id`, `user_id = auth.uid()` (the admin who logs it)
-     - `direction = 'out'`
-     - `category = 'expense'` (matches existing schema; no new enum value needed)
-     - `party_name = "Staff Advance: {Staff Name}"`
-     - `amount = delta`
-     - `note = "Advance paid on {YYYY-MM-DD}"`
-     - `occurred_at = now()`
-   - On success toast: "Advance recorded — ৳{delta} deducted from balance."
-4. If `delta <= 0` (admin lowered/kept advances), just update `staff_settings` without creating a transaction. Show an info toast.
+No DB schema change is required. We identify a staff advance transaction by:
+`category = 'expense'` AND `note LIKE 'STAFF_ADVANCE:<userId>%'`
 
-Because `cash_transactions` rows with `direction='out'` are already aggregated by `Index.tsx`, `DailyTransactions.tsx`, `AllTransactions.tsx`, and `submit_blind_closing`, the shop's running balance and transaction history pick this up automatically — no extra wiring.
+Storing the staff `user_id` inside `note` lets us filter precisely without a migration. `party_name` stays human-friendly: `Staff Advance: <Name>`.
 
-### 3. "View in Transactions" link
-Next to the Advances input (edit mode) and next to the Advances row (read mode), add a small text link `View in Transactions →` that navigates to `/transactions` (the existing `AllTransactions` page).
+## Changes
 
-### 4. Remaining Salary on staff's own Profile
-In `src/pages/Profile.tsx`:
-- Also fetch `basic_salary` and `advances` from `staff_settings` (currently only `monthly_target` and `commission_percent` are read).
-- Add a compact "Earnings This Month" card under the analytics grid showing:
-  - Basic Salary
-  - Commission ({pct}%) = computed
-  - Advances (− amount)
-  - **Remaining Salary** = `basic_salary + commission − advances`
-- Read-only for staff (no edit pencil) — admins continue to edit on the Manage Staff detail page.
+### 1. `src/pages/StaffPerformanceDetails.tsx` (Admin view)
 
-### 5. Keep existing UI patterns
-- Use shadcn `AlertDialog` for the confirmation popup (already in `src/components/ui/alert-dialog.tsx`).
-- Reuse `StatCard` / row layout from `PerformanceWidgets` for the new earnings card on Profile.
-- Tailwind, rounded-3xl cards, mobile-first — matches the rest of the app.
+**Earnings Summary card — edit mode:**
+- Replace the single `advances` numeric field with:
+  - Read-only label: `Total Advances Taken (This Month): − ৳{monthAdvanceTotal}` in rose-600.
+  - A **"New Advance"** input that defaults to empty (`""`), placeholder `e.g. 500`.
+  - Save flow:
+    1. Validate amount > 0 (skip insert if blank/0, but still allow basic salary / commission % updates).
+    2. Show the existing confirmation dialog: "This will deduct ৳X from the shop's current balance…"
+    3. On confirm, insert a row into `cash_transactions`:
+       - `direction: 'out'`, `category: 'expense'`
+       - `party_name: 'Staff Advance: <Name>'`
+       - `amount: <new advance>`
+       - `note: 'STAFF_ADVANCE:<userId> | Cash Advance - Approved by Owner'`
+       - `occurred_at: now()`
+    4. Clear input back to empty, refresh `monthAdvanceTotal`.
+- Remove the persisted `advances` column from save payloads (we leave the column in DB but stop writing to it). Basic salary and commission % continue to upsert into `staff_settings`.
 
-## Files touched
-- `src/pages/StaffPerformanceDetails.tsx` — confirmation dialog, auto-create cash_transaction on advance increase, "View in Transactions" link.
-- `src/pages/Profile.tsx` — fetch `basic_salary` + `advances`, render Remaining Salary card.
+**Display mode (read-only summary):**
+- "Advances" line uses `monthAdvanceTotal` from transactions, shown as `− ৳X` in red.
+- "Net Payable" = `basic_salary + commission − monthAdvanceTotal`.
 
-## No DB migration required
-`cash_transactions` already supports `direction='out'` + `category='expense'` + `party_name` + `note`, and existing RLS lets any pharmacy member (including admins) insert their own rows. The shop balance, daily totals, and transaction history pages already aggregate these rows.
+**"View in Transactions →" link:**
+- Replace the `navigate('/more/all-transactions')` call with opening a new **Staff Advances modal** (Sheet/Dialog) — see section 3.
+
+**Data fetch:**
+- Add a query alongside the existing month sales fetch:
+  ```
+  select id, amount, occurred_at, note
+  from cash_transactions
+  where pharmacy_id = ? and category = 'expense'
+    and note like 'STAFF_ADVANCE:<userId>%'
+    and occurred_at >= monthStart
+  ```
+  Sum into `monthAdvanceTotal`; keep the rows for the modal.
+
+### 2. `src/pages/Profile.tsx` (Personal view)
+
+- Replace `advances` (from `staff_settings`) with `monthAdvanceTotal` queried the same way for the logged-in user.
+- Earnings card:
+  - "Advances (This Month)" row in red: `− ৳X`.
+  - Net Payable = `basic_salary + commission − monthAdvanceTotal`.
+- Add a small "View advance history" link that opens the same Staff Advances modal in read-only mode.
+
+### 3. New component: `src/components/staff/StaffAdvancesSheet.tsx`
+
+A bottom sheet (`<Sheet side="bottom">`) used by both Profile and StaffPerformanceDetails.
+
+**Header:** `{Staff Name}'s Advances — {Month YYYY}`
+
+**Body — receipt-style list** (clean MediNist aesthetic, lots of whitespace):
+```
+─────────────────────────────────
+12 Apr 2026 · 3:42 PM
+Cash Advance - Approved by Owner
+                          − ৳500
+─────────────────────────────────
+05 Apr 2026 · 11:10 AM
+Cash Advance - Approved by Owner
+                          − ৳1,000
+─────────────────────────────────
+```
+Empty state: "No advances taken this month."
+
+**Footer (sticky):**
+```
+Total Monthly Advance        − ৳1,500
+```
+(rose-600, bold, tabular-nums)
+
+Props: `{ open, onOpenChange, staffName, userId, pharmacyId }`. Component fetches its own rows on open.
+
+### 4. Math summary
+
+Across both pages, the canonical formula becomes:
+```
+commission   = monthSales × commission_percent / 100
+totalAdvances = Σ cash_transactions (this month, STAFF_ADVANCE:<userId>)
+netPayable   = basic_salary + commission − totalAdvances
+```
+
+### 5. Cleanup
+
+- Stop writing `staff_settings.advances` (leave column in place; harmless legacy data).
+- Remove the `advances` field from the `StaffSettings` interface usage in save payloads (keep type for backward read compatibility but ignore the value).
 
 ## Out of scope
-- No new "transactions" table — the project's transaction system is `cash_transactions`.
-- No reversal logic when an admin reduces the Advances number (we don't auto-create a refund). We can add that later if needed.
+
+- No DB migration. No RLS change (existing `cash_transactions` SELECT policy already lets pharmacy members view rows, and the staff-self filter is enforced in the query via `note` pattern + RLS).
+- No changes to AllTransactions page.
+- No edit/delete UI for past advance entries (only admins can delete via existing AllTransactions UI if needed).
