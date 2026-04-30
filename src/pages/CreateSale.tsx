@@ -555,23 +555,14 @@ const CreateSale = () => {
                 <span className="truncate">
                   Billing for: <strong className="text-gray-900">{selectedCustomer.name}</strong>
                 </span>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <CustomerPickerPopover
-                    pharmacyId={profile.pharmacy_id}
-                    selected={null}
-                    onSelect={(c) => c && setSelectedCustomer(c)}
-                    onQuickAdd={() => setQuickAddOpen(true)}
-                    triggerLabel="Change"
-                    compact
-                  />
-                  <button
-                    onClick={() => setSelectedCustomer(null)}
-                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition"
-                    aria-label="Clear customer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setSelectedCustomer(null)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition text-[11px] font-medium flex-shrink-0"
+                  aria-label="Change customer"
+                >
+                  Change
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             ) : (
               <CustomerPickerPopover
