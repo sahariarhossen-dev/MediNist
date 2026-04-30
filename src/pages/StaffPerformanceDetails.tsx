@@ -24,6 +24,7 @@ import {
   startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
 import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
+import ProductTargetsList from "@/components/staff/ProductTargetsList";
 
 interface StaffProfile {
   id: string;
@@ -471,6 +472,18 @@ const StaffPerformanceDetails = () => {
           </div>
         </div>
       </div>
+
+      {/* Product Targets */}
+      {me?.pharmacy_id && userId && (
+        <div className="px-page mt-4">
+          <ProductTargetsList
+            pharmacyId={me.pharmacy_id}
+            userId={userId}
+            isAdmin={isAdmin}
+            currentUserId={me.id}
+          />
+        </div>
+      )}
 
       {/* Earnings */}
       <div className="px-page mt-4">

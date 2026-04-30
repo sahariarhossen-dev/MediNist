@@ -1,0 +1,163 @@
+import { useEffect, useState, useCallback } from "react";
+import { Pill, Trophy, Plus, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import AddProductTargetSheet from "./AddProductTargetSheet";
+
+interface ProductTarget {
+  id: string;
+  medicine_id: string;
+  medicine_name: string;
+  target_quantity: number;
+  current_progress: number;
+  incentive_description: string;
+  achieved_at: string | null;
+}
+
+interface Props {
+  pharmacyId: string;
+  userId: string;
+  isAdmin: boolean;
+  currentUserId?: string; // for created_by when admin
+  /** Hide entire card if there are no targets (used in staff Profile). */
+  hideWhenEmpty?: boolean;
+}
+
+const firstOfMonth = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
+
+export default function ProductTargetsList({
+  pharmacyId, userId, isAdmin, currentUserId, hideWhenEmpty,
+}: Props) {
+  const [targets, setTargets] = useState<ProductTarget[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("product_targets" as any)
+      .select("id, medicine_id, medicine_name, target_quantity, current_progress, incentive_description, achieved_at")
+      .eq("pharmacy_id", pharmacyId)
+      .eq("user_id", userId)
+      .eq("target_month", firstOfMonth())
+      .order("created_at", { ascending: false });
+    setLoading(false);
+    if (error) {
+      toast({ title: "Could not load targets", description: error.message, variant: "destructive" });
+      return;
+    }
+    setTargets((data || []) as unknown as ProductTarget[]);
+  }, [pharmacyId, userId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const remove = async (id: string) => {
+    if (!confirm("Delete this product target?")) return;
+    const { error } = await supabase.from("product_targets" as any).delete().eq("id", id);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setTargets((p) => p.filter((t) => t.id !== id));
+  };
+
+  if (hideWhenEmpty && !loading && targets.length === 0) return null;
+
+  return (
+    <>
+      <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-bold text-gray-900">
+              {isAdmin ? "Product Targets & Incentives" : "My Product Targets"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">This month</p>
+          </div>
+          {isAdmin && currentUserId && (
+            <Button
+              size="sm"
+              className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus size={14} /> Add
+            </Button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-14 bg-gray-50 rounded-xl animate-pulse" />
+            <div className="h-14 bg-gray-50 rounded-xl animate-pulse" />
+          </div>
+        ) : targets.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-4 text-center">
+            No product targets set for this month.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {targets.map((t) => {
+              const pct = Math.min(100, (t.current_progress / t.target_quantity) * 100);
+              const achieved = !!t.achieved_at || t.current_progress >= t.target_quantity;
+              return (
+                <div key={t.id} className="rounded-2xl border border-gray-100 p-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      achieved ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"
+                    }`}>
+                      <Pill size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{t.medicine_name}</p>
+                        {achieved && (
+                          <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] px-2 py-0.5 font-semibold">
+                            <Trophy size={10} /> Achieved
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {t.current_progress}/{t.target_quantity} sold · {t.incentive_description}
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() => remove(t.id)}
+                        className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"
+                        aria-label="Delete target"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        achieved ? "bg-emerald-500" : "bg-blue-500"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {isAdmin && currentUserId && (
+        <AddProductTargetSheet
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          pharmacyId={pharmacyId}
+          userId={userId}
+          createdBy={currentUserId}
+          onCreated={load}
+        />
+      )}
+    </>
+  );
+}
