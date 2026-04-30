@@ -1,109 +1,112 @@
-# Standardize Advances as Recurring Transactions
+# Product-Specific Targets & Incentives
 
-## Concept Shift
+Add a per-medicine sales target system. Admins assign targets like "Sell 50 packs of Napa Extend → ৳500 bonus" to a staff member; progress increments automatically with each completed sale; staff see live progress on their Profile.
 
-Today, the **Advances** field stores a single cumulative number on `staff_settings.advances` and is overwritten each save. We move to a transaction-driven model:
+## 1. Database
 
-- **Source of truth** for advances = `cash_transactions` rows tagged for that staff member.
-- The input field is always blank — saving creates one new transaction row.
-- "Total Advances (Current Month)" is computed by summing those rows for the month.
-- "Net Payable" uses this monthly sum (not the stale `staff_settings.advances` column).
+**New table `product_targets`** (migration):
 
-No DB schema change is required. We identify a staff advance transaction by:
-`category = 'expense'` AND `note LIKE 'STAFF_ADVANCE:<userId>%'`
+| column | type | notes |
+|---|---|---|
+| id | uuid PK | gen_random_uuid() |
+| pharmacy_id | uuid NOT NULL | scopes via RLS |
+| user_id | uuid NOT NULL | the staff member |
+| medicine_id | uuid NOT NULL | references inventory medicine |
+| medicine_name | text NOT NULL | snapshot for display if med is renamed/deleted |
+| target_quantity | integer NOT NULL CHECK (> 0) | units to sell |
+| current_progress | integer NOT NULL DEFAULT 0 | auto-incremented |
+| incentive_description | text NOT NULL | e.g. "৳500 Bonus", "Gift Box" |
+| target_month | date NOT NULL | first day of month (e.g. 2026-04-01) |
+| created_by | uuid NOT NULL | admin who set it |
+| achieved_at | timestamptz NULL | set when progress first crosses target |
+| created_at, updated_at | timestamptz | defaults |
 
-Storing the staff `user_id` inside `note` lets us filter precisely without a migration. `party_name` stays human-friendly: `Staff Advance: <Name>`.
+Unique constraint: `(pharmacy_id, user_id, medicine_id, target_month)` — one active target per staff/medicine/month.
 
-## Changes
+Index: `(pharmacy_id, user_id, target_month)`.
 
-### 1. `src/pages/StaffPerformanceDetails.tsx` (Admin view)
+**RLS policies:**
+- SELECT: members of the pharmacy (`pharmacy_id = get_user_pharmacy_id()`) — staff can see their own + admins see all.
+- INSERT / UPDATE / DELETE: admin only (`is_pharmacy_admin()`).
 
-**Earnings Summary card — edit mode:**
-- Replace the single `advances` numeric field with:
-  - Read-only label: `Total Advances Taken (This Month): − ৳{monthAdvanceTotal}` in rose-600.
-  - A **"New Advance"** input that defaults to empty (`""`), placeholder `e.g. 500`.
-  - Save flow:
-    1. Validate amount > 0 (skip insert if blank/0, but still allow basic salary / commission % updates).
-    2. Show the existing confirmation dialog: "This will deduct ৳X from the shop's current balance…"
-    3. On confirm, insert a row into `cash_transactions`:
-       - `direction: 'out'`, `category: 'expense'`
-       - `party_name: 'Staff Advance: <Name>'`
-       - `amount: <new advance>`
-       - `note: 'STAFF_ADVANCE:<userId> | Cash Advance - Approved by Owner'`
-       - `occurred_at: now()`
-    4. Clear input back to empty, refresh `monthAdvanceTotal`.
-- Remove the persisted `advances` column from save payloads (we leave the column in DB but stop writing to it). Basic salary and commission % continue to upsert into `staff_settings`.
-
-**Display mode (read-only summary):**
-- "Advances" line uses `monthAdvanceTotal` from transactions, shown as `− ৳X` in red.
-- "Net Payable" = `basic_salary + commission − monthAdvanceTotal`.
-
-**"View in Transactions →" link:**
-- Replace the `navigate('/more/all-transactions')` call with opening a new **Staff Advances modal** (Sheet/Dialog) — see section 3.
-
-**Data fetch:**
-- Add a query alongside the existing month sales fetch:
-  ```
-  select id, amount, occurred_at, note
-  from cash_transactions
-  where pharmacy_id = ? and category = 'expense'
-    and note like 'STAFF_ADVANCE:<userId>%'
-    and occurred_at >= monthStart
-  ```
-  Sum into `monthAdvanceTotal`; keep the rows for the modal.
-
-### 2. `src/pages/Profile.tsx` (Personal view)
-
-- Replace `advances` (from `staff_settings`) with `monthAdvanceTotal` queried the same way for the logged-in user.
-- Earnings card:
-  - "Advances (This Month)" row in red: `− ৳X`.
-  - Net Payable = `basic_salary + commission − monthAdvanceTotal`.
-- Add a small "View advance history" link that opens the same Staff Advances modal in read-only mode.
-
-### 3. New component: `src/components/staff/StaffAdvancesSheet.tsx`
-
-A bottom sheet (`<Sheet side="bottom">`) used by both Profile and StaffPerformanceDetails.
-
-**Header:** `{Staff Name}'s Advances — {Month YYYY}`
-
-**Body — receipt-style list** (clean MediNist aesthetic, lots of whitespace):
+**Auto-increment trigger** on `sale_items` AFTER INSERT (SECURITY DEFINER, bypasses RLS write restriction):
 ```
-─────────────────────────────────
-12 Apr 2026 · 3:42 PM
-Cash Advance - Approved by Owner
-                          − ৳500
-─────────────────────────────────
-05 Apr 2026 · 11:10 AM
-Cash Advance - Approved by Owner
-                          − ৳1,000
-─────────────────────────────────
+For each new sale_item row:
+  fetch parent sale: pharmacy_id, user_id, status, created_at
+  if status != 'completed' → return  -- only count completed sales
+  compute month = date_trunc('month', sale.created_at)::date
+  UPDATE product_targets
+    SET current_progress = current_progress + NEW.quantity,
+        achieved_at = CASE
+          WHEN achieved_at IS NULL
+           AND current_progress + NEW.quantity >= target_quantity
+          THEN now() ELSE achieved_at END,
+        updated_at = now()
+    WHERE pharmacy_id = sale.pharmacy_id
+      AND user_id     = sale.user_id
+      AND medicine_id = NEW.medicine_id
+      AND target_month = month;
 ```
-Empty state: "No advances taken this month."
+Also add an AFTER UPDATE trigger on `sales` so that when a draft transitions to `completed`, we backfill progress for its existing sale_items (single statement summing per medicine).
 
-**Footer (sticky):**
-```
-Total Monthly Advance        − ৳1,500
-```
-(rose-600, bold, tabular-nums)
+This means the existing `CreateSale.tsx` flow needs **no client changes** — progress updates server-side.
 
-Props: `{ open, onOpenChange, staffName, userId, pharmacyId }`. Component fetches its own rows on open.
+## 2. Admin View — `StaffPerformanceDetails.tsx`
 
-### 4. Math summary
+New section "**Product Targets & Incentives**" placed after the Achievements card. Visible only when `canEdit` (admin).
 
-Across both pages, the canonical formula becomes:
-```
-commission   = monthSales × commission_percent / 100
-totalAdvances = Σ cash_transactions (this month, STAFF_ADVANCE:<userId>)
-netPayable   = basic_salary + commission − totalAdvances
-```
+**Active Targets list** (current month, sorted by progress %):
+- Card per target with:
+  - Medicine icon (Pill) + name (bold) + small chip "x of y units"
+  - Linear progress bar (`<Progress />`):
+    - Blue (`bg-blue-500`) while in progress
+    - Green (`bg-emerald-500`) when achieved
+  - Right side: incentive text in muted small caps + "🏆 Achieved" green badge if `achieved_at` set
+  - Trash icon (admin only) → soft confirm → DELETE
+- Empty state: "No product targets set for this month."
 
-### 5. Cleanup
+**"+ Add Target" button** → opens a Sheet (bottom):
+- Product picker: reuse `search_medicines` RPC (same pattern as CreateSale) — debounced search with dropdown showing name/company.
+- Target Quantity: numeric input (min 1).
+- Incentive / Reward: free-text input, placeholder "e.g. ৳500 Bonus or Gift Box".
+- Target Month: defaults to current month, read-only (admins manage one month at a time; future enhancement can allow selection).
+- Save → INSERT into `product_targets`. On unique-violation, toast "Target already exists for this product this month."
 
-- Stop writing `staff_settings.advances` (leave column in place; harmless legacy data).
-- Remove the `advances` field from the `StaffSettings` interface usage in save payloads (keep type for backward read compatibility but ignore the value).
+## 3. Staff View — `Profile.tsx`
 
-## Out of scope
+New "**My Targets**" card after the existing Monthly Target card, only when the staff has at least one active target this month.
 
-- No DB migration. No RLS change (existing `cash_transactions` SELECT policy already lets pharmacy members view rows, and the staff-self filter is enforced in the query via `note` pattern + RLS).
-- No changes to AllTransactions page.
-- No edit/delete UI for past advance entries (only admins can delete via existing AllTransactions UI if needed).
+Per target row:
+- Pill icon + medicine name + "Achieved 🏆" badge (emerald) when complete
+- Below: linear progress bar (blue/green per state)
+- Below progress: `{current}/{target} sold · {incentive_description}` in xs muted text
+
+Read-only — no edit/delete affordances for staff.
+
+Empty state hidden (don't render the card if zero targets).
+
+## 4. New shared component
+
+`src/components/staff/ProductTargetsList.tsx`
+- Props: `{ pharmacyId, userId, isAdmin, onChange? }`
+- Fetches `product_targets` for current month + given user_id
+- Renders the list (used by both Profile and StaffPerformanceDetails)
+- Admin variant accepts an `onAdd` slot or shows internal Add button
+
+`src/components/staff/AddProductTargetSheet.tsx`
+- The admin "Add Target" bottom sheet described above
+
+## 5. Visual style
+
+- Cards: existing `rounded-3xl bg-white shadow-sm border border-gray-100`
+- Progress bar: shadcn `<Progress />` with custom indicator color via className override (blue / emerald)
+- Achieved badge: `bg-emerald-100 text-emerald-700 rounded-full text-[10px] px-2 py-0.5`
+- Medicine icon: `Pill` from lucide in a tinted circle (`bg-sky-100 text-sky-700`)
+
+## Technical notes
+
+- The trigger runs as SECURITY DEFINER and only updates rows matching the sale's pharmacy_id/user_id, so no RLS bypass risk.
+- `target_month` stored as `date` (first of month) — fetch with `eq("target_month", firstOfMonthDate)`.
+- `current_progress` is materialized (not computed on read) so list rendering is a single query.
+- Backfill on existing data is intentionally skipped — targets created today only count sales from today onward, which matches "monthly target" semantics for the current month.
+- No changes to `CreateSale.tsx`, `sale_items` schema, or existing RLS.
