@@ -1,82 +1,63 @@
-# Merge Product Targets Into Monthly Target Card
+# Customer Profile Overhaul
 
-Fold the standalone "Product Targets" card into the existing "Monthly Target" card so staff see one unified Goals block: monthly sales gauge → product targets → achievements. Switch the per-product UI from large bordered cards to compact horizontal rows.
+Redesign `src/pages/CustomerProfile.tsx` and `src/components/customers/PrescriptionCard.tsx` to deliver a richer identity card, month-aware financial summary, manual due entry, and a more professional prescription vault.
 
-## 1. Redesign `ProductTargetsList.tsx` as compact rows
+## 1. Customer Identity Card (header)
 
-Rewrite the component so it can be embedded inside another card (no more outer white wrapper) and renders compact rows.
+Replace the current bare name/phone block with a single white card (light grey divider) containing:
 
-New props:
-- `embedded?: boolean` — when true, drop the outer card chrome and header (host card supplies them).
-- Existing props kept: `pharmacyId`, `userId`, `isAdmin`, `currentUserId`, `hideWhenEmpty`.
-- Add `onAddRequest?: () => void` so the host can drive the Add button (used when admin's pencil is on the parent card).
+- **Name** (bold, larger) + edit pencil icon
+- **Phone** with `Phone` icon, tappable `tel:` link
+- **Address** row with `MapPin` icon (only shown if present)
+- **Notes** row with `FileText` icon, soft grey background, italic small text (only if present)
 
-Row layout (per target):
-```
-[icon] Napa Extend           15/30 packs   🎁 ৳200
-       ▓▓▓▓▓▓░░░░░░░░░░░ (thin 1.5px bar)
-```
-- Pill icon in tinted circle (sky in progress, emerald achieved).
-- Name truncates; quantity `X/Y` in tabular-nums on the right.
-- Incentive badge: amber pill `🎁 {incentive_description}` (text/emoji together).
-- Thin progress bar (`h-1.5`), blue (`bg-blue-500`) → emerald (`bg-emerald-500`) when achieved.
-- Achieved state: row gets `bg-emerald-50/60` background + check icon; replace incentive badge with green `✓ Achieved 🏆` badge.
-- Admin-only trash icon, smaller and right-aligned, hidden until row hover on desktop.
+Back button (`ArrowLeft`) stays at the top, separate from the card.
 
-Responsiveness:
-- Wrap rows in a container that becomes scrollable when more than 3 targets:
-  ```
-  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1
-                  [scrollbar-width:thin]">
-  ```
-- Each row roughly 52px → 3 rows ≈ 160px cap.
+## 2. Smart Financial Card
 
-Empty/loading/non-embedded behavior unchanged. When `embedded` and empty + admin, show inline "No product targets yet — tap + to add one." When `embedded` and empty + staff, render nothing (so host can hide the section divider).
+Restructure the balance card into two zones:
 
-## 2. `Profile.tsx` — embed inside Monthly Target card
+- **Top row**: Lifetime "Total Due" with large amount (red/green/grey based on sign) — unchanged logic, uses `customer.total_due`.
+- **Bottom row** (new "This Month" mini-grid, 2 columns):
+  - **This Month's Sales** (red) — sum of `customer_ledger` entries where `entry_type='due'` AND `occurred_at` is in current calendar month.
+  - **This Month's Paid** (green) — sum of `entry_type='payment'` for current month.
+- Reset behavior is automatic via month filter on the existing ledger array (no DB changes).
 
-Remove the separate "My Product Targets" block (the one added previously between Monthly Target and Achievements).
+**Action buttons** (stacked under the card, full width grid 2 cols):
+- `Receive Payment` (existing, green)
+- `+ Add Manual Due` (new, amber/orange) — opens a new `AddManualDueSheet`.
 
-Inside the Monthly Target `<Card>`, after the existing `flex items-center gap-5` row that holds `<CircularProgress />` + target/achievement text, add:
+### AddManualDueSheet (new component)
 
-```
-{/* Divider only when there are targets */}
-<ProductTargetsList
-  pharmacyId={profile.pharmacy_id}
-  userId={user.id}
-  isAdmin={false}
-  embedded
-  hideWhenEmpty
-  /* internally renders: thin border-t separator + label "Product Targets · This month" + rows */
-/>
-```
+`src/components/customers/AddManualDueSheet.tsx`. Mirrors `ReceivePaymentSheet` UX:
+- Inputs: Amount (required, >0), Description (optional, defaults to "Manual due entry").
+- On save: insert one row into `customer_ledger` with `entry_type='due'`, `customer_id`, `pharmacy_id`, `user_id`, `amount`, `description`. The existing `recalc_customer_total_due` trigger updates `customers.total_due` automatically.
+- No mirror cash transaction (manual due ≠ cash movement).
+- Toast + reload on success.
 
-The component, when `embedded`, prepends its own `border-t border-border mt-4 pt-3` separator and a small section label, so the Monthly Target card visually splits into "Overall" (top) and "Per-product" (bottom).
+## 3. Prescription Vault Restyle
 
-## 3. `StaffPerformanceDetails.tsx` — embed + admin pencil controls add
+Update `src/components/customers/PrescriptionCard.tsx`:
 
-Remove the standalone "Product Targets" card block currently inserted between Achievements and Earnings.
+- White card, `rounded-2xl`, very subtle shadow (`shadow-[0_1px_2px_rgba(0,0,0,0.04)]`), thin left border accent in soft emerald instead of bold blue.
+- **Medicine name**: `font-semibold text-[15px] text-gray-900 tracking-tight` (drop heavy bold), pairs with a small strength chip.
+- **Dosage as pill badges**: parse `dosage_frequency` (e.g. `1+0+1`) into 3 small rounded badges (morning/noon/night) with subtle color tints — amber, sky, indigo backgrounds at 10% opacity. Fallback to a single mono badge if parsing fails (non `n+n+n` patterns).
+- **Timing**: small italic tag with soft grey background (`bg-gray-50 text-gray-500 italic text-[11px]`), e.g. *"Before meal"*.
+- **Notes**: light italic grey small text below.
+- **Action menu**: discreet `MoreVertical` — smaller (w-3.5 h-3.5), muted, hover-only background.
+- Selection ring/checkbox behavior preserved.
 
-Inside the existing "Monthly Target" card (the white rounded-3xl with the circular progress), add an embedded list below the gauge row, just like Profile.
+## 4. Data Logic
 
-Admin edit affordance:
-- The card already shows a pencil icon when `canEdit && editing !== "target"`. Keep its existing job (edit the ৳ monthly target) but add a second small `+` button beside it labeled "Add product target" that calls the embedded list's `onAddRequest`.
-- To wire that, lift the `addOpen` state up: `StaffPerformanceDetails` owns it, passes `onAddRequest={() => setAddOpen(true)}` to the embedded list, and the list always mounts the `AddProductTargetSheet` with a controlled `open` prop coming from the parent.
-  - Simpler alt: keep Add button inside the embedded list itself, render it next to the section label (admin-only). The pencil stays for monthly target editing only. **Use this simpler path** — matches the requirement "Admin can click Edit (pencil) icon … to add or modify these specific product goals" by making the Add control visible right inside the same card.
+- Month filter uses local `new Date().getFullYear()/getMonth()` against ledger `occurred_at` (already fetched).
+- No schema changes, no migrations. All RLS policies already allow members to insert ledger entries.
 
-## 4. Data & sync
+## 5. Files Touched
 
-No new queries — `ProductTargetsList` already filters by current month via `target_month = firstOfMonth()`, matching the monthly sales window. Auto-increment trigger from the previous step continues to update progress on every completed sale.
+| File | Change |
+|------|--------|
+| `src/pages/CustomerProfile.tsx` | Identity card, financial card with monthly stats, new manual-due button & sheet wiring |
+| `src/components/customers/PrescriptionCard.tsx` | Restyle: dosage pill badges, italic timing tag, refined typography |
+| `src/components/customers/AddManualDueSheet.tsx` | **New** sheet for manual due entry |
 
-## 5. Files touched
-
-- `src/components/staff/ProductTargetsList.tsx` — major rewrite to compact rows + `embedded` prop + scroll cap.
-- `src/pages/Profile.tsx` — remove standalone block; nest `<ProductTargetsList embedded hideWhenEmpty />` inside Monthly Target card.
-- `src/pages/StaffPerformanceDetails.tsx` — remove standalone block; nest `<ProductTargetsList embedded />` (admin sees empty state + Add button) inside Monthly Target card.
-
-No DB or trigger changes. No new component files.
-
-## Out of scope
-
-- Editing an existing target inline (still delete + re-add for now).
-- Carrying targets across months / archiving.
+No DB migrations. No edge functions. Lucide icons already available (`MapPin`, `FileText`, `Plus`, `MinusCircle`).
