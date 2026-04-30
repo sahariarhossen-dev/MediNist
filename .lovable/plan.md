@@ -1,73 +1,58 @@
 ## Goal
+Wire the Admin's "Earnings Summary" editor on `StaffPerformanceDetails` to the shop's central cash flow, and surface remaining salary on the staff's own `Profile`.
 
-Make personal performance analytics part of every staff member's own **Profile** page (showing only their own data), and restrict **Manage Staff** strictly to admins.
+## What changes
 
----
+### 1. Commission % (already partially done)
+- Commission % field already exists in `staff_settings` and the editor in `StaffPerformanceDetails.tsx`. Keep as is — confirm it's saved on "Save" (it already calls `saveSettings({ commission_percent })`) and used as `(monthSales * commission_percent) / 100`.
+- No DB schema change needed.
 
-## 1. Personal Profile Page (`src/pages/Profile.tsx`)
+### 2. Automated Advance → cash transaction
+When the Admin edits "Advances" and clicks Save in `StaffPerformanceDetails.tsx`:
 
-Replace the static "Monthly Target" card with a live analytics block — same visual language as the Staff Performance Details page, but always scoped to the logged-in user.
+1. Compute `delta = newAdvances - oldAdvances`.
+2. If `delta > 0`, show an AlertDialog:
+   > "This will deduct ৳{delta} from the shop's current balance. Do you want to proceed?"
+3. On confirm:
+   - Upsert `staff_settings` with the new `advances`.
+   - Insert into `cash_transactions`:
+     - `pharmacy_id`, `user_id = auth.uid()` (the admin who logs it)
+     - `direction = 'out'`
+     - `category = 'expense'` (matches existing schema; no new enum value needed)
+     - `party_name = "Staff Advance: {Staff Name}"`
+     - `amount = delta`
+     - `note = "Advance paid on {YYYY-MM-DD}"`
+     - `occurred_at = now()`
+   - On success toast: "Advance recorded — ৳{delta} deducted from balance."
+4. If `delta <= 0` (admin lowered/kept advances), just update `staff_settings` without creating a transaction. Show an info toast.
 
-Keep:
-- Header, avatar uploader, name/pharmacy line
-- "User Identity" card
-- Security/password accordion
-- Log Out button
+Because `cash_transactions` rows with `direction='out'` are already aggregated by `Index.tsx`, `DailyTransactions.tsx`, `AllTransactions.tsx`, and `submit_blind_closing`, the shop's running balance and transaction history pick this up automatically — no extra wiring.
 
-Remove:
-- Hard-coded "Monthly Target" card (`monthlyTarget = 500000`, `achievement = 400000`)
+### 3. "View in Transactions" link
+Next to the Advances input (edit mode) and next to the Advances row (read mode), add a small text link `View in Transactions →` that navigates to `/transactions` (the existing `AllTransactions` page).
 
-Insert (directly under User Identity, in this order):
+### 4. Remaining Salary on staff's own Profile
+In `src/pages/Profile.tsx`:
+- Also fetch `basic_salary` and `advances` from `staff_settings` (currently only `monthly_target` and `commission_percent` are read).
+- Add a compact "Earnings This Month" card under the analytics grid showing:
+  - Basic Salary
+  - Commission ({pct}%) = computed
+  - Advances (− amount)
+  - **Remaining Salary** = `basic_salary + commission − advances`
+- Read-only for staff (no edit pencil) — admins continue to edit on the Manage Staff detail page.
 
-1. **Analytics grid (2×2)** — same `StatCard` style:
-   - This Month — sum of `sales.total` where `user_id = me.id`, status `completed`, current month
-   - This Week — same filter, current ISO week (Mon-start)
-   - Commission — `monthSales × staff_settings.commission_percent / 100`
-   - Loyalty Score — count of distinct customers handled this month who also appear in `customer_ledger` before this month (same logic already in StaffPerformanceDetails)
+### 5. Keep existing UI patterns
+- Use shadcn `AlertDialog` for the confirmation popup (already in `src/components/ui/alert-dialog.tsx`).
+- Reuse `StatCard` / row layout from `PerformanceWidgets` for the new earnings card on Profile.
+- Tailwind, rounded-3xl cards, mobile-first — matches the rest of the app.
 
-2. **Monthly Target circular progress card** — large `CircularProgress` matching current Profile design, value = `monthSales / monthly_target`. Pencil/edit icon **only when `profile.role === 'admin'`** (non-admins see read-only).
+## Files touched
+- `src/pages/StaffPerformanceDetails.tsx` — confirmation dialog, auto-create cash_transaction on advance increase, "View in Transactions" link.
+- `src/pages/Profile.tsx` — fetch `basic_salary` + `advances`, render Remaining Salary card.
 
-3. **Achievements card** — three `BadgeTile`s (Top Seller, Fastest Biller, Customer Favorite) with the same auto-calculation rules as `StaffPerformanceDetails`. Earned-state determined by comparing the user against pharmacy-wide month winners.
+## No DB migration required
+`cash_transactions` already supports `direction='out'` + `category='expense'` + `party_name` + `note`, and existing RLS lets any pharmacy member (including admins) insert their own rows. The shop balance, daily totals, and transaction history pages already aggregate these rows.
 
-Data fetching: one effect on mount that runs the same queries as `StaffPerformanceDetails` but hard-coded to `userId = user.id`. Reuse the existing `staff_settings` row (read via `select` already permitted by current RLS — all pharmacy members can read pharmacy staff_settings rows; if we want stricter per-user reads, see "RLS notes" below).
-
-To avoid duplication, extract the small visual helpers (`StatCard`, `CircularProgress`, `BadgeTile`) into a tiny shared module `src/components/staff/PerformanceWidgets.tsx` and import them from both `Profile.tsx` and `StaffPerformanceDetails.tsx`.
-
----
-
-## 2. Manage Staff (`src/pages/ShopProfile.tsx`)
-
-The Shop Profile page itself stays accessible to everyone (shop info is useful to all staff), but the **Manage Staff accordion section is admin-only**:
-
-- Wrap the entire `AccordionItem value="manage-staff"` (and the surrounding "Top Performer" card / invite form / staff list) in `{isAdmin && ( … )}`.
-- Non-admins simply don't see the section.
-
-Direct route protection for `/staff/:userId`:
-- In `StaffPerformanceDetails.tsx` the existing guard already redirects when the visitor is neither admin nor the staff themselves. Update it to additionally redirect non-admins to `/profile` (instead of `navigate(-1)`) — so a salesman who hits `/staff/<someone-else-id>` lands on their own profile.
-- Salesmen/managers no longer need to click into `/staff/:userId` for themselves; their analytics live on `/profile`. We'll keep the route working (admins use it to view any staff member; a staff member viewing their own ID still works as a fallback).
-
----
-
-## 3. RLS / data access
-
-Current state already supports the requirements:
-
-- `sales` SELECT policy: `pharmacy_id = get_user_pharmacy_id()` — every member can read pharmacy sales. We rely on **client-side filtering by `user_id = auth.uid()`** for the personal Profile cards. This matches how `StaffPerformanceDetails` already aggregates.
-- `staff_settings` SELECT policy: any pharmacy member can read; **only admins can INSERT/UPDATE/DELETE**. ✓ matches "non-admins read-only".
-- `customer_ledger` SELECT policy: pharmacy members can read — needed for loyalty / customer-favorite calculation. ✓
-
-No schema or policy changes are required. The "personal data only" rule is enforced in the UI (we never display other users' rows on `/profile`), and write-protection on targets/commissions is already enforced by RLS on `staff_settings`.
-
----
-
-## Files
-
-**Edited**
-- `src/pages/Profile.tsx` — remove static target, add analytics grid + dynamic target + achievements
-- `src/pages/ShopProfile.tsx` — wrap Manage Staff accordion in `isAdmin` guard
-- `src/pages/StaffPerformanceDetails.tsx` — redirect denied users to `/profile`; import shared widgets
-
-**Created**
-- `src/components/staff/PerformanceWidgets.tsx` — shared `StatCard`, `CircularProgress`, `BadgeTile` (extracted from current `StaffPerformanceDetails.tsx` to avoid duplication)
-
-No DB migrations, no new RPCs, no edge functions.
+## Out of scope
+- No new "transactions" table — the project's transaction system is `cash_transactions`.
+- No reversal logic when an admin reduces the Advances number (we don't auto-create a refund). We can add that later if needed.

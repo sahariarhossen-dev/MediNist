@@ -41,6 +41,8 @@ const Profile = () => {
   const [loyalty, setLoyalty] = useState(0);
   const [monthlyTarget, setMonthlyTarget] = useState(0);
   const [commissionPercent, setCommissionPercent] = useState(0);
+  const [basicSalary, setBasicSalary] = useState(0);
+  const [advances, setAdvances] = useState(0);
   const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
   const [editingTarget, setEditingTarget] = useState(false);
   const [draftTarget, setDraftTarget] = useState(0);
@@ -56,15 +58,20 @@ const Profile = () => {
       // Settings (target + commission)
       const { data: setData } = await supabase
         .from("staff_settings" as any)
-        .select("monthly_target, commission_percent")
+        .select("monthly_target, commission_percent, basic_salary, advances")
         .eq("pharmacy_id", profile.pharmacy_id)
         .eq("user_id", user.id)
         .maybeSingle();
       if (!cancelled && setData) {
-        const s = setData as unknown as { monthly_target: number; commission_percent: number };
+        const s = setData as unknown as {
+          monthly_target: number; commission_percent: number;
+          basic_salary: number; advances: number;
+        };
         setMonthlyTarget(Number(s.monthly_target || 0));
         setDraftTarget(Number(s.monthly_target || 0));
         setCommissionPercent(Number(s.commission_percent || 0));
+        setBasicSalary(Number(s.basic_salary || 0));
+        setAdvances(Number(s.advances || 0));
       }
 
       // Pharmacy-wide month sales (needed both for personal totals + winners)
@@ -438,6 +445,33 @@ const Profile = () => {
               earned={winners.fastestBiller === user?.id} color="sky" />
             <BadgeTile icon={<Star size={20} />} label="Customer Favorite"
               earned={winners.customerFavorite === user?.id} color="rose" />
+          </div>
+        </Card>
+      </div>
+
+      {/* Earnings This Month */}
+      <div className="px-5 pb-4">
+        <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Earnings This Month</h2>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Basic Salary</p>
+              <p className="text-sm font-semibold tabular-nums text-foreground">{fmt(basicSalary)}</p>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Commission ({commissionPercent || 0}%)</p>
+              <p className="text-sm font-semibold tabular-nums text-emerald-700">+ {fmt(commission)}</p>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <p className="text-sm text-muted-foreground">Advances</p>
+              <p className="text-sm font-semibold tabular-nums text-rose-600">− {fmt(advances)}</p>
+            </div>
+            <div className="border-t border-border mt-2 pt-3 flex items-center justify-between">
+              <p className="text-sm font-bold text-foreground">Remaining Salary</p>
+              <p className="text-lg font-bold text-primary tabular-nums">
+                {fmt(basicSalary + commission - advances)}
+              </p>
+            </div>
           </div>
         </Card>
       </div>

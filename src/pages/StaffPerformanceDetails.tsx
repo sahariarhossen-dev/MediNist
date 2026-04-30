@@ -10,6 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import {
   StatCard,
@@ -64,6 +68,10 @@ const StaffPerformanceDetails = () => {
   // Inline editor state
   const [editing, setEditing] = useState<null | "target" | "earnings">(null);
   const [draft, setDraft] = useState<StaffSettings>(settings);
+  const [confirmAdvance, setConfirmAdvance] = useState<{
+    open: boolean; delta: number; pending?: Partial<StaffSettings>;
+  }>({ open: false, delta: 0 });
+  const [savingEarnings, setSavingEarnings] = useState(false);
 
   useEffect(() => {
     if (!userId || !me?.pharmacy_id) return;
@@ -191,26 +199,88 @@ const StaffPerformanceDetails = () => {
     ? Math.min(100, (monthSales / settings.monthly_target) * 100)
     : 0;
 
-  const saveSettings = async (next: Partial<StaffSettings>) => {
-    if (!me?.pharmacy_id || !userId) return;
+  const persistSettings = async (next: Partial<StaffSettings>) => {
+    if (!me?.pharmacy_id || !userId) return false;
     const merged = { ...settings, ...next };
     const { error } = await supabase
       .from("staff_settings" as any)
       .upsert(
-        {
-          pharmacy_id: me.pharmacy_id,
-          user_id: userId,
-          ...merged,
-        },
+        { pharmacy_id: me.pharmacy_id, user_id: userId, ...merged },
         { onConflict: "pharmacy_id,user_id" },
       );
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
+      return false;
     }
     setSettings(merged);
     setDraft(merged);
-    toast({ title: "Saved" });
+    return true;
+  };
+
+  const saveSettings = async (next: Partial<StaffSettings>) => {
+    const ok = await persistSettings(next);
+    if (ok) toast({ title: "Saved" });
+  };
+
+  const handleSaveEarnings = async () => {
+    if (!me?.pharmacy_id || !userId || !me.id) return;
+    const delta = (draft.advances || 0) - (settings.advances || 0);
+    const pending: Partial<StaffSettings> = {
+      basic_salary: draft.basic_salary,
+      commission_percent: draft.commission_percent,
+      advances: draft.advances,
+    };
+    if (delta > 0) {
+      // Need confirmation before deducting from shop balance
+      setConfirmAdvance({ open: true, delta, pending });
+      return;
+    }
+    setSavingEarnings(true);
+    const ok = await persistSettings(pending);
+    setSavingEarnings(false);
+    if (ok) {
+      toast({ title: "Saved" });
+      setEditing(null);
+    }
+  };
+
+  const confirmAdvanceDeduction = async () => {
+    if (!me?.pharmacy_id || !userId || !me.id) return;
+    const { delta, pending } = confirmAdvance;
+    setSavingEarnings(true);
+    const ok = await persistSettings(pending || {});
+    if (!ok) {
+      setSavingEarnings(false);
+      setConfirmAdvance({ open: false, delta: 0 });
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const staffName = staff?.full_name || "Staff";
+    const { error: txErr } = await supabase.from("cash_transactions").insert({
+      pharmacy_id: me.pharmacy_id,
+      user_id: me.id,
+      direction: "out",
+      category: "expense",
+      party_name: `Staff Advance: ${staffName}`,
+      amount: delta,
+      note: `Advance paid on ${today}`,
+      occurred_at: new Date().toISOString(),
+    });
+    setSavingEarnings(false);
+    setConfirmAdvance({ open: false, delta: 0 });
+    if (txErr) {
+      toast({
+        title: "Saved settings, but transaction failed",
+        description: txErr.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: "Advance recorded",
+      description: `৳${delta.toLocaleString("en-IN")} deducted from shop balance.`,
+    });
+    setEditing(null);
   };
 
   const initials = (staff?.full_name || "?")
@@ -414,18 +484,19 @@ const StaffPerformanceDetails = () => {
                 value={draft.advances}
                 onChange={(v) => setDraft({ ...draft, advances: v })}
               />
+              <button
+                type="button"
+                onClick={() => navigate("/more/all-transactions")}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View in Transactions →
+              </button>
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"
+                  disabled={savingEarnings}
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700 h-9 flex-1"
-                  onClick={async () => {
-                    await saveSettings({
-                      basic_salary: draft.basic_salary,
-                      commission_percent: draft.commission_percent,
-                      advances: draft.advances,
-                    });
-                    setEditing(null);
-                  }}
+                  onClick={handleSaveEarnings}
                 >
                   <Check size={14} /> Save
                 </Button>
@@ -444,6 +515,15 @@ const StaffPerformanceDetails = () => {
               <Row label="Basic Salary" value={fmt(settings.basic_salary || 0)} />
               <Row label={`Commission (${settings.commission_percent || 0}%)`} value={`+ ${fmt(commission)}`} positive />
               <Row label="Advances" value={`− ${fmt(settings.advances || 0)}`} negative />
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/more/all-transactions")}
+                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+                >
+                  View in Transactions →
+                </button>
+              )}
               <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between">
                 <p className="text-sm font-bold text-gray-900">Net Payable</p>
                 <p className="text-lg font-bold text-emerald-700 tabular-nums">{fmt(netPayable)}</p>
@@ -452,6 +532,32 @@ const StaffPerformanceDetails = () => {
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={confirmAdvance.open}
+        onOpenChange={(o) => !o && setConfirmAdvance({ open: false, delta: 0 })}
+      >
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Advance Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deduct ৳{confirmAdvance.delta.toLocaleString("en-IN")} from
+              the shop's current balance and log it as an expense in your Transactions.
+              Do you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={savingEarnings}
+              onClick={confirmAdvanceDeduction}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+            >
+              Yes, deduct & save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
