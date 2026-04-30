@@ -170,7 +170,7 @@ export default function ProductTargetsList({
   if (embedded) {
     return (
       <>
-        <div className="border-t border-gray-100 mt-4 pt-3">
+        <div className="border-t border-gray-100 mt-4 pt-[20px]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Product Targets · This month
