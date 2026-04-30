@@ -41,6 +41,8 @@ const Profile = () => {
   const [loyalty, setLoyalty] = useState(0);
   const [monthlyTarget, setMonthlyTarget] = useState(0);
   const [commissionPercent, setCommissionPercent] = useState(0);
+  const [basicSalary, setBasicSalary] = useState(0);
+  const [advances, setAdvances] = useState(0);
   const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
   const [editingTarget, setEditingTarget] = useState(false);
   const [draftTarget, setDraftTarget] = useState(0);
@@ -56,15 +58,20 @@ const Profile = () => {
       // Settings (target + commission)
       const { data: setData } = await supabase
         .from("staff_settings" as any)
-        .select("monthly_target, commission_percent")
+        .select("monthly_target, commission_percent, basic_salary, advances")
         .eq("pharmacy_id", profile.pharmacy_id)
         .eq("user_id", user.id)
         .maybeSingle();
       if (!cancelled && setData) {
-        const s = setData as unknown as { monthly_target: number; commission_percent: number };
+        const s = setData as unknown as {
+          monthly_target: number; commission_percent: number;
+          basic_salary: number; advances: number;
+        };
         setMonthlyTarget(Number(s.monthly_target || 0));
         setDraftTarget(Number(s.monthly_target || 0));
         setCommissionPercent(Number(s.commission_percent || 0));
+        setBasicSalary(Number(s.basic_salary || 0));
+        setAdvances(Number(s.advances || 0));
       }
 
       // Pharmacy-wide month sales (needed both for personal totals + winners)
