@@ -484,18 +484,19 @@ const StaffPerformanceDetails = () => {
                 value={draft.advances}
                 onChange={(v) => setDraft({ ...draft, advances: v })}
               />
+              <button
+                type="button"
+                onClick={() => navigate("/more/all-transactions")}
+                className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+              >
+                View in Transactions →
+              </button>
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"
+                  disabled={savingEarnings}
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700 h-9 flex-1"
-                  onClick={async () => {
-                    await saveSettings({
-                      basic_salary: draft.basic_salary,
-                      commission_percent: draft.commission_percent,
-                      advances: draft.advances,
-                    });
-                    setEditing(null);
-                  }}
+                  onClick={handleSaveEarnings}
                 >
                   <Check size={14} /> Save
                 </Button>
@@ -514,6 +515,15 @@ const StaffPerformanceDetails = () => {
               <Row label="Basic Salary" value={fmt(settings.basic_salary || 0)} />
               <Row label={`Commission (${settings.commission_percent || 0}%)`} value={`+ ${fmt(commission)}`} positive />
               <Row label="Advances" value={`− ${fmt(settings.advances || 0)}`} negative />
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/more/all-transactions")}
+                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+                >
+                  View in Transactions →
+                </button>
+              )}
               <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between">
                 <p className="text-sm font-bold text-gray-900">Net Payable</p>
                 <p className="text-lg font-bold text-emerald-700 tabular-nums">{fmt(netPayable)}</p>
@@ -522,6 +532,32 @@ const StaffPerformanceDetails = () => {
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={confirmAdvance.open}
+        onOpenChange={(o) => !o && setConfirmAdvance({ open: false, delta: 0 })}
+      >
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Advance Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deduct ৳{confirmAdvance.delta.toLocaleString("en-IN")} from
+              the shop's current balance and log it as an expense in your Transactions.
+              Do you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={savingEarnings}
+              onClick={confirmAdvanceDeduction}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+            >
+              Yes, deduct & save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
