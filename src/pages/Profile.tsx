@@ -594,6 +594,15 @@ const Profile = () => {
           <span className="font-semibold text-destructive">Log Out</span>
         </button>
       </div>
+      {user?.id && profile?.pharmacy_id && (
+        <StaffAdvancesSheet
+          open={advancesSheetOpen}
+          onOpenChange={setAdvancesSheetOpen}
+          staffName={profile?.full_name || "You"}
+          userId={user.id}
+          pharmacyId={profile.pharmacy_id}
+        />
+      )}
     </div>
   );
 };
