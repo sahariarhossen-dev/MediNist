@@ -10,6 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import {
   StatCard,
@@ -64,6 +68,10 @@ const StaffPerformanceDetails = () => {
   // Inline editor state
   const [editing, setEditing] = useState<null | "target" | "earnings">(null);
   const [draft, setDraft] = useState<StaffSettings>(settings);
+  const [confirmAdvance, setConfirmAdvance] = useState<{
+    open: boolean; delta: number; pending?: Partial<StaffSettings>;
+  }>({ open: false, delta: 0 });
+  const [savingEarnings, setSavingEarnings] = useState(false);
 
   useEffect(() => {
     if (!userId || !me?.pharmacy_id) return;
@@ -191,26 +199,88 @@ const StaffPerformanceDetails = () => {
     ? Math.min(100, (monthSales / settings.monthly_target) * 100)
     : 0;
 
-  const saveSettings = async (next: Partial<StaffSettings>) => {
-    if (!me?.pharmacy_id || !userId) return;
+  const persistSettings = async (next: Partial<StaffSettings>) => {
+    if (!me?.pharmacy_id || !userId) return false;
     const merged = { ...settings, ...next };
     const { error } = await supabase
       .from("staff_settings" as any)
       .upsert(
-        {
-          pharmacy_id: me.pharmacy_id,
-          user_id: userId,
-          ...merged,
-        },
+        { pharmacy_id: me.pharmacy_id, user_id: userId, ...merged },
         { onConflict: "pharmacy_id,user_id" },
       );
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
+      return false;
     }
     setSettings(merged);
     setDraft(merged);
-    toast({ title: "Saved" });
+    return true;
+  };
+
+  const saveSettings = async (next: Partial<StaffSettings>) => {
+    const ok = await persistSettings(next);
+    if (ok) toast({ title: "Saved" });
+  };
+
+  const handleSaveEarnings = async () => {
+    if (!me?.pharmacy_id || !userId || !me.id) return;
+    const delta = (draft.advances || 0) - (settings.advances || 0);
+    const pending: Partial<StaffSettings> = {
+      basic_salary: draft.basic_salary,
+      commission_percent: draft.commission_percent,
+      advances: draft.advances,
+    };
+    if (delta > 0) {
+      // Need confirmation before deducting from shop balance
+      setConfirmAdvance({ open: true, delta, pending });
+      return;
+    }
+    setSavingEarnings(true);
+    const ok = await persistSettings(pending);
+    setSavingEarnings(false);
+    if (ok) {
+      toast({ title: "Saved" });
+      setEditing(null);
+    }
+  };
+
+  const confirmAdvanceDeduction = async () => {
+    if (!me?.pharmacy_id || !userId || !me.id) return;
+    const { delta, pending } = confirmAdvance;
+    setSavingEarnings(true);
+    const ok = await persistSettings(pending || {});
+    if (!ok) {
+      setSavingEarnings(false);
+      setConfirmAdvance({ open: false, delta: 0 });
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const staffName = staff?.full_name || "Staff";
+    const { error: txErr } = await supabase.from("cash_transactions").insert({
+      pharmacy_id: me.pharmacy_id,
+      user_id: me.id,
+      direction: "out",
+      category: "expense",
+      party_name: `Staff Advance: ${staffName}`,
+      amount: delta,
+      note: `Advance paid on ${today}`,
+      occurred_at: new Date().toISOString(),
+    });
+    setSavingEarnings(false);
+    setConfirmAdvance({ open: false, delta: 0 });
+    if (txErr) {
+      toast({
+        title: "Saved settings, but transaction failed",
+        description: txErr.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: "Advance recorded",
+      description: `৳${delta.toLocaleString("en-IN")} deducted from shop balance.`,
+    });
+    setEditing(null);
   };
 
   const initials = (staff?.full_name || "?")
