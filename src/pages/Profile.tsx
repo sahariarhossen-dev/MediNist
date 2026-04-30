@@ -447,20 +447,17 @@ const Profile = () => {
               )}
             </div>
           </div>
+          {user?.id && profile?.pharmacy_id && (
+            <ProductTargetsList
+              pharmacyId={profile.pharmacy_id}
+              userId={user.id}
+              isAdmin={false}
+              embedded
+              hideWhenEmpty
+            />
+          )}
         </Card>
       </div>
-
-      {/* My Product Targets */}
-      {user?.id && profile?.pharmacy_id && (
-        <div className="px-5 pb-4">
-          <ProductTargetsList
-            pharmacyId={profile.pharmacy_id}
-            userId={user.id}
-            isAdmin={false}
-            hideWhenEmpty
-          />
-        </div>
-      )}
 
       {/* Achievements */}
       <div className="px-5 pb-4">

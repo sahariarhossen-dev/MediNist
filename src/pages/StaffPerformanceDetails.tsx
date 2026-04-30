@@ -443,6 +443,15 @@ const StaffPerformanceDetails = () => {
               )}
             </div>
           </div>
+          {me?.pharmacy_id && userId && (
+            <ProductTargetsList
+              pharmacyId={me.pharmacy_id}
+              userId={userId}
+              isAdmin={isAdmin}
+              currentUserId={me.id}
+              embedded
+            />
+          )}
         </div>
       </div>
 
@@ -472,18 +481,6 @@ const StaffPerformanceDetails = () => {
           </div>
         </div>
       </div>
-
-      {/* Product Targets */}
-      {me?.pharmacy_id && userId && (
-        <div className="px-page mt-4">
-          <ProductTargetsList
-            pharmacyId={me.pharmacy_id}
-            userId={userId}
-            isAdmin={isAdmin}
-            currentUserId={me.id}
-          />
-        </div>
-      )}
 
       {/* Earnings */}
       <div className="px-page mt-4">
