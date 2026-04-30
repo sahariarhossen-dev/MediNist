@@ -1,52 +1,27 @@
-# Persistent Prescription Header on Sales Page
+Redesign the Financial Card on Customer Profile (`src/pages/CustomerProfile.tsx`) into a compact, iOS-inspired card. Single-file visual change — no DB or logic changes; month labels and monthly totals already derive correctly from `ledger`.
 
-Optimize `src/pages/CreateSale.tsx` so a selected customer's prescription chips stay visible after items enter the cart, and the bulky customer card collapses to free vertical space.
+## Changes (financial card block only)
 
-## Changes
+**Container**
+- Padding `p-4` → `p-3.5`, keep `rounded-2xl` (16px), soft shadow `shadow-[0_1px_2px_rgba(16,24,40,0.04)]`, tighter internal spacing.
 
-### 1. `src/pages/CreateSale.tsx` — Conditional rendering
+**Total Due header**
+- Label: `text-[10px] font-medium uppercase tracking-[0.08em] text-gray-400` (lighter, less shouty).
+- Amount: `text-[28px] font-semibold tabular-nums tracking-tight` instead of `text-3xl font-extrabold`. Colors unchanged (red / emerald / gray based on sign).
 
-**Customer area (currently around line 550–560):**
-- When `cartItems.length === 0`: render the existing full `CustomerPickerPopover` trigger (unchanged).
-- When `cartItems.length > 0` AND `selectedCustomer`: replace it with a compact inline row:
-  - Text: `Billing for: <strong>{selectedCustomer.name}</strong>`
-  - Small ghost button (`X` icon) to clear the customer (calls `setSelectedCustomer(null)`).
-  - Small "Change" link that opens the picker (reuse the popover, just trigger styled as a tiny chip).
-  - Tailwind: `flex items-center justify-between text-[12px] text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5`.
+**Monthly stats row (dynamic month)**
+- Replace the two tinted blocks with a single flat `bg-gray-50/60 rounded-xl` container split into two columns by a thin `divide-x divide-gray-100`.
+- Left column: `{MONTH} SALES` — label `text-[10px] text-red-500/80 tracking-wider`, amount `text-[15px] font-semibold tabular-nums text-gray-900`.
+- Right column: `{MONTH} PAID` — label `text-[10px] text-emerald-600/80 tracking-wider`, amount `text-[15px] font-semibold tabular-nums text-gray-900`.
+- Month auto-updates via existing `monthLabel` (uppercased).
 
-**Prescription strip (currently line 563):**
-- Change condition from
-  `selectedCustomer && prescriptions.length > 0 && cartItems.length === 0 && !searchQuery`
-  to
-  `selectedCustomer && prescriptions.length > 0`.
-- Strip stays mounted regardless of cart state or search query so the user can keep one-tap adding meds.
-- Header text stays "Saved for {name}".
-- Container: keep `flex gap-2 overflow-x-auto pb-1 -mx-1 px-1`, add `scroll-smooth snap-x` for smooth swipe.
+**Action buttons (compact, side-by-side)**
+- `grid grid-cols-2 gap-2 mt-3`, both `h-9 rounded-xl text-[13px]`.
+- Receive Payment: solid `bg-emerald-600 hover:bg-emerald-700 text-white font-semibold` + `HandCoins` icon.
+- Add Manual Due: ghost `bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium` + `MinusCircle` icon.
 
-**Per-chip "already in cart" feedback:**
-- Compute `const cartMedicineIds = new Set(cartItems.map(i => i.medicine.id))` once per render.
-- For each prescription chip, check `presc.medicine_id && cartMedicineIds.has(presc.medicine_id)`.
-- When in cart: swap classes from blue (`border-blue-200 bg-blue-50 text-blue-700`) to green (`border-emerald-200 bg-emerald-50 text-emerald-700`) and prepend a `Check` icon (lucide `Check`, `w-3 h-3`) instead of the `Pill` icon. Keep button enabled (tapping again increments quantity via existing `addPrescriptionToCart`).
+## Data
+No changes. `monthLabel`, `monthly.sales` (sum of `entry_type='due'` for current month), and `monthly.paid` (sum of `entry_type='payment'` for current month) are already correct and dynamic.
 
-### 2. State management
-No new state required. `prescriptions` is already loaded on customer change (lines 184–197) and only cleared when `selectedCustomer` becomes null. That naturally satisfies "stays as long as a customer is selected". No effect changes needed.
-
-### 3. Out of scope
-- No DB changes.
-- No changes to `addPrescriptionToCart` logic (quantity/dosage handling already correct).
-- No changes to other pages.
-
-## Files touched
-- `src/pages/CreateSale.tsx` (only)
-
-## Visual summary
-
-```text
-Cart empty:                          Cart has items:
-[ Search bar............. ]          [ Search bar............. ]
-[ + Select Customer card ]           [ Billing for: Rahim  · change · x ]
-Saved for Rahim                      Saved for Rahim
-[Pill Napa 1+0+1] [Pill Elodep 0+0+1]   [✓ Napa 1+0+1] [Pill Elodep 0+0+1]
-(empty cart placeholder)             1. Napa  x2 ...
-                                     2. ...
-```
+## Out of scope
+Identity card, tabs, prescription vault, ledger timeline, sheets, and any database work.

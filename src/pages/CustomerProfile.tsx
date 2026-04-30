@@ -97,6 +97,7 @@ const CustomerProfile = () => {
     { sales: 0, paid: 0 },
   );
   const monthLabel = now.toLocaleString("en-US", { month: "long" });
+  const monthLabelUpper = monthLabel.toUpperCase();
 
   const handleDeletePresc = async (p: Prescription) => {
     if (!confirm(`Delete "${p.medicine_name}"?`)) return;
@@ -181,35 +182,37 @@ const CustomerProfile = () => {
       </div>
 
       {/* Financial Card */}
-      <div className="mx-page mt-3 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+      <div className="mx-page mt-3 bg-white rounded-2xl p-3.5 border border-gray-100 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{dueLabel}</p>
-          <p className={`text-3xl font-extrabold tabular-nums ${dueColor} mt-0.5`}>৳{formatBDT(Math.abs(due))}</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-gray-400">{dueLabel}</p>
+          <p className={`text-[28px] leading-tight font-semibold tabular-nums tracking-tight ${dueColor} mt-0.5`}>
+            ৳{formatBDT(Math.abs(due))}
+          </p>
         </div>
 
-        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2">
-          <div className="bg-red-50/60 rounded-xl px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-red-600/80">{monthLabel} Sales</p>
-            <p className="text-base font-bold tabular-nums text-red-700 mt-0.5">৳{formatBDT(monthly.sales)}</p>
+        <div className="mt-2.5 bg-gray-50/60 rounded-xl grid grid-cols-2 divide-x divide-gray-100">
+          <div className="px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-red-500/80">{monthLabelUpper} SALES</p>
+            <p className="text-[15px] font-semibold tabular-nums text-gray-900 mt-0.5">৳{formatBDT(monthly.sales)}</p>
           </div>
-          <div className="bg-green-50/60 rounded-xl px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700/80">{monthLabel} Paid</p>
-            <p className="text-base font-bold tabular-nums text-green-700 mt-0.5">৳{formatBDT(monthly.paid)}</p>
+          <div className="px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-emerald-600/80">{monthLabelUpper} PAID</p>
+            <p className="text-[15px] font-semibold tabular-nums text-gray-900 mt-0.5">৳{formatBDT(monthly.paid)}</p>
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             onClick={() => setPayOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-semibold shadow-sm"
+            className="inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-semibold shadow-sm transition-colors"
           >
-            <HandCoins className="w-4 h-4" /> Receive Payment
+            <HandCoins className="w-3.5 h-3.5" /> Receive Payment
           </button>
           <button
             onClick={() => setDueOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold"
+            className="inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-[13px] font-medium transition-colors"
           >
-            <MinusCircle className="w-4 h-4" /> Add Manual Due
+            <MinusCircle className="w-3.5 h-3.5" /> Add Manual Due
           </button>
         </div>
       </div>
