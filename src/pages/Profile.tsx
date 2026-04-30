@@ -15,6 +15,7 @@ import {
   StatCard, BadgeTile, fmtBdt as fmt, startOfMonthIso, startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
 import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
+import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -42,7 +43,8 @@ const Profile = () => {
   const [monthlyTarget, setMonthlyTarget] = useState(0);
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [basicSalary, setBasicSalary] = useState(0);
-  const [advances, setAdvances] = useState(0);
+  const [monthAdvanceTotal, setMonthAdvanceTotal] = useState(0);
+  const [advancesSheetOpen, setAdvancesSheetOpen] = useState(false);
   const [winners, setWinners] = useState<{ topSeller?: string; fastestBiller?: string; customerFavorite?: string }>({});
   const [editingTarget, setEditingTarget] = useState(false);
   const [draftTarget, setDraftTarget] = useState(0);
@@ -71,7 +73,20 @@ const Profile = () => {
         setDraftTarget(Number(s.monthly_target || 0));
         setCommissionPercent(Number(s.commission_percent || 0));
         setBasicSalary(Number(s.basic_salary || 0));
-        setAdvances(Number(s.advances || 0));
+      }
+
+      // Monthly advance transactions for me (sourced from cash_transactions)
+      const { data: advRows } = await supabase
+        .from("cash_transactions")
+        .select("amount")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("category", "expense")
+        .like("note", `STAFF_ADVANCE:${user.id}%`)
+        .gte("occurred_at", startOfMonthIso());
+      if (!cancelled) {
+        setMonthAdvanceTotal(
+          (advRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+        );
       }
 
       // Pharmacy-wide month sales (needed both for personal totals + winners)
