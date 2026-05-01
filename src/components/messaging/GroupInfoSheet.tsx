@@ -13,8 +13,19 @@ import type { RoomInfo, RoomMember } from "@/hooks/useChatRoom";
 const initials = (n: string | null | undefined) =>
   (n || "?").split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-const humanRole = (r?: string | null) =>
-  !r ? "Member" : r === "admin" ? "Owner" : r.charAt(0).toUpperCase() + r.slice(1);
+const humanRole = (r?: string | null) => {
+  if (!r) return "Member";
+  switch (r) {
+    case "admin":
+      return "Owner";
+    case "manager":
+      return "Manager";
+    case "salesman":
+      return "Salesman";
+    default:
+      return r.charAt(0).toUpperCase() + r.slice(1);
+  }
+};
 
 const GroupInfoSheet = ({
   open,
@@ -163,7 +174,10 @@ const GroupInfoSheet = ({
                     user_id: m.user_id,
                     full_name: m.full_name,
                     avatar_url: m.avatar_url,
-                    last_seen: m.last_read_at,
+                    role: m.role,
+                    phone: m.phone,
+                    last_seen: m.last_seen,
+                    verified: true,
                   })
                 }
                 className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
