@@ -178,7 +178,7 @@ const GroupInfoSheet = ({
                   <p className="truncate text-sm font-semibold text-gray-900">
                     {m.user_id === user?.id ? "You" : m.full_name || "Member"}
                   </p>
-                  <p className="text-xs text-gray-500">{humanRole((m as RoomMember & { role?: string | null }).role)}</p>
+                  <p className="text-xs text-gray-500">{humanRole(m.role)}</p>
                 </div>
                 {m.is_admin && (
                   <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
