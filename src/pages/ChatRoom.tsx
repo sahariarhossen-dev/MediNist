@@ -37,15 +37,18 @@ const ChatRoom = () => {
   );
 
   const headerName =
-    room?.type === "group" ? room?.name || "Group" : other?.full_name || "Direct chat";
+    room?.type === "group"
+      ? room?.name || "Group"
+      : other?.full_name || (members.length > 0 ? "Teammate" : "");
   const headerAvatar = room?.type === "group" ? room?.avatar_url : other?.avatar_url;
 
   const subtitle = (() => {
     if (typingUserIds.length > 0) return "typing…";
     if (room?.type === "group") return `${members.length} member${members.length === 1 ? "" : "s"}`;
     if (!other) return "";
-    const isOnline = Date.now() - new Date(other.last_read_at).getTime() < 60_000;
-    return isOnline ? "Online" : `Last seen ${relativeTime(other.last_read_at)}`;
+    if (!other.last_seen) return "Offline";
+    const isOnline = Date.now() - new Date(other.last_seen).getTime() < 60_000;
+    return isOnline ? "Online" : `Last seen ${relativeTime(other.last_seen)}`;
   })();
 
   const openHeader = () => {
@@ -124,7 +127,8 @@ const ChatRoom = () => {
                 avatar_url: other.avatar_url,
                 role: other.role,
                 phone: other.phone,
-                last_seen: other.last_read_at,
+                last_seen: other.last_seen,
+                verified: true,
               }
             : null
         }

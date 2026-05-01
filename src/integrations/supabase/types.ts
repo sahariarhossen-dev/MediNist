@@ -1115,6 +1115,17 @@ export type Database = {
         Args: { _other_user: string }
         Returns: string
       }
+      get_pharmacy_member_directory: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          full_name: string
+          id: string
+          last_seen: string
+          phone: string
+          role: string
+        }[]
+      }
       get_pharmacy_member_names: {
         Args: never
         Returns: {
