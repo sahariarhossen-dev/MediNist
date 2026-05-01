@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Users, MessageSquarePlus } from "lucide-react";
 import { usePharmacyStaff } from "@/hooks/usePharmacyStaff";
 import { supabase } from "@/integrations/supabase/client";
