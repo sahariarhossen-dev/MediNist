@@ -10,6 +10,7 @@ export interface ProfileMember {
   role?: string | null;
   phone?: string | null;
   last_seen?: string | null;
+  verified?: boolean;
 }
 
 const initials = (n: string | null | undefined) =>
@@ -17,8 +18,16 @@ const initials = (n: string | null | undefined) =>
 
 const humanRole = (r?: string | null) => {
   if (!r) return "Member";
-  if (r === "admin") return "Owner";
-  return r.charAt(0).toUpperCase() + r.slice(1);
+  switch (r) {
+    case "admin":
+      return "Owner";
+    case "manager":
+      return "Manager";
+    case "salesman":
+      return "Salesman";
+    default:
+      return r.charAt(0).toUpperCase() + r.slice(1);
+  }
 };
 
 const ProfileSheet = ({
@@ -71,7 +80,11 @@ const ProfileSheet = ({
               )
             }
           />
-          <Row icon={<BadgeCheck className="h-4 w-4 text-emerald-500" />} label="Verified teammate" value="Yes" />
+          <Row
+            icon={<BadgeCheck className={`h-4 w-4 ${member.verified ? "text-emerald-500" : "text-gray-400"}`} />}
+            label="Verified teammate"
+            value={member.verified ? "Yes" : "No"}
+          />
         </div>
       </SheetContent>
     </Sheet>
