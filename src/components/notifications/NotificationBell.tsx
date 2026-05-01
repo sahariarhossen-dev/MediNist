@@ -29,11 +29,11 @@ const NotificationBell = () => {
       <PopoverTrigger asChild>
         <button
           aria-label="Notifications"
-          className="relative p-2 rounded-full hover:bg-gray-100 transition"
+          className="relative p-2 rounded-full hover:bg-gray-100 transition ml-0 pl-[8px] mr-[10px]"
         >
           <Bell
             size={22}
-            className={cn("text-gray-600", animating && "animate-jiggle origin-top")}
+            className={cn("text-gray-600 mb-0 mt-0 pb-0 pt-[5px]", animating && "animate-jiggle origin-top")}
           />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center ring-2 ring-[#e9f1fb]">
