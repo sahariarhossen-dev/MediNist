@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -17,6 +17,11 @@ export const useChatInbox = () => {
   const { user, profile } = useAuth();
   const [rooms, setRooms] = useState<InboxRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const instanceIdRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2)
+  );
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -30,17 +35,27 @@ export const useChatInbox = () => {
   }, [refresh]);
 
   useEffect(() => {
-    if (!profile?.pharmacy_id) return;
-    const ch = supabase
-      .channel(`inbox:${profile.pharmacy_id}`)
+    if (!profile?.pharmacy_id || !user?.id) return;
+    const channelName = `inbox:${profile.pharmacy_id}:${user.id}:${instanceIdRef.current}`;
+    const ch = supabase.channel(channelName);
+    ch.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "chat_messages",
+        filter: `pharmacy_id=eq.${profile.pharmacy_id}`,
+      },
+      () => refresh()
+    )
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages", filter: `pharmacy_id=eq.${profile.pharmacy_id}` },
-        () => refresh()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_room_members", filter: `user_id=eq.${user?.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_room_members",
+          filter: `user_id=eq.${user.id}`,
+        },
         () => refresh()
       )
       .subscribe();
