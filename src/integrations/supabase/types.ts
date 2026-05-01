@@ -157,6 +157,115 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_messages: {
+        Row: {
+          attachment_type: string | null
+          attachment_url: string | null
+          content: string | null
+          created_at: string
+          edited_at: string | null
+          id: string
+          pharmacy_id: string
+          room_id: string
+          sender_id: string
+        }
+        Insert: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          content?: string | null
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          pharmacy_id: string
+          room_id: string
+          sender_id: string
+        }
+        Update: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          content?: string | null
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          pharmacy_id?: string
+          room_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_room_members: {
+        Row: {
+          is_admin: boolean
+          joined_at: string
+          last_read_at: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          is_admin?: boolean
+          joined_at?: string
+          last_read_at?: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          is_admin?: boolean
+          joined_at?: string
+          last_read_at?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_room_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_rooms: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          created_by: string
+          id: string
+          name: string | null
+          pharmacy_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          name?: string | null
+          pharmacy_id: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string | null
+          pharmacy_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           created_at: string | null
@@ -957,6 +1066,23 @@ export type Database = {
           role: string
         }[]
       }
+      create_group_room: {
+        Args: { _avatar_url?: string; _member_ids: string[]; _name: string }
+        Returns: string
+      }
+      get_chat_inbox: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          display_name: string
+          last_message: string
+          last_message_at: string
+          other_user_id: string
+          room_id: string
+          type: string
+          unread_count: number
+        }[]
+      }
       get_invitation_by_token: {
         Args: { _token: string }
         Returns: {
@@ -984,6 +1110,10 @@ export type Database = {
           name: string
           upazila: string
         }[]
+      }
+      get_or_create_direct_room: {
+        Args: { _other_user: string }
+        Returns: string
       }
       get_pharmacy_member_names: {
         Args: never
@@ -1038,6 +1168,15 @@ export type Database = {
         Returns: undefined
       }
       is_pharmacy_admin: { Args: never; Returns: boolean }
+      is_room_admin: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_room_member: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
+      mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       search_medicines: {
         Args: { _pharmacy_id: string; _query: string }
         Returns: {
