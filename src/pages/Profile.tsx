@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown,
-  Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon,
+  Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon, Mail,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -377,6 +377,13 @@ const Profile = () => {
               ) : (
                 <span className="text-xs font-medium text-foreground">{profile?.phone || "—"}</span>
               )}
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Mail size={12} className="text-muted-foreground" />
+                Email
+              </span>
+              <span className="text-xs font-medium text-foreground truncate max-w-[60%] text-right">{user?.email || "—"}</span>
             </div>
           </div>
         </Card>
