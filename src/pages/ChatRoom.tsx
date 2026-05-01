@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -7,6 +7,8 @@ import ChatInput from "@/components/messaging/ChatInput";
 import { useChatRoom } from "@/hooks/useChatRoom";
 import { useAuth } from "@/contexts/AuthContext";
 import { relativeTime } from "@/lib/relativeTime";
+import ProfileSheet from "@/components/messaging/ProfileSheet";
+import GroupInfoSheet from "@/components/messaging/GroupInfoSheet";
 
 const initials = (n: string | null | undefined) =>
   (n || "?").split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
@@ -15,9 +17,11 @@ const ChatRoom = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { room, members, messages, typingUserIds, sendMessage, markRead, broadcastTyping, loading } =
+  const { room, members, messages, typingUserIds, sendMessage, markRead, broadcastTyping, loading, reload } =
     useChatRoom(roomId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
 
   useEffect(() => {
     markRead();
@@ -39,29 +43,47 @@ const ChatRoom = () => {
   const subtitle = (() => {
     if (typingUserIds.length > 0) return "typing…";
     if (room?.type === "group") return `${members.length} member${members.length === 1 ? "" : "s"}`;
-    return other ? `Last seen ${relativeTime(other.last_read_at)}` : "";
+    if (!other) return "";
+    const isOnline = Date.now() - new Date(other.last_read_at).getTime() < 60_000;
+    return isOnline ? "Online" : `Last seen ${relativeTime(other.last_read_at)}`;
   })();
+
+  const openHeader = () => {
+    if (room?.type === "group") setGroupOpen(true);
+    else if (other) setProfileOpen(true);
+  };
 
   return (
     <div className="flex flex-col h-screen bg-[#efeae2]">
       <header className="flex items-center gap-3 bg-white border-b border-gray-200 px-3 py-2 shrink-0">
         <button
-          onClick={() => navigate("/messages")}
+          onClick={() => navigate("/messages", { replace: true })}
           className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
           aria-label="Back"
         >
           <ArrowLeft className="h-5 w-5 text-gray-700" />
         </button>
-        <Avatar className="h-9 w-9">
-          {headerAvatar ? <AvatarImage src={headerAvatar} /> : null}
-          <AvatarFallback className="bg-blue-500 text-white text-xs font-semibold">
-            {room?.type === "group" ? <Users className="h-4 w-4" /> : initials(headerName)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0">
-          <p className="truncate font-semibold text-sm text-gray-900">{headerName}</p>
-          <p className="truncate text-[11px] text-gray-500">{subtitle}</p>
-        </div>
+        <button
+          onClick={openHeader}
+          className="flex items-center gap-3 flex-1 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-gray-50 text-left"
+        >
+          <Avatar className="h-10 w-10 shrink-0">
+            {headerAvatar ? <AvatarImage src={headerAvatar} className="object-cover" /> : null}
+            <AvatarFallback
+              className={
+                room?.type === "group"
+                  ? "bg-gradient-to-br from-emerald-400 to-green-600 text-white"
+                  : "bg-blue-500 text-white text-xs font-semibold"
+              }
+            >
+              {room?.type === "group" ? <Users className="h-4 w-4" /> : initials(headerName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="truncate font-semibold text-sm text-gray-900 leading-tight">{headerName}</p>
+            <p className="truncate text-[11px] text-gray-500 leading-tight mt-0.5">{subtitle}</p>
+          </div>
+        </button>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-3 space-y-1.5">
@@ -90,6 +112,30 @@ const ChatRoom = () => {
       </div>
 
       <ChatInput onSend={sendMessage} onTyping={broadcastTyping} />
+
+      <ProfileSheet
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+        member={
+          other
+            ? {
+                user_id: other.user_id,
+                full_name: other.full_name,
+                avatar_url: other.avatar_url,
+                role: other.role,
+                phone: other.phone,
+                last_seen: other.last_read_at,
+              }
+            : null
+        }
+      />
+      <GroupInfoSheet
+        open={groupOpen}
+        onOpenChange={setGroupOpen}
+        room={room}
+        members={members}
+        onChanged={reload}
+      />
     </div>
   );
 };
