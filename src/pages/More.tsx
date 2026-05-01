@@ -41,8 +41,6 @@ const More = () => {
   const getShopInitials = (name: string | null) =>
     name ? name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "S";
 
-  const contactInfo = user?.email || profile?.phone || "—";
-
   const menuItems = allMenuItems.filter(
     (item) => !(profile?.role === "salesman" && item.path === "/more/daily-transactions"),
   );
@@ -51,11 +49,8 @@ const More = () => {
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
       <AppHeader />
 
-      {/* Shop Profile Card – Shop logo, user name, email/phone */}
-      <div
-        className="mx-page mt-2 bg-white rounded-2xl p-4 shadow-sm cursor-pointer"
-        onClick={() => navigate("/shop-profile")}
-      >
+      {/* Static Identity Card – Shop logo, user name, shop name */}
+      <div className="mx-page mt-2 bg-white rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-4">
           <Avatar className="h-14 w-14 border-2 border-blue-100">
             {pharmacyLogo ? (
@@ -65,12 +60,10 @@ const More = () => {
               {getShopInitials(pharmacyName)}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
             <p className="font-bold text-gray-900 text-fluid-base truncate">{profile?.full_name || "User"}</p>
-            <p className="text-fluid-sm text-gray-500 truncate">{contactInfo}</p>
-            <p className="text-fluid-xs text-gray-400 truncate mt-0.5">{pharmacyName || "Your Pharmacy"}</p>
+            <p className="text-fluid-sm text-gray-500 truncate">{pharmacyName || "Your Pharmacy"}</p>
           </div>
-          <ChevronRight size={18} className="text-gray-300 flex-shrink-0" />
         </div>
       </div>
 
