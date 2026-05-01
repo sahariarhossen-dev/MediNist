@@ -20,7 +20,13 @@ const InboxRow = ({ room, onClick }: { room: InboxRoom; onClick: () => void }) =
     >
       <Avatar className="h-12 w-12 shrink-0">
         {room.avatar_url ? <AvatarImage src={room.avatar_url} alt={room.display_name} /> : null}
-        <AvatarFallback className="bg-blue-500 text-white text-sm font-semibold">
+        <AvatarFallback
+          className={
+            room.type === "group"
+              ? "bg-gradient-to-br from-emerald-400 to-green-600 text-white"
+              : "bg-blue-500 text-white text-sm font-semibold"
+          }
+        >
           {room.type === "group" ? <Users className="h-5 w-5" /> : initials(room.display_name)}
         </AvatarFallback>
       </Avatar>
