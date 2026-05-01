@@ -18,6 +18,8 @@ export interface RoomMember {
   last_read_at: string;
   full_name: string | null;
   avatar_url: string | null;
+  role: string | null;
+  phone: string | null;
 }
 
 export interface RoomInfo {
@@ -50,8 +52,16 @@ export const useChatRoom = (roomId: string | undefined) => {
     if (m.data) {
       const ids = (m.data as { user_id: string; is_admin: boolean; last_read_at: string }[]).map((x) => x.user_id);
       const profiles = ids.length
-        ? await supabase.from("profiles").select("id,full_name,avatar_url").in("id", ids)
-        : { data: [] as { id: string; full_name: string | null; avatar_url: string | null }[] };
+        ? await supabase.from("profiles").select("id,full_name,avatar_url,role,phone").in("id", ids)
+        : {
+            data: [] as {
+              id: string;
+              full_name: string | null;
+              avatar_url: string | null;
+              role: string | null;
+              phone: string | null;
+            }[],
+          };
       const map = new Map((profiles.data || []).map((p) => [p.id, p]));
       setMembers(
         (m.data as { user_id: string; is_admin: boolean; last_read_at: string }[]).map((mb) => ({
@@ -60,6 +70,8 @@ export const useChatRoom = (roomId: string | undefined) => {
           last_read_at: mb.last_read_at,
           full_name: map.get(mb.user_id)?.full_name ?? null,
           avatar_url: map.get(mb.user_id)?.avatar_url ?? null,
+          role: map.get(mb.user_id)?.role ?? null,
+          phone: map.get(mb.user_id)?.phone ?? null,
         }))
       );
     }

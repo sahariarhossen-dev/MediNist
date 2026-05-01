@@ -1,118 +1,78 @@
-# Real-time Messaging System (WhatsApp-style)
+# Messaging Polish: Navigation, Avatars, Identity Sheets
 
-Add a staff chat system to MediNist with 1-on-1 and group conversations, scoped per pharmacy, with Supabase Realtime sync.
+## 1. Fix back-button navigation loop
 
-## 1. Database (Supabase migration)
+**Problem**: `Messages` page is rendered inside `AppHeader` (a root-tab style header) AND has its own back button calling `navigate(-1)`. Combined with the root-tab `useRootBackHandler` sentinel pushed on `/` `/sales` `/ai` `/more`, history can loop. The chat room also uses `navigate("/messages")` which is correct, but inbox `navigate(-1)` may bounce.
 
-Three new tables, all scoped by `pharmacy_id` with RLS using existing `get_user_pharmacy_id()` and `is_pharmacy_admin()` helpers.
+**Fixes**:
+- `src/pages/Messages.tsx`: back arrow → `navigate("/")` (definitive Dashboard target). Also remove the duplicated `<AppHeader />` above the page header so the inbox shows a single clean header (back + title) like WhatsApp.
+- `src/pages/ChatRoom.tsx`: keep `navigate("/messages")` but use `{ replace: false }` and guard against landing back on chat — already correct. No change needed beyond confirming.
+- No change to `useRootBackHandler` (it only runs on `/ /sales /ai /more`).
 
-**`chat_rooms`** — one row per conversation
-- `id uuid pk`, `pharmacy_id uuid not null`
-- `type text not null check in ('direct','group')`
-- `name text` (group name; null for direct)
-- `avatar_url text`
-- `created_by uuid not null`, `created_at`, `updated_at` (touched by trigger when last message changes)
+## 2. Dynamic profile & group avatars (already partially wired)
 
-**`chat_room_members`** — membership
-- `room_id uuid`, `user_id uuid`, `joined_at`, `last_read_at timestamptz` (drives unread count)
-- `is_admin boolean default false`
-- PK `(room_id, user_id)`
+Avatars already pull `avatar_url` from `profiles` via `get_chat_inbox` and `useChatRoom`. Confirmed working. To guarantee live sync:
 
-**`chat_messages`**
-- `id uuid pk`, `room_id uuid`, `sender_id uuid`, `pharmacy_id uuid`
-- `content text`, `attachment_url text` (nullable), `attachment_type text`
-- `created_at timestamptz`
+- `useChatRoom.ts`: when receiving INSERT realtime, also re-fetch member profile snapshots if a new sender appears (covers avatar updates mid-session).
+- `InboxRow.tsx` / `ChatRoom.tsx` header: when `room.type === "group"` and no `avatar_url`, render a stylized circular gradient with the `Users` icon (already uses `Users` icon in fallback — upgrade styling to a green-gradient circle to match WhatsApp).
 
-**RLS**
-- `chat_rooms`: SELECT/INSERT requires `pharmacy_id = get_user_pharmacy_id()`. Only members can SELECT (via subquery on `chat_room_members`). Only admins or `created_by` can UPDATE/DELETE.
-- `chat_room_members`: members can SELECT their own rows + rows of rooms they belong to. INSERT: room creator (direct) or pharmacy admin (group).
-- `chat_messages`: SELECT if user is a member of `room_id`. INSERT if `sender_id = auth.uid()` AND user is member. UPDATE/DELETE only by sender within 5 min, or admin.
+## 3. WhatsApp-style "View Identity" feature
 
-**Helper RPC**
-- `get_or_create_direct_room(_other_user uuid) returns uuid` — finds or creates a direct room between current user and `_other_user` (both in same pharmacy), inserts both members, returns room id.
-- `get_chat_inbox()` — returns one row per room with `room_id`, `type`, `display_name`, `avatar_url`, `last_message`, `last_message_at`, `unread_count`, `other_user_id` (for direct).
+### New component: `src/components/messaging/ProfileSheet.tsx`
+A bottom `Sheet` showing a member's identity:
+- Large avatar (avatar_url with fallback initials)
+- Full name
+- Designation (role: Owner/Manager/Salesman — humanized from `profiles.role`)
+- Member ID (short of `profiles.id`, e.g. `#A1B2C3`)
+- Phone (`profiles.phone`) with tap-to-call link
+- Last seen (relative)
 
-**Realtime** — enable replication on `chat_messages` and `chat_rooms`.
+Triggered by tapping the avatar in `ChatRoom` header (direct chats only).
 
-**Storage** — reuse a new public bucket `chat-attachments` (or reuse `pharmacy-assets` under a `chat/` prefix). Plan picks a new bucket for clean separation.
+### New component: `src/components/messaging/GroupInfoSheet.tsx`
+- Group avatar (editable for admins)
+- Group name (editable inline for admins via pencil icon)
+- Member list with avatars, names, roles, admin badges
+- Tapping a member opens `ProfileSheet`
+- Admin-only: change avatar → upload to `chat-attachments/groups/<roomId>.jpg` (public URL via signed URL or move to public bucket option below) and `update chat_rooms set avatar_url, name`
+- "Leave group" button for non-admin (deletes own `chat_room_members` row)
 
-## 2. Header Update (`src/components/AppHeader.tsx`)
+Triggered by tapping the avatar/name in `ChatRoom` header for group rooms.
 
-Add a new `MessageBubble` component between Bell and Avatar (per request: "between profile icon and bell"). Final order, left → right: `Logo … Bell · MessageBubble · Avatar`.
+### Permissions
+RLS already allows: `chat_rooms` UPDATE by creator or `is_pharmacy_admin()`. No DB changes required. Storage upload uses existing `chat-attachments` bucket; we'll add a small RLS policy if needed for the `groups/` prefix (insert/select for room members).
 
-- `MessageSquare` icon, same button styling as bell.
-- Green badge (`bg-green-500`) with unread count, capped at "9+".
-- Click → navigates to `/messages` (full-screen Inbox), not a popover (better mobile UX).
+### DB / storage migration
+- Add storage policies for `chat-attachments` so room members can read group avatars and admins can write under `groups/<room_id>/`:
+  - SELECT: room member (via `is_room_member`) when path starts with `groups/<room_id>/`
+  - INSERT/UPDATE: room admin or pharmacy admin
+- (Optional, simpler) Use the public `pharmacy-assets` bucket for group icons under `groups/<room_id>/icon.jpg`. **Plan: use existing public `pharmacy-assets` bucket** to avoid signed-URL plumbing.
 
-## 3. Inbox Page (`/messages` → `src/pages/Messages.tsx`)
+## 4. UI/UX polishing
 
-WhatsApp-style chat list:
-- Top bar: back button, "Messages" title, search icon.
-- Search bar (sticky) filtering staff names + group names.
-- Chat rows: avatar, name, last message preview (truncated), timestamp (relative), green unread count circle on right.
-- FAB bottom-right: opens "New chat" sheet → tabs "Direct" (list of all pharmacy staff from `get_pharmacy_member_names()`) / "New Group" (admin only).
-- Empty state: "No conversations yet — start chatting with your team."
+`src/pages/ChatRoom.tsx` header:
+- Wrap avatar + name in a single tappable region that opens the appropriate sheet
+- Tighten alignment: `items-center`, consistent `gap-3`, avatar `h-10 w-10`
+- Subtitle: keep "typing…" / "N members" / "last seen X" (already present; refine "Online" if `last_seen` is within 60s)
 
-## 4. Conversation Page (`/messages/:roomId` → `src/pages/ChatRoom.tsx`)
+`src/pages/Messages.tsx`:
+- Remove `<AppHeader />` (it's noise inside an inbox screen)
+- Sticky single header with back arrow → Dashboard
+- Search bar unchanged
 
-- Header: back, avatar, name, presence subtitle ("online" if `last_seen` within 60s, else "last seen …"; "typing…" when realtime typing event received).
-- Message list (reverse-chronological scroll, auto-scroll to bottom on new message):
-  - Sent (right): `bg-[#dcf8c6]` bubble, time + double-tick (✓✓ blue if recipient's `last_read_at >= message.created_at`).
-  - Received (left): `bg-white` bubble; in groups, sender name in a deterministic color above the bubble (hash of user_id → from a 6-color palette).
-- Input bar (sticky bottom): `+` attachment, emoji button (uses native emoji input for v1 — no extra dep), text input, send button.
-- Attachments: image/document upload to `chat-attachments` bucket, store URL in `attachment_url`.
-- Typing indicator: broadcast via Supabase channel `room:${roomId}` (presence/broadcast, no DB writes).
-- Marks room read: on mount + on new message arrival while open, update `last_read_at = now()` in `chat_room_members`.
+## Files to change
 
-## 5. Group Management
+```text
+src/App.tsx                                    (no change)
+src/pages/Messages.tsx                         (remove AppHeader, back→"/")
+src/pages/ChatRoom.tsx                         (tappable header → open sheets, online logic)
+src/components/messaging/InboxRow.tsx          (group icon styling)
+src/components/messaging/ProfileSheet.tsx      NEW
+src/components/messaging/GroupInfoSheet.tsx    NEW
+src/hooks/useChatRoom.ts                       (refetch members when new sender appears)
+supabase/migrations/<ts>_chat_group_assets.sql storage policy on pharmacy-assets for groups/
+```
 
-- "New Group" sheet (admin only — gated by `profile.role === 'admin'`):
-  - Group name, optional avatar upload, multi-select staff list.
-  - Creates `chat_rooms` row + member rows in one RPC call.
-- Group chat header tap → "Group Info" sheet: members list, add/remove (admin only), leave group.
-
-## 6. Hooks & Utilities (new files)
-
-- `src/hooks/useChatInbox.ts` — fetches `get_chat_inbox()`, subscribes to `chat_messages` inserts to refresh; exposes `{ rooms, totalUnread, loading }`.
-- `src/hooks/useChatRoom.ts` — fetches messages for a room, subscribes to inserts/updates, exposes `{ messages, sendMessage, members, typingUsers, markRead }`.
-- `src/hooks/usePharmacyStaff.ts` — calls existing `get_pharmacy_member_names()` + presence RPC for the new-chat picker.
-- `src/lib/chatColors.ts` — deterministic color picker for sender names.
-
-## 7. Integration Points
-
-- `MessageBubble` reads `totalUnread` from `useChatInbox` (lightweight: only counts, no message bodies).
-- Add routes `/messages` and `/messages/:roomId` in `src/App.tsx` (protected, wrapped in `AppLayout` for inbox; chat room uses its own full-height layout without bottom nav).
-
-## 8. Files
-
-**New**
-- `supabase/migrations/<ts>_chat.sql` (tables, RLS, RPCs, realtime publication, storage bucket policies)
-- `src/components/messaging/MessageBubble.tsx` (header icon)
-- `src/components/messaging/InboxRow.tsx`
-- `src/components/messaging/MessageItem.tsx`
-- `src/components/messaging/ChatInput.tsx`
-- `src/components/messaging/NewChatSheet.tsx`
-- `src/components/messaging/NewGroupSheet.tsx`
-- `src/components/messaging/GroupInfoSheet.tsx`
-- `src/pages/Messages.tsx`
-- `src/pages/ChatRoom.tsx`
-- `src/hooks/useChatInbox.ts`
-- `src/hooks/useChatRoom.ts`
-- `src/hooks/usePharmacyStaff.ts`
-- `src/lib/chatColors.ts`
-
-**Edited**
-- `src/components/AppHeader.tsx` — add `<MessageBubble />` between bell and avatar.
-- `src/App.tsx` — add `/messages` and `/messages/:roomId` routes.
-
-## Out of Scope (v1)
-
-- Message reactions, replies, forwarding.
-- Voice/video calls.
-- Push notifications (in-app only; uses existing browser tab).
-- Message editing UI beyond the 5-minute window backend allows.
-- End-to-end encryption (RLS-protected only).
-
-## Note on User Identity
-
-Names, avatars, phone, role come live from `profiles` (already powering the Profile page). No duplication — the chat picker queries `get_pharmacy_member_names()` joined with `profiles` for avatar/role.
+## Out of scope
+- Adding/removing group members (can be a follow-up)
+- Message reactions, replies, deletes from UI
