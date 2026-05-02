@@ -56,8 +56,7 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
 };
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
-  void productType; // legacy prop, no longer drives display
-  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
+  if (isSingleUnit(productType ?? null)) {
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
@@ -226,7 +225,7 @@ const Inventory = () => {
 
   const getCalculatedStock = (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
-    const addedPieces = isSingleUnit(med) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    const addedPieces = isSingleUnit(med.product_type) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
     return (med.stock_quantity || 0) + addedPieces;
   };
 
@@ -261,7 +260,7 @@ const Inventory = () => {
     // sensible custom bucket (e.g. "Eye Drop") in the product-type dropdown.
     const productTypeBucket =
       functionalType === "Other" && med.format ? med.format : functionalType;
-    const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack });
+    const isMultiUnit = !isSingleUnit(med.format ?? functionalType);
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
@@ -493,7 +492,7 @@ const Inventory = () => {
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? "Qty" : "Box"}</span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med.product_type) ? "Qty" : "Box"}</span>
                             <Input
                               ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
                               type="number"
@@ -543,8 +542,6 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
-                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
                       return (
                         <div
                           key={med.id}
@@ -584,7 +581,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2.5">
-                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit({ pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack }) ? "Box:" : "Qty (pcs):"}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit(catalogType) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}

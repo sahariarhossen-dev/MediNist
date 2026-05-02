@@ -1,65 +1,62 @@
-## Goal
-
-Stop gating the multi-unit (Box : Strip : Pcs) display on product type. Instead, drive it off the product's actual pack configuration — `pcs_per_strip` and `strip_per_pack`. Any product with meaningful pack data (either value > 1) gets the tri-unit treatment; everything else falls back to a simple pieces count.
+# Fix: Product badges show "Other" for valid types like Suppository / Pediatric
 
 ## Root cause
 
-`isTriUnitCategory()` in `src/lib/productType.ts` only returns true for `Tablet` / `Capsule`. `isSingleUnit()` in `src/lib/stockUtils.ts` wraps that. As a result, a Suppository configured with 5 pcs/strip × 2 strips/box still renders as a flat number, and the Add/Edit Product page hides the "Strip & Pack Details" section entirely for non‑tablet/capsule types.
+`src/lib/productType.ts` defines a fixed 7-category union (`Tablet`, `Capsule`, `Syrup`, `Injection`, `Inhaler`, `Topical`, `Other`). `getStandardizedType()` keyword-scans the string and returns `"Other"` for anything that doesn't match — so `"Suppository"`, `"Pediatric"`, `"Eye Drop"`, etc. all render as **Other** on the badge, even though the database row stores the correct value.
 
-## Fix — data-driven, not type-driven
+The badge component itself is fine; the bug is the helper collapsing unknown-but-valid types.
 
-### 1. `src/lib/stockUtils.ts` — make `isSingleUnit` look at the data
+## The fix
 
-Change the signature so it accepts the medicine record (or just the two pack fields) and returns `true` only when **both** `pcs_per_strip ≤ 1` and `strip_per_pack ≤ 1` (treating null/0 as 1). Keep the old single-arg form working via overload for backwards compatibility, but the data-aware form becomes the primary path.
+### 1. New helper: `getDisplayCategory(raw)` in `src/lib/productType.ts`
 
-```ts
-export const isSingleUnit = (med: {
-  pcs_per_strip?: number | null;
-  strip_per_pack?: number | null;
-}): boolean => {
-  const pps = med.pcs_per_strip ?? 1;
-  const spp = med.strip_per_pack ?? 1;
-  return pps <= 1 && spp <= 1;
-};
+Returns a short, human-readable label for the badge, **never** "Other" when a real value exists:
+
+- If the raw string matches one of the 7 standard patterns → return that standard name (`Tablet`, `Capsule`, …). Keeps the existing dedupe behavior so "Soft Gelatin Capsule" still shows as **Capsule**.
+- Otherwise → return a Title-Cased version of the raw string itself (e.g. `"suppository"` → `Suppository`, `"PEDIATRIC"` → `Pediatric`, `"Eye Drop"` → `Eye Drop`). Truncate to ~14 chars with ellipsis so long custom labels don't break the 390 px row layout.
+- Empty / null → return `""` (caller already guards on truthiness, so no badge renders).
+
+Add a few more keyword patterns that are common in Bangladeshi pharmacies so they get a consistent color chip: `Suppository`, `Drops` (eye/ear/nasal), `Powder`, `Sachet`. These get their own `StandardCategory` entries with chip colors in `getProductTypeChipClasses`. "Pediatric" is a **form modifier**, not a dosage form — leave it as a custom label rendered verbatim.
+
+### 2. Update chip color helper
+
+Extend `getProductTypeChipClasses` so the new categories above get distinct colors, and unknown custom strings get a neutral slate chip (instead of the current gray "Other" chip) so they look intentional, not broken.
+
+### 3. Swap badge call sites from `getStandardizedType` → `getDisplayCategory`
+
+Three files render the badge:
+
+- `src/pages/Inventory.tsx` (line ~488)
+- `src/pages/CreateSale.tsx` (lines ~536, ~639, ~737)
+- `src/pages/ShortItems.tsx` (line ~153)
+
+Each becomes:
+```tsx
+<span title={med.product_type || med.unit_format}
+      className={getProductTypeChipClasses(med.product_type || med.unit_format)}>
+  {getDisplayCategory(med.product_type || med.unit_format)}
+</span>
 ```
 
-This means:
-- Suppository with 5 × 2 → multi-unit (`0 : 2 : 0`)
-- Syrup bottle with no pack values → single-unit (`120 Pcs`)
-- Enterogermina vial pack of 10 → multi-unit (treats pack as box, vial as pcs)
+Keep `getStandardizedType` for **logic** (tri-unit detection, stock alerts, strip/box rules) — that's where the 7-bucket collapse is correct. Only the **display** path changes.
 
-### 2. Update all call sites to pass the medicine object
+### 4. Make matching case-insensitive everywhere
 
-- `src/pages/Inventory.tsx` — `TriUnitDisplay` (line 59), expanded "Qty / Box" label (line 495), stock add path (line 228). All three already have the full `med` in scope.
-- `src/pages/CreateSale.tsx` — lines 543 and 658, swap `isSingleUnit(med.product_type…)` for `isSingleUnit(med)` / `isSingleUnit(item.medicine)`.
-- `src/pages/ShortItems.tsx` — line 161, swap to `isSingleUnit(item)`.
-- Catalog row at `Inventory.tsx:584` — catalog rows don't have explicit pack fields yet; keep type-based fallback there only (or compute pack from `boxSize`/`packSize` like the existing `computeStripPerPack`).
+Existing patterns already use `/i`, but verify `fetchPharmacyProductTypes` dedupe uses `.toLowerCase()` keys (it does). No change needed beyond confirming.
 
-### 3. `src/lib/stockUtils.ts` — `getEffectiveStockAlert`
+### 5. Stale-data refresh
 
-Currently keys off `getStandardizedType` to decide "one full box vs 2 units". Change to: if the product has pack data (`spp × pps > 1`), use one full box as the smart default; otherwise fall back to 2 units. Removes the Tablet/Capsule hardcode here too.
-
-### 4. `src/pages/AddProduct.tsx` — show Strip & Pack Details for everyone
-
-- Remove `const isTabletOrCapsule = isTriUnitCategory(productType)` and the `{isTabletOrCapsule && (…)}` gate around the Strip & Pack Details block (line 322). The section becomes always visible.
-- The save payload (lines 186–187) currently writes `null` for these fields when not tablet/capsule. Change to: write whatever the user typed (parsed numbers), or `null` when the input is empty. Drop the `isTabletOrCapsule &&` guard.
-- Update the helper hint under "Stock Alert Level" to say something neutral like "Leave empty to use a smart default based on your pack size."
-- Optional polish: rename the section label from "Strip & Pack Details" to "Pack Details (optional)" so it reads naturally for vials/suppositories too. Keep the same two inputs ("Pcs per Strip", "Strips per Box") since users already understand them; for vial packs they can put 1 strip × N pcs, and for blister suppositories the existing labels match.
-
-### 5. Keep `isTriUnitCategory` for the few places that legitimately need a type check
-
-The Add/Edit form still uses `getFunctionalBucket` to pick the right strength input ("mg" vs "ml" vs "puffs") — that's correct and stays. We're only removing the type gate from the **stock display** and **pack-details visibility** paths.
+The Inventory list already refetches via its load effect after edit. No state-cache bug — the "Other" was always rendered fresh from the DB; the helper was the culprit. After the helper change, edits will reflect immediately on the next list mount/refetch with no further work.
 
 ## Files touched
 
-- `src/lib/stockUtils.ts` — `isSingleUnit` signature change, `getEffectiveStockAlert` data-driven
-- `src/pages/Inventory.tsx` — call-site updates (3 spots, plus the catalog-row fallback note)
-- `src/pages/CreateSale.tsx` — call-site updates (2 spots)
-- `src/pages/ShortItems.tsx` — call-site update (1 spot)
-- `src/pages/AddProduct.tsx` — always show Strip & Pack Details; always persist the values
+- `src/lib/productType.ts` — add `getDisplayCategory`, extend patterns + chip colors
+- `src/pages/Inventory.tsx` — swap badge text
+- `src/pages/CreateSale.tsx` — swap badge text (3 spots)
+- `src/pages/ShortItems.tsx` — swap badge text
 
-No DB schema change, no migration — `medicines.pcs_per_strip` and `strip_per_pack` already exist and accept any product type.
+No DB changes, no migrations, no schema edits. Pure frontend helper refactor.
 
 ## Mobile QA (390 px)
 
-The Strip & Pack Details block uses `grid-cols-2` with `gap-3` and `h-12` inputs — already mobile-tested for tablets, so it'll fit identically for any other type. The badge row in Inventory is unchanged.
+Custom labels are truncated to 14 chars + ellipsis in the helper, so even long strings like "Dry Powder Inhalation Capsule" (which still maps to **Capsule** anyway) or a custom "Reconstitution Powder" → `Reconstitut…` won't push action buttons off-screen. Full string remains in the `title` tooltip.

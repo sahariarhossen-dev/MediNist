@@ -1,5 +1,4 @@
-// Pure data-driven stock utilities. Tri-unit (Box:Strip:Pcs) display is
-// driven entirely by the product's pack configuration, NOT by its type.
+import { isTriUnitCategory, getStandardizedType } from "./productType";
 
 /**
  * Tri-Unit Inventory System: Box : Strip : Pcs
@@ -64,18 +63,10 @@ export const totalPiecesToTriUnitLabeled = (
  * Convert a number of boxes into total pieces.
  */
 /**
- * Check if a product should display as a single quantity (e.g. "120 Pcs")
- * instead of Box : Strip : Pcs. Driven purely by pack data — any product
- * (Suppository, Vial pack, etc.) with `pcs_per_strip > 1` or
- * `strip_per_pack > 1` gets the multi-unit treatment.
+ * Check if a product type uses single-unit quantity (not Box:Strip:Pcs).
  */
-export const isSingleUnit = (med: {
-  pcs_per_strip?: number | null;
-  strip_per_pack?: number | null;
-}): boolean => {
-  const pps = med?.pcs_per_strip ?? 1;
-  const spp = med?.strip_per_pack ?? 1;
-  return (pps || 1) <= 1 && (spp || 1) <= 1;
+export const isSingleUnit = (productType: string | null): boolean => {
+  return !isTriUnitCategory(productType);
 };
 
 /**
@@ -110,11 +101,13 @@ export const getEffectiveStockAlert = (med: {
 }): number => {
   if (med.stock_alert && med.stock_alert > 0) return med.stock_alert;
 
-  const spp = med.strip_per_pack || 0;
-  const pps = med.pcs_per_strip || 0;
-  const oneBox = spp * pps;
-  // Any product with real pack data → default alert is one full box.
-  if (oneBox > 1) return oneBox;
+  const std = getStandardizedType(med.product_type);
+  if (std === "Tablet" || std === "Capsule") {
+    const spp = med.strip_per_pack || 0;
+    const pps = med.pcs_per_strip || 0;
+    const oneBox = spp * pps;
+    return oneBox > 0 ? oneBox : 10;
+  }
   return 2;
 };
 
