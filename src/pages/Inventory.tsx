@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType, getProductTypeChipClasses } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -476,9 +476,12 @@ const Inventory = () => {
                           </p>
                           <div className="flex items-center gap-1.5 mt-1 min-w-0">
                             <span className="text-[11px] text-gray-400 truncate min-w-0">{med.company_name || "—"}</span>
-                            {med.product_type && (
-                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type)}`}>
-                                {med.product_type}
+                            {(med.product_type || med.unit_format) && (
+                              <span
+                                title={getDisplayFormat(med) || undefined}
+                                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
+                              >
+                                {getStandardizedType(med.product_type || med.unit_format)}
                               </span>
                             )}
                           </div>
@@ -557,8 +560,11 @@ const Inventory = () => {
                                 {med.company && (
                                   <span className="text-[11px] text-gray-400 truncate max-w-[55%]">{med.company}</span>
                                 )}
-                                {catalogType && (
-                                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(catalogType)}`}>
+                                {med.format && (
+                                  <span
+                                    title={med.format}
+                                    className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(catalogType)}`}
+                                  >
                                     {catalogType}
                                   </span>
                                 )}
