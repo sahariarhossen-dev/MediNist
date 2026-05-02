@@ -1,58 +1,53 @@
-## Root cause
+# Intelligent Product Auto-Categorization
 
-The `profiles` table has RLS `USING (id = auth.uid())` — a user can only SELECT their own row. In `useChatRoom.ts` we do:
+Upgrade the existing `src/lib/productType.ts` helpers into a single keyword-priority engine that maps any raw `product_type` / `unit_format` string (e.g. "Dry Powder Inhalation Capsule", "Soft Gelatin Capsule", "Oral Suspension") to one of seven Standard Categories, then thread that engine through the Add Product form, POS/Sales, Inventory, Catalog Search, and Short Items screens.
 
-```ts
-supabase.from("profiles").select("id,full_name,avatar_url,role,phone").in("id", ids)
-```
+The full technical string remains stored in Supabase (`medicines.unit_format`); the Standard Category drives all UI logic and grouping.
 
-For every teammate in the room this returns `null`, so the chat header shows "Direct chat" / "DC", and ProfileSheet shows "Member" with no avatar and no phone. The inbox list works because it goes through the `get_chat_inbox` SECURITY DEFINER RPC.
+## 1. Standardization engine (`src/lib/productType.ts`)
 
-## Fix
+Add a single source of truth:
 
-### 1. New SECURITY DEFINER RPC (migration)
+- `StandardCategory` union: `"Tablet" | "Capsule" | "Syrup" | "Injection" | "Inhaler" | "Topical" | "Other"`.
+- `getStandardizedType(raw: string | null | undefined): StandardCategory` — keyword scan with **priority order** (first match wins, so "Inhalation Capsule" → Capsule, not Inhaler):
+  1. **Capsule** — `capsule`, `softgel`, `soft gelatin`, `\bcap\b`
+  2. **Tablet** — `tablet`, `\btab\b`, `bolus`
+  3. **Syrup** — `suspension`, `syrup`, `oral liquid`, `solution`
+  4. **Injection** — `injection`, `\biv\b`, `\bim\b`, `vial`, `ampoule`
+  5. **Inhaler** — `inhaler`, `\bmdi\b`, `\bdpi\b`, `aerosol`, `respule`, `nebul`
+  6. **Topical** — `cream`, `ointment`, `gel`, `lotion`
+  7. **Other** — fallback
+- Refactor `toFunctionalType`, `getFunctionalBucket`, `detectFunctionalTypeFromName`, `getProductTypeChipClasses`, and `stockUtils.isSingleUnit` / `getEffectiveStockAlert` to delegate to `getStandardizedType` so the keyword rules live in one place.
+- `isTriUnitCategory(cat)` → `true` only for `Tablet` and `Capsule` (drives strip/box UI + auto-calc).
+- Keep the verbatim string available via `getDisplayFormat(med)` (already exists) for tooltips/long-form display.
 
-Add `public.get_pharmacy_member_directory()` returning `id, full_name, avatar_url, role, phone, last_seen` for every profile sharing the caller's `pharmacy_id`. Mirrors existing `get_pharmacy_member_presence` but also exposes `phone` (needed by ProfileSheet). Granted to `authenticated`.
+## 2. Add Product form (`src/pages/AddProduct.tsx`)
 
-### 2. `src/hooks/useChatRoom.ts`
+- Replace the `isTabletOrCapsule` boolean with `isTriUnitCategory(getStandardizedType(productType))` so any technical string mapping to Tablet/Capsule (e.g. "Inhalation Capsule", "Chewable Tablet") shows the **Strip & Pack Details** section and enables the `Pcs × Strip × Box` auto-calc preview.
+- `getStrengthConfig` and `getTypeIcon` switch on the standardized category instead of substring checks; Inhaler gets its own icon/strength label (`puffs`).
+- Mobile responsiveness: keep current `grid-cols-2 gap-3` for strip/pack inputs; ensure the new auto-calc preview line uses `text-xs` + `break-words` so long labels never overflow at 390 px.
 
-Replace the direct `from("profiles")...in("id", ids)` query with `supabase.rpc("get_pharmacy_member_directory")`, then build the lookup map from the result. Also surface `last_seen` (real presence) on `RoomMember` instead of repurposing `last_read_at` for online status.
+## 3. POS / Sales screen (`src/pages/CreateSale.tsx`)
 
-### 3. `src/pages/ChatRoom.tsx`
+- Replace the raw `getDisplayFormat(med)` superscript tag with the **Standard Category** chip (`getStandardizedType(...)`) using `getProductTypeChipClasses` for color. The full technical string moves to the element's `title` attribute so it's still discoverable on hover/long-press but never breaks the row layout on a 390 px viewport.
+- `isSingleUnit` calls switch from raw `product_type` to `getStandardizedType(med.unit_format ?? med.product_type)` so a product saved as "Dry Powder Inhalation Capsule" still displays Box:Strip:Pcs stock.
 
-- Header title: when `room.type === "direct"`, always render `other?.full_name` and only fall back to "Teammate" (never "Direct chat") once members have loaded.
-- Subtitle online check: use `other.last_seen` (from the new RPC) instead of `last_read_at`.
-- Pass `member.last_seen` (not `last_read_at`) into `ProfileSheet`.
+## 4. Inventory + Short Items + Catalog Search
 
-### 4. `src/components/messaging/ProfileSheet.tsx`
+- `src/pages/Inventory.tsx`: chip rendering already uses `getProductTypeChipClasses`; pass it the standardized category. `isSingleUnit(...)` calls and the catalog-import branch (`toFunctionalType(med.format)`) route through `getStandardizedType` so newly imported products store the technical string in `unit_format` and the standardized category in `product_type`.
+- `src/pages/ShortItems.tsx` + `src/pages/CatalogSearch.tsx`: same swap — display the standard category tag, keep the full string as title.
 
-- `humanRole` already maps `admin → Owner`; extend to: `admin → Owner`, `manager → Manager`, `salesman → Salesman`, anything else → titlecased value, null → "Member".
-- "Verified teammate" row: show "Yes" only when the viewed member's `pharmacy_id` matches the current user's `pharmacy_id`. Since the directory RPC already filters by pharmacy, any returned member is verified — pass an explicit `verified: true` boolean from `ChatRoom.tsx` (computed as `other != null`, since RPC only returns same-pharmacy members) and render Yes/No accordingly.
+## 5. Multi-tenant inventory mapping
 
-### 5. `src/components/messaging/GroupInfoSheet.tsx`
-
-Same `humanRole` extension and same `last_seen` propagation when opening a member's ProfileSheet from the group list.
+- `fetchPharmacyProductTypes(pharmacyId)` already merges seed categories with each pharmacy's distinct `product_type`. Update it to:
+  1. Map every fetched `product_type` through `getStandardizedType` and **dedupe by standardized category** so a shop that already has "Capsule" doesn't end up with both "Capsule" and "Inhalation Capsule" entries in their dropdown.
+  2. Always present the seven standard categories first, then any genuinely-new custom types (e.g. "Eye Drop") sorted alphabetically.
+- On save in `AddProduct`, write the standardized category to `medicines.product_type` and the verbatim user/catalog string to `medicines.unit_format`. This means a brand-new shop adding their first "Soft Gelatin Capsule" automatically links to the existing "Capsule" group; if they add "Eye Drop", a new shop-specific entry appears.
 
 ## Technical details
 
-- Migration SQL (concept):
-  ```sql
-  create or replace function public.get_pharmacy_member_directory()
-  returns table(id uuid, full_name text, avatar_url text, role text, phone text, last_seen timestamptz)
-  language sql stable security definer set search_path = public as $$
-    select p.id, p.full_name, p.avatar_url, p.role, p.phone, p.last_seen
-    from public.profiles p
-    where p.pharmacy_id = public.get_user_pharmacy_id();
-  $$;
-  grant execute on function public.get_pharmacy_member_directory() to authenticated;
-  ```
-- `RoomMember` interface gains `last_seen: string | null`; existing `last_read_at` (for unread tracking) stays.
-- No changes needed to inbox flow — `get_chat_inbox` already returns `display_name` and `avatar_url` correctly via SECURITY DEFINER.
-
-## Files touched
-
-- `supabase/migrations/<new>.sql` — create RPC
-- `src/hooks/useChatRoom.ts` — use RPC, add `last_seen`
-- `src/pages/ChatRoom.tsx` — header name, online via `last_seen`, pass `last_seen` + verified flag
-- `src/components/messaging/ProfileSheet.tsx` — full role map, verified prop
-- `src/components/messaging/GroupInfoSheet.tsx` — role map + `last_seen` propagation
+- No DB schema changes — `medicines.product_type` (standardized) and `medicines.unit_format` (verbatim) already exist.
+- No migration/backfill of existing rows; the standardization engine is tolerant of legacy values because it keyword-scans on read.
+- All changes are pure-frontend + helper refactors; no edge functions or RLS changes.
+- Files touched: `src/lib/productType.ts`, `src/lib/stockUtils.ts`, `src/pages/AddProduct.tsx`, `src/pages/CreateSale.tsx`, `src/pages/Inventory.tsx`, `src/pages/CatalogSearch.tsx`, `src/pages/ShortItems.tsx`.
+- Mobile QA target: 390 × 641 (current preview viewport). Standard-category chips are short (≤9 chars) so labels never wrap or push action buttons off-screen.
