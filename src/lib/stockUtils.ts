@@ -1,3 +1,5 @@
+import { isTriUnitCategory, getStandardizedType } from "./productType";
+
 /**
  * Tri-Unit Inventory System: Box : Strip : Pcs
  *
@@ -64,8 +66,7 @@ export const totalPiecesToTriUnitLabeled = (
  * Check if a product type uses single-unit quantity (not Box:Strip:Pcs).
  */
 export const isSingleUnit = (productType: string | null): boolean => {
-  const triUnitTypes = ["tablet", "capsule"];
-  return !triUnitTypes.includes((productType || "").toLowerCase());
+  return !isTriUnitCategory(productType);
 };
 
 /**
@@ -100,8 +101,8 @@ export const getEffectiveStockAlert = (med: {
 }): number => {
   if (med.stock_alert && med.stock_alert > 0) return med.stock_alert;
 
-  const type = (med.product_type || "").toLowerCase();
-  if (type === "tablet" || type === "capsule") {
+  const std = getStandardizedType(med.product_type);
+  if (std === "Tablet" || std === "Capsule") {
     const spp = med.strip_per_pack || 0;
     const pps = med.pcs_per_strip || 0;
     const oneBox = spp * pps;

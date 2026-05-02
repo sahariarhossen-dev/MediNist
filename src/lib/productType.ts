@@ -3,23 +3,88 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Product Type / Format Mapping
  *
- * `unit_format` (display) — verbatim label from the master catalog,
- *   e.g. "Chewable Tablet", "Soft Gelatin Capsule", "Oral Suspension".
- * `product_type` (functional) — canonical category that drives
- *   stock/box/strip/MRP logic: "Tablet" | "Capsule" | "Syrup" | other.
+ * `unit_format` (display) — verbatim label from the master catalog or user
+ *   input, e.g. "Chewable Tablet", "Soft Gelatin Capsule",
+ *   "Dry Powder Inhalation Capsule", "Oral Suspension".
+ * `product_type` (functional / standardized) — one of the seven Standard
+ *   Categories below, derived via {@link getStandardizedType}. Drives all
+ *   UI grouping, chip colors, strip/box logic, and stock-alert defaults.
  */
 
-export function toFunctionalType(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const s = trimmed.toLowerCase();
-  if (s.includes("tablet")) return "Tablet";
-  if (s.includes("capsule")) return "Capsule";
-  if (s.includes("suspension") || s.includes("syrup")) return "Syrup";
-  // Unknown format → pass through verbatim so it becomes a new product_type
-  // (e.g. "Eye Drop", "Pediatric Drops", "Metered-Dose Inhaler (MDI)").
-  return trimmed;
+/** The seven standard categories every product is bucketed into. */
+export type StandardCategory =
+  | "Tablet"
+  | "Capsule"
+  | "Syrup"
+  | "Injection"
+  | "Inhaler"
+  | "Topical"
+  | "Other";
+
+export const STANDARD_CATEGORIES: StandardCategory[] = [
+  "Tablet",
+  "Capsule",
+  "Syrup",
+  "Injection",
+  "Inhaler",
+  "Topical",
+  "Other",
+];
+
+// Keyword priority — first match wins. Order matters so that
+// "Inhalation Capsule" → Capsule (not Inhaler) and "Oral Suspension" → Syrup.
+const CATEGORY_PATTERNS: Array<{ category: StandardCategory; pattern: RegExp }> = [
+  { category: "Capsule", pattern: /\b(capsules?|softgels?|soft\s*gelatin|caps?)\b/i },
+  { category: "Tablet", pattern: /\b(tablets?|tabs?|bolus)\b/i },
+  { category: "Syrup", pattern: /\b(suspension|syrup|oral\s*liquid|solution)\b/i },
+  { category: "Injection", pattern: /\b(injection|iv|im|vial|ampoule|ampule)\b/i },
+  { category: "Inhaler", pattern: /\b(inhaler|inhalation|mdi|dpi|aerosol|respule|nebul\w*)\b/i },
+  { category: "Topical", pattern: /\b(cream|ointment|gel|lotion)\b/i },
+];
+
+/**
+ * Map any raw product_type / unit_format / catalog format string to a
+ * Standard Category using priority-ordered keyword matching.
+ *   "Dry Powder Inhalation Capsule" → "Capsule"
+ *   "Soft Gelatin Capsule"          → "Capsule"
+ *   "Chewable Tablet"               → "Tablet"
+ *   "Oral Suspension"               → "Syrup"
+ *   "MDI Aerosol"                   → "Inhaler"
+ *   "IV Vial"                       → "Injection"
+ *   "Eye Drop"                      → "Other"
+ */
+export function getStandardizedType(
+  raw: string | null | undefined
+): StandardCategory {
+  if (!raw) return "Other";
+  const s = raw.trim();
+  if (!s) return "Other";
+  for (const { category, pattern } of CATEGORY_PATTERNS) {
+    if (pattern.test(s)) return category;
+  }
+  return "Other";
+}
+
+/**
+ * Tablet and Capsule are the only categories that use the
+ * Pcs × Strip × Box tri-unit inventory model. Everything else uses
+ * single-unit quantities (vials, bottles, tubes, puffs, etc.).
+ */
+export function isTriUnitCategory(
+  category: string | null | undefined
+): boolean {
+  const std = getStandardizedType(category);
+  return std === "Tablet" || std === "Capsule";
+}
+
+/**
+ * Legacy alias — returns the standardized category for a raw catalog/user
+ * string. Always returns one of the seven standard categories.
+ */
+export function toFunctionalType(
+  raw: string | null | undefined
+): StandardCategory {
+  return getStandardizedType(raw);
 }
 
 export function getDisplayFormat(med: {
@@ -30,72 +95,72 @@ export function getDisplayFormat(med: {
 }
 
 /**
- * Detect functional product type from a medicine name (case-insensitive).
- * Returns null if no keyword matches. Used to auto-fill the Product Type
- * dropdown on the Edit Product screen when the DB value is empty.
+ * Detect functional product type from a medicine name. Returns null if no
+ * keyword matches. Used to auto-fill the Product Type dropdown on the
+ * Edit Product screen when the DB value is empty.
  */
 export function detectFunctionalTypeFromName(
   name: string | null | undefined
-): "Tablet" | "Capsule" | "Syrup" | null {
+): StandardCategory | null {
   if (!name) return null;
-  const s = name.toLowerCase();
-  if (s.includes("tablet")) return "Tablet";
-  if (s.includes("capsule")) return "Capsule";
-  if (s.includes("syrup") || s.includes("suspension") || s.includes("oral")) return "Syrup";
-  return null;
+  const std = getStandardizedType(name);
+  return std === "Other" ? null : std;
 }
 
 /**
- * Seed types — always present in the dropdown even for a brand-new pharmacy
- * with no inventory yet. Order is preserved at the top of the list.
+ * Seed types — always present in the dropdown for a brand-new pharmacy.
+ * The six concrete Standard Categories appear first in priority order.
  */
-export const SEED_PRODUCT_TYPES = [
-  "Tablet",
-  "Capsule",
-  "Syrup",
-  "Injection",
-  "Cream",
-  "Suspension",
-  "Ointment",
-] as const;
+export const SEED_PRODUCT_TYPES: readonly StandardCategory[] = STANDARD_CATEGORIES.filter(
+  (c) => c !== "Other"
+);
 
 /**
  * Functional buckets that drive strength input and strip/box visibility.
  */
 export function getFunctionalBucket(
   type: string | null | undefined
-): "tablet-like" | "liquid" | "topical" | "other" {
-  if (!type) return "other";
-  const s = type.toLowerCase();
-  if (s.includes("tablet") || s.includes("capsule") || s.includes("injection")) return "tablet-like";
-  if (s.includes("syrup") || s.includes("suspension")) return "liquid";
-  if (s.includes("cream") || s.includes("ointment") || s.includes("gel") || s.includes("lotion")) return "topical";
-  return "other";
+): "tablet-like" | "liquid" | "topical" | "inhaler" | "other" {
+  switch (getStandardizedType(type)) {
+    case "Tablet":
+    case "Capsule":
+    case "Injection":
+      return "tablet-like";
+    case "Syrup":
+      return "liquid";
+    case "Topical":
+      return "topical";
+    case "Inhaler":
+      return "inhaler";
+    default:
+      return "other";
+  }
 }
 
 /**
- * Map a product_type to a Tailwind chip class string (background + text).
- * Case-insensitive and keyword based, so custom types like "Eye Drop" or
- * "Dry Powder Inhaler (DPI)" still resolve to the right color family.
+ * Tailwind chip classes (background + text) for a product type.
+ * Driven by the Standard Category so any technical string still resolves
+ * to a consistent color family across the app.
  */
 export function getProductTypeChipClasses(type: string | null | undefined): string {
-  const s = (type || "").toLowerCase();
-  if (!s) return "bg-gray-100 text-gray-600";
-  if (s.includes("tablet")) return "bg-blue-50 text-blue-700";
-  if (s.includes("capsule")) return "bg-purple-50 text-purple-700";
-  if (s.includes("syrup") || s.includes("suspension")) return "bg-amber-50 text-amber-700";
-  if (s.includes("injection") || s.includes("vial") || s.includes("ampoule")) return "bg-rose-50 text-rose-700";
-  if (s.includes("cream") || s.includes("ointment") || s.includes("gel") || s.includes("lotion")) return "bg-teal-50 text-teal-700";
-  if (s.includes("drop")) return "bg-cyan-50 text-cyan-700";
-  if (s.includes("inhaler") || s.includes("mdi") || s.includes("dpi") || s.includes("nebul")) return "bg-indigo-50 text-indigo-700";
-  return "bg-gray-100 text-gray-600";
+  switch (getStandardizedType(type)) {
+    case "Tablet":    return "bg-blue-50 text-blue-700";
+    case "Capsule":   return "bg-purple-50 text-purple-700";
+    case "Syrup":     return "bg-amber-50 text-amber-700";
+    case "Injection": return "bg-rose-50 text-rose-700";
+    case "Topical":   return "bg-teal-50 text-teal-700";
+    case "Inhaler":   return "bg-indigo-50 text-indigo-700";
+    default:          return "bg-gray-100 text-gray-600";
+  }
 }
 
 /**
  * Fetch the dynamic list of product types available to a pharmacy.
- * Combines the seed list with every distinct `product_type` already used
- * in this pharmacy's inventory, de-duplicated case-insensitively. Seeds
- * appear first, custom types follow alphabetically.
+ * Always returns the six Standard Categories first (priority order), then
+ * any genuinely custom types this pharmacy has saved (e.g. "Eye Drop")
+ * sorted alphabetically. Existing inventory rows that map to a standard
+ * category (e.g. "Soft Gelatin Capsule" → Capsule) are deduped into that
+ * standard bucket so the dropdown stays clean.
  */
 export async function fetchPharmacyProductTypes(
   pharmacyId: string
@@ -114,6 +179,8 @@ export async function fetchPharmacyProductTypes(
     for (const row of data as Array<{ product_type: string | null }>) {
       const v = (row.product_type || "").trim();
       if (!v) continue;
+      // Anything that maps to a known standard category is already covered.
+      if (getStandardizedType(v) !== "Other") continue;
       const key = v.toLowerCase();
       if (!seen.has(key)) {
         seen.set(key, v);

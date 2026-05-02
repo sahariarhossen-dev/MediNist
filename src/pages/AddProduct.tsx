@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Pill, FlaskConical, Syringe, Package, AlertTriangle, Plus, Check, X } from "lucide-react";
+import { ArrowLeft, Pill, FlaskConical, Syringe, Package, AlertTriangle, Plus, Check, X, Wind } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,6 +18,8 @@ import {
   fetchPharmacyProductTypes,
   getFunctionalBucket,
   SEED_PRODUCT_TYPES,
+  getStandardizedType,
+  isTriUnitCategory,
 } from "@/lib/productType";
 
 const ADD_NEW_SENTINEL = "__add_new__";
@@ -31,21 +33,25 @@ const getStrengthConfig = (type: string) => {
       return { label: "Volume", unit: "ml", placeholder: "e.g. 100" };
     case "topical":
       return { label: "Weight", unit: "gm", placeholder: "e.g. 15" };
+    case "inhaler":
+      return { label: "Doses", unit: "puffs", placeholder: "e.g. 200" };
     default:
       return null;
   }
 };
 
 const getTypeIcon = (type: string) => {
-  const bucket = getFunctionalBucket(type);
-  switch (bucket) {
-    case "tablet-like":
-      if (type.toLowerCase().includes("injection")) return <Syringe size={16} />;
+  switch (getStandardizedType(type)) {
+    case "Tablet":
+    case "Capsule":
       return <Pill size={16} />;
-    case "liquid":
+    case "Injection":
+      return <Syringe size={16} />;
+    case "Syrup":
       return <FlaskConical size={16} />;
-    case "topical":
-      return <Package size={16} />;
+    case "Inhaler":
+      return <Wind size={16} />;
+    case "Topical":
     default:
       return <Package size={16} />;
   }
@@ -70,10 +76,8 @@ const AddProduct = () => {
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
 
-  const isTabletOrCapsule = (() => {
-    const s = productType.toLowerCase();
-    return s === "tablet" || s === "capsule";
-  })();
+  const standardizedType = getStandardizedType(productType);
+  const isTabletOrCapsule = isTriUnitCategory(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -167,7 +171,13 @@ const AddProduct = () => {
     const payload = {
       name: name.trim(),
       company_name: companyName.trim() || null,
-      product_type: productType || null,
+      // Standardized category drives UI logic / grouping. For non-standard
+      // custom types (e.g. "Eye Drop"), keep the verbatim string so this
+      // pharmacy gets its own custom bucket in the dropdown.
+      product_type: productType
+        ? (standardizedType === "Other" ? productType : standardizedType)
+        : null,
+      // Verbatim label the user picked — preserved for tooltips / display.
       unit_format: productType || null,
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
