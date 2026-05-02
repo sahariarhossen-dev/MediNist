@@ -19,9 +19,6 @@ import {
   getFunctionalBucket,
   SEED_PRODUCT_TYPES,
   getStandardizedType,
-  isPowderType,
-  detectPowderUnit,
-  POWDER_UNIT_OPTIONS,
 } from "@/lib/productType";
 
 const ADD_NEW_SENTINEL = "__add_new__";
@@ -37,8 +34,6 @@ const getStrengthConfig = (type: string) => {
       return { label: "Weight", unit: "gm", placeholder: "e.g. 15" };
     case "inhaler":
       return { label: "Doses", unit: "puffs", placeholder: "e.g. 200" };
-    case "powder":
-      return { label: "Net Weight", unit: "gm", placeholder: "e.g. 100" };
     default:
       return null;
   }
@@ -79,10 +74,8 @@ const AddProduct = () => {
   const [mrp, setMrp] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
-  const [powderUnit, setPowderUnit] = useState<string>("Container");
 
   const standardizedType = getStandardizedType(productType);
-  const isPowder = isPowderType(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -132,18 +125,9 @@ const AddProduct = () => {
     if (s.mrp) setMrp(s.mrp);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
     if (s.stripPerBox) setStripPerBox(s.stripPerBox);
-    if (s.powderUnit) setPowderUnit(s.powderUnit);
   }, []);
 
   const strengthConfig = getStrengthConfig(productType);
-
-  // Auto-pick a sensible powder unit when the user first switches to a
-  // powder type and we can read a hint from the strength field.
-  useEffect(() => {
-    if (!isPowder) return;
-    if (powderUnit) return;
-    setPowderUnit(detectPowderUnit(strength));
-  }, [isPowder, powderUnit, strength]);
 
   const handleTypeChange = (v: string) => {
     if (v === ADD_NEW_SENTINEL) {
@@ -192,15 +176,13 @@ const AddProduct = () => {
         ? (standardizedType === "Other" ? productType : standardizedType)
         : null,
       // Verbatim label the user picked — preserved for tooltips / display.
-      unit_format: productType
-        ? (isPowder ? `${productType} — ${powderUnit}` : productType)
-        : null,
+      unit_format: productType || null,
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
-      pcs_per_strip: isPowder ? null : (pcsPerStrip ? Number(pcsPerStrip) : null),
-      strip_per_pack: isPowder ? null : (stripPerBox ? Number(stripPerBox) : null),
+      pcs_per_strip: pcsPerStrip ? Number(pcsPerStrip) : null,
+      strip_per_pack: stripPerBox ? Number(stripPerBox) : null,
     };
 
     let error;
@@ -334,30 +316,8 @@ const AddProduct = () => {
           </div>
         )}
 
-        {/* 3b. Powder Unit Type — single-unit powders (Sachet, Container) */}
-        {isPowder && (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-foreground">Unit Type</Label>
-            <Select value={powderUnit} onValueChange={setPowderUnit}>
-              <SelectTrigger className="rounded-xl bg-muted border-0 h-12">
-                <SelectValue placeholder="Select unit" />
-              </SelectTrigger>
-              <SelectContent>
-                {POWDER_UNIT_OPTIONS.map((u) => (
-                  <SelectItem key={u} value={u}>{u}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Powders are counted as individual {powderUnit.toLowerCase()}s — strip / box fields don't apply.
-            </p>
-          </div>
-        )}
-
-        {/* 3c. Pack Details — applies to any product with a multi-unit pack
-            (Tablet/Capsule strips, Suppository blisters, vial packs, etc.).
-            Hidden for powders. */}
-        {!isPowder && (
+        {/* 3b. Pack Details — applies to any product with a multi-unit pack
+            (Tablet/Capsule strips, Suppository blisters, vial packs, etc.) */}
         <div className="space-y-3">
           <Label className="text-sm font-medium text-foreground">Pack Details (optional)</Label>
             <div className="grid grid-cols-2 gap-3">
@@ -388,7 +348,6 @@ const AddProduct = () => {
               </p>
             )}
         </div>
-        )}
 
         {/* 4. Company Name */}
         <div className="space-y-2">
@@ -431,9 +390,7 @@ const AddProduct = () => {
             Stock Alert Level
           </Label>
           <p className="text-xs text-muted-foreground">
-            {isPowder
-              ? `Leave empty to use a smart default of 2 ${powderUnit.toLowerCase()}s.`
-              : "Leave empty to use a smart default based on your pack size — 1 full box when pack details are set, otherwise 2 units."}
+            Leave empty to use a smart default based on your pack size — 1 full box when pack details are set, otherwise 2 units.
           </p>
           <Input
             type="number"

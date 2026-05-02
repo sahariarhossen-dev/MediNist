@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory, isPowderType, detectPowderUnit } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -43,16 +43,11 @@ interface MasterMedicine {
 
 const parsePackSize = (val: string | null): number | null => {
   if (!val || val === "N/A") return null;
-  // Single-container packs (e.g. "100 gm container", "200 gm jar") describe
-  // the size of one unit, NOT a count of pieces inside a strip. Treat as
-  // single-unit so we don't poison pcs_per_strip with the gram value.
-  if (/\b(container|jar|bottle|tin|tub|sachet)\b/i.test(val)) return null;
   const match = val.match(/(\d+)/);
   return match ? parseInt(match[1], 10) : null;
 };
 
 const computeStripPerPack = (packSize: string | null, boxSize: string | null): number | null => {
-  if (packSize && /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(packSize)) return null;
   const pcs = parsePackSize(packSize);
   const box = parsePackSize(boxSize);
   if (!pcs || !box || pcs === 0) return null;
@@ -60,19 +55,9 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
   return result > 0 ? result : null;
 };
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType, unitFormat, packSize }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null; unitFormat?: string | null; packSize?: string | null }) => {
-  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType, unit_format: unitFormat })) {
-    const isPowder = isPowderType(productType) || isPowderType(unitFormat);
-    if (isPowder) {
-      const unit = detectPowderUnit(packSize || unitFormat);
-      const label = totalPcs === 1 ? unit : `${unit}s`;
-      return (
-        <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
-          {totalPcs} {label}
-          {packSize ? <span className="text-gray-400 font-normal"> | {packSize}</span> : null}
-        </span>
-      );
-    }
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
+  void productType; // legacy prop, no longer drives display
+  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
@@ -241,8 +226,7 @@ const Inventory = () => {
 
   const getCalculatedStock = (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
-    const single = isSingleUnit(med);
-    const addedPieces = single ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    const addedPieces = isSingleUnit(med) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
     return (med.stock_quantity || 0) + addedPieces;
   };
 
@@ -269,16 +253,15 @@ const Inventory = () => {
       return;
     }
     setAddingCatalog(true);
-    const isPowder = isPowderType(med.format) || (med.pack_size ? /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(med.pack_size) : false);
-    const pcsPerStrip = isPowder ? null : parsePackSize(med.pack_size);
-    const stripPerPack = isPowder ? null : computeStripPerPack(med.pack_size, med.box_size);
+    const pcsPerStrip = parsePackSize(med.pack_size);
+    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
     // Keep verbatim format for unmappable types so the pharmacy still gets a
     // sensible custom bucket (e.g. "Eye Drop") in the product-type dropdown.
     const productTypeBucket =
       functionalType === "Other" && med.format ? med.format : functionalType;
-    const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productTypeBucket, unit_format: med.format });
+    const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack });
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
@@ -510,7 +493,7 @@ const Inventory = () => {
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? (isPowderType(med.product_type || med.unit_format) ? detectPowderUnit(med.product_size || med.unit_format) : "Qty") : "Box"}</span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? "Qty" : "Box"}</span>
                             <Input
                               ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
                               type="number"
@@ -530,7 +513,7 @@ const Inventory = () => {
                           </div>
                         ) : (
                           <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                           </div>
                         )}
                       </div>
@@ -539,10 +522,10 @@ const Inventory = () => {
                           <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
                             <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
                             <span className="text-gray-400">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                             <span className="text-emerald-600 font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                           </div>
                         </div>
@@ -560,9 +543,8 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogIsPowder = isPowderType(med.format) || (med.pack_size ? /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(med.pack_size) : false);
-                      const catalogPcsPerStrip = catalogIsPowder ? null : parsePackSize(med.pack_size);
-                      const catalogStripPerPack = catalogIsPowder ? null : computeStripPerPack(med.pack_size, med.box_size);
+                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
+                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
                       return (
                         <div
                           key={med.id}
@@ -602,7 +584,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2.5">
-                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit({ pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack, product_type: med.format, unit_format: med.format }) ? "Box:" : (catalogIsPowder ? `${detectPowderUnit(med.pack_size)}s:` : "Qty (pcs):")}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit({ pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack }) ? "Box:" : "Qty (pcs):"}</span>
                                 <Input
                                   type="number"
                                   min={0}
