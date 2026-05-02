@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
-import { getStandardizedType, getProductTypeChipClasses } from "@/lib/productType";
+import { getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import {
   Select,
   SelectContent,
@@ -150,7 +150,7 @@ const ShortItems = () => {
                             title={item.product_type}
                             className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${getProductTypeChipClasses(item.product_type)}`}
                           >
-                            {getStandardizedType(item.product_type)}
+                            {getDisplayCategory(item.product_type)}
                           </span>
                         ) : (
                           "—"
