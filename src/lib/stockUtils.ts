@@ -1,6 +1,8 @@
 // Pure data-driven stock utilities. Tri-unit (Box:Strip:Pcs) display is
 // driven entirely by the product's pack configuration, NOT by its type.
 
+import { isPowderType } from "./productType";
+
 /**
  * Tri-Unit Inventory System: Box : Strip : Pcs
  *
@@ -72,7 +74,12 @@ export const totalPiecesToTriUnitLabeled = (
 export const isSingleUnit = (med: {
   pcs_per_strip?: number | null;
   strip_per_pack?: number | null;
+  product_type?: string | null;
+  unit_format?: string | null;
 }): boolean => {
+  // Powder-like products (Effervescent Powder, Sachet, Granules) are always
+  // counted as single units (Containers / Sachets), regardless of pack data.
+  if (isPowderType(med?.product_type) || isPowderType(med?.unit_format)) return true;
   const pps = med?.pcs_per_strip ?? 1;
   const spp = med?.strip_per_pack ?? 1;
   return (pps || 1) <= 1 && (spp || 1) <= 1;
@@ -104,11 +111,15 @@ export const boxesToPieces = (
  */
 export const getEffectiveStockAlert = (med: {
   product_type?: string | null;
+  unit_format?: string | null;
   stock_alert?: number | null;
   strip_per_pack?: number | null;
   pcs_per_strip?: number | null;
 }): number => {
   if (med.stock_alert && med.stock_alert > 0) return med.stock_alert;
+
+  // Powders use single-unit counting → flat 2 units default.
+  if (isPowderType(med.product_type) || isPowderType(med.unit_format)) return 2;
 
   const spp = med.strip_per_pack || 0;
   const pps = med.pcs_per_strip || 0;
@@ -124,6 +135,7 @@ export const getEffectiveStockAlert = (med: {
  */
 export const isLowStock = (med: {
   product_type?: string | null;
+  unit_format?: string | null;
   stock_alert?: number | null;
   strip_per_pack?: number | null;
   pcs_per_strip?: number | null;
