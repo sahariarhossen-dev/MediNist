@@ -120,7 +120,10 @@ const CatalogSearch = () => {
       pharmacy_id: profile.pharmacy_id,
       name: med.brand_name,
       company_name: med.company || null,
-      product_type: toFunctionalType(med.format),
+      product_type: (() => {
+        const std = toFunctionalType(med.format);
+        return std === "Other" && med.format ? med.format : std;
+      })(),
       unit_format: med.format || null,
       price: med.unit_price || null,
       stock_quantity: qty,
