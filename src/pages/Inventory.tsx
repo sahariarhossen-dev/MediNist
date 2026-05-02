@@ -256,14 +256,18 @@ const Inventory = () => {
     const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
-    const isMultiUnit = !isSingleUnit(functionalType);
+    // Keep verbatim format for unmappable types so the pharmacy still gets a
+    // sensible custom bucket (e.g. "Eye Drop") in the product-type dropdown.
+    const productTypeBucket =
+      functionalType === "Other" && med.format ? med.format : functionalType;
+    const isMultiUnit = !isSingleUnit(med.format ?? functionalType);
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
       name: med.brand_name,
       company_name: med.company || null,
-      product_type: functionalType,
+      product_type: productTypeBucket,
       unit_format: med.format || null,
       product_size: med.strength || null,
       price: med.unit_price || null,
