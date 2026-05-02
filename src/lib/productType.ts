@@ -66,6 +66,43 @@ export function getStandardizedType(
 }
 
 /**
+ * Title-case a free-form custom product type for badge display.
+ * "suppository" → "Suppository", "EYE DROP" → "Eye Drop",
+ * "pediatric drops" → "Pediatric Drops".
+ */
+function titleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * Display label for the product-type badge. Unlike {@link getStandardizedType}
+ * (which collapses everything to one of seven buckets for *logic*), this
+ * helper preserves real custom values like "Suppository", "Pediatric",
+ * "Eye Drop" so the badge never falsely shows "Other" when the database
+ * actually has a value. Truncated to 14 chars for mobile row layouts;
+ * full string remains available via the `title` attribute.
+ */
+export function getDisplayCategory(
+  raw: string | null | undefined
+): string {
+  if (!raw) return "";
+  const s = raw.trim();
+  if (!s) return "";
+  // If it maps to a known standard bucket, use the short standard name
+  // (so "Soft Gelatin Capsule" still chips as "Capsule").
+  const std = getStandardizedType(s);
+  if (std !== "Other") return std;
+  // Otherwise show the user's actual value, title-cased + truncated.
+  const pretty = titleCase(s);
+  return pretty.length > 14 ? pretty.slice(0, 13) + "…" : pretty;
+}
+
+/**
  * Tablet and Capsule are the only categories that use the
  * Pcs × Strip × Box tri-unit inventory model. Everything else uses
  * single-unit quantities (vials, bottles, tubes, puffs, etc.).
@@ -143,14 +180,26 @@ export function getFunctionalBucket(
  * to a consistent color family across the app.
  */
 export function getProductTypeChipClasses(type: string | null | undefined): string {
-  switch (getStandardizedType(type)) {
+  const std = getStandardizedType(type);
+  switch (std) {
     case "Tablet":    return "bg-blue-50 text-blue-700";
     case "Capsule":   return "bg-purple-50 text-purple-700";
     case "Syrup":     return "bg-amber-50 text-amber-700";
     case "Injection": return "bg-rose-50 text-rose-700";
     case "Topical":   return "bg-teal-50 text-teal-700";
     case "Inhaler":   return "bg-indigo-50 text-indigo-700";
-    default:          return "bg-gray-100 text-gray-600";
+    default: {
+      // Custom (unmapped) types — give them a neutral but intentional chip
+      // instead of the washed-out "Other" gray, with a couple of soft
+      // hints for the most common Bangladeshi pharmacy form factors.
+      const s = (type || "").toLowerCase();
+      if (/\bsuppositor/.test(s)) return "bg-pink-50 text-pink-700";
+      if (/\bdrops?\b/.test(s)) return "bg-cyan-50 text-cyan-700";
+      if (/\b(powder|sachet)\b/.test(s)) return "bg-orange-50 text-orange-700";
+      if (/\bpediatric\b/.test(s)) return "bg-emerald-50 text-emerald-700";
+      if (s.trim()) return "bg-slate-100 text-slate-700";
+      return "bg-gray-100 text-gray-600";
+    }
   }
 }
 
