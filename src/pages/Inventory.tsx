@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory, isPowderType, detectPowderUnit } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -43,11 +43,16 @@ interface MasterMedicine {
 
 const parsePackSize = (val: string | null): number | null => {
   if (!val || val === "N/A") return null;
+  // Single-container packs (e.g. "100 gm container", "200 gm jar") describe
+  // the size of one unit, NOT a count of pieces inside a strip. Treat as
+  // single-unit so we don't poison pcs_per_strip with the gram value.
+  if (/\b(container|jar|bottle|tin|tub|sachet)\b/i.test(val)) return null;
   const match = val.match(/(\d+)/);
   return match ? parseInt(match[1], 10) : null;
 };
 
 const computeStripPerPack = (packSize: string | null, boxSize: string | null): number | null => {
+  if (packSize && /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(packSize)) return null;
   const pcs = parsePackSize(packSize);
   const box = parsePackSize(boxSize);
   if (!pcs || !box || pcs === 0) return null;
@@ -55,9 +60,19 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
   return result > 0 ? result : null;
 };
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
-  void productType; // legacy prop, no longer drives display
-  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType, unitFormat, packSize }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null; unitFormat?: string | null; packSize?: string | null }) => {
+  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType, unit_format: unitFormat })) {
+    const isPowder = isPowderType(productType) || isPowderType(unitFormat);
+    if (isPowder) {
+      const unit = detectPowderUnit(packSize || unitFormat);
+      const label = totalPcs === 1 ? unit : `${unit}s`;
+      return (
+        <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
+          {totalPcs} {label}
+          {packSize ? <span className="text-gray-400 font-normal"> | {packSize}</span> : null}
+        </span>
+      );
+    }
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
