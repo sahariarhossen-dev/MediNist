@@ -76,10 +76,8 @@ const AddProduct = () => {
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
 
-  const isTabletOrCapsule = (() => {
-    const s = productType.toLowerCase();
-    return s === "tablet" || s === "capsule";
-  })();
+  const standardizedType = getStandardizedType(productType);
+  const isTabletOrCapsule = isTriUnitCategory(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -173,7 +171,9 @@ const AddProduct = () => {
     const payload = {
       name: name.trim(),
       company_name: companyName.trim() || null,
-      product_type: productType || null,
+      // Standardized category drives all UI logic / grouping…
+      product_type: productType ? standardizedType : null,
+      // …while the verbatim string the user picked is preserved for display.
       unit_format: productType || null,
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
