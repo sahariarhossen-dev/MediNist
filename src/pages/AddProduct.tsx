@@ -19,7 +19,6 @@ import {
   getFunctionalBucket,
   SEED_PRODUCT_TYPES,
   getStandardizedType,
-  isTriUnitCategory,
 } from "@/lib/productType";
 
 const ADD_NEW_SENTINEL = "__add_new__";
@@ -77,7 +76,6 @@ const AddProduct = () => {
   const [stripPerBox, setStripPerBox] = useState("");
 
   const standardizedType = getStandardizedType(productType);
-  const isTabletOrCapsule = isTriUnitCategory(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -183,8 +181,8 @@ const AddProduct = () => {
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
-      pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
-      strip_per_pack: isTabletOrCapsule && stripPerBox ? Number(stripPerBox) : null,
+      pcs_per_strip: pcsPerStrip ? Number(pcsPerStrip) : null,
+      strip_per_pack: stripPerBox ? Number(stripPerBox) : null,
     };
 
     let error;
@@ -318,10 +316,10 @@ const AddProduct = () => {
           </div>
         )}
 
-        {/* 3b. Strip & Pack Details (Tablet/Capsule only) */}
-        {isTabletOrCapsule && (
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
+        {/* 3b. Pack Details — applies to any product with a multi-unit pack
+            (Tablet/Capsule strips, Suppository blisters, vial packs, etc.) */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium text-foreground">Pack Details (optional)</Label>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
@@ -349,8 +347,7 @@ const AddProduct = () => {
                 Total Box Size: <span className="font-semibold text-foreground">{pcsPerStrip} × {stripPerBox} = {totalBoxSize} pcs</span>
               </p>
             )}
-          </div>
-        )}
+        </div>
 
         {/* 4. Company Name */}
         <div className="space-y-2">
@@ -393,7 +390,7 @@ const AddProduct = () => {
             Stock Alert Level
           </Label>
           <p className="text-xs text-muted-foreground">
-            Leave empty to use smart defaults — 1 box for Tablet/Capsule, 2 units for others.
+            Leave empty to use a smart default based on your pack size — 1 full box when pack details are set, otherwise 2 units.
           </p>
           <Input
             type="number"
