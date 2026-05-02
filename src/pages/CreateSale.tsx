@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
-import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses } from "@/lib/productType";
+import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
@@ -533,7 +533,7 @@ const CreateSale = () => {
                         title={getDisplayFormat(med) || undefined}
                         className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
                       >
-                        {getStandardizedType(med.product_type || med.unit_format)}
+                        {getDisplayCategory(med.product_type || med.unit_format)}
                       </span>
                     )}
                   </p>
@@ -636,7 +636,7 @@ const CreateSale = () => {
                             title={getDisplayFormat(item.medicine) || undefined}
                             className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
                           >
-                            {getStandardizedType(item.medicine.product_type || item.medicine.unit_format)}
+                            {getDisplayCategory(item.medicine.product_type || item.medicine.unit_format)}
                           </span>
                         )}
                       </p>
@@ -734,7 +734,7 @@ const CreateSale = () => {
                           title={getDisplayFormat(item.medicine) || undefined}
                           className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
                         >
-                          {getStandardizedType(item.medicine.product_type || item.medicine.unit_format)}
+                          {getDisplayCategory(item.medicine.product_type || item.medicine.unit_format)}
                         </span>
                       )}
                     </p>

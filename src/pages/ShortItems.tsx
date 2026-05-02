@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
-import { getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
+import { getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import {
   Select,
   SelectContent,

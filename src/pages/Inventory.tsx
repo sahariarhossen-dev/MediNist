@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
-import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat } from "@/lib/productType";
+import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
 
 interface Medicine {
   id: string;
@@ -485,7 +485,7 @@ const Inventory = () => {
                                 title={getDisplayFormat(med) || undefined}
                                 className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
                               >
-                                {getStandardizedType(med.product_type || med.unit_format)}
+                                {getDisplayCategory(med.product_type || med.unit_format)}
                               </span>
                             )}
                           </div>
