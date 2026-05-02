@@ -1,62 +1,66 @@
-# Fix: Product badges show "Other" for valid types like Suppository / Pediatric
 
-## Root cause
+# Brand MediNist auth emails (incl. Reset Password)
 
-`src/lib/productType.ts` defines a fixed 7-category union (`Tablet`, `Capsule`, `Syrup`, `Injection`, `Inhaler`, `Topical`, `Other`). `getStandardizedType()` keyword-scans the string and returns `"Other"` for anything that doesn't match — so `"Suppository"`, `"Pediatric"`, `"Eye Drop"`, etc. all render as **Other** on the badge, even though the database row stores the correct value.
+## Approach
 
-The badge component itself is fine; the bug is the helper collapsing unknown-but-valid types.
+Instead of pasting raw HTML into the Supabase dashboard (which doesn't apply cleanly in Lovable Cloud), we'll scaffold Lovable's managed React Email templates, brand them for MediNist, and deploy. The **Reset Password** template is one of six that get scaffolded — we'll style all of them consistently so your auth emails look unified.
 
-## The fix
+## Prerequisite: Email domain
 
-### 1. New helper: `getDisplayCategory(raw)` in `src/lib/productType.ts`
+Lovable's email system requires a verified sender subdomain (e.g. `notify.medinist.app`). The project currently has none configured. You'll be shown a setup dialog to add one — DNS verification can finish in the background; we don't need to wait to scaffold/style.
 
-Returns a short, human-readable label for the badge, **never** "Other" when a real value exists:
+## Brand spec (extracted from project)
 
-- If the raw string matches one of the 7 standard patterns → return that standard name (`Tablet`, `Capsule`, …). Keeps the existing dedupe behavior so "Soft Gelatin Capsule" still shows as **Capsule**.
-- Otherwise → return a Title-Cased version of the raw string itself (e.g. `"suppository"` → `Suppository`, `"PEDIATRIC"` → `Pediatric`, `"Eye Drop"` → `Eye Drop`). Truncate to ~14 chars with ellipsis so long custom labels don't break the 390 px row layout.
-- Empty / null → return `""` (caller already guards on truthiness, so no badge renders).
+- **Primary blue**: `#2463eb` (from `LogoFull.tsx`)
+- **App name**: MediNist
+- **Body bg**: `#ffffff` (required)
+- **Button radius**: `8px` (from `--radius: 0.5rem`)
+- **Heading color**: `#0a1729` (foreground)
+- **Body text**: `#55687a` (muted-foreground)
+- **Font**: System sans (`-apple-system, Segoe UI, Roboto, Arial, sans-serif`)
+- **Footer**: `© 2026 MediNist` + "If you didn't request this, please ignore this email."
 
-Add a few more keyword patterns that are common in Bangladeshi pharmacies so they get a consistent color chip: `Suppository`, `Drops` (eye/ear/nasal), `Powder`, `Sachet`. These get their own `StandardCategory` entries with chip colors in `getProductTypeChipClasses`. "Pediatric" is a **form modifier**, not a dosage form — leave it as a custom label rendered verbatim.
+## Steps
 
-### 2. Update chip color helper
+1. **Add email domain** — open the email setup dialog, enter your sending subdomain, complete DNS info.
+2. **Scaffold templates** — creates `auth-email-hook` Edge Function + 6 React Email templates (signup, magic-link, **recovery**, invite, email-change, reauthentication) in `supabase/functions/_shared/email-templates/`.
+3. **Brand the templates** — apply MediNist palette/typography, mobile-responsive layout, MediNist wordmark header (text logo, matches app), CTA button using `{{ .ConfirmationURL }}` equivalent, and the requested footer copy.
+4. **Deploy** the `auth-email-hook` edge function.
+5. **Confirm** — once DNS verifies (tracked in Cloud → Emails), Supabase routes auth emails through your branded templates automatically.
 
-Extend `getProductTypeChipClasses` so the new categories above get distinct colors, and unknown custom strings get a neutral slate chip (instead of the current gray "Other" chip) so they look intentional, not broken.
+## Recovery (Reset Password) template — content blueprint
 
-### 3. Swap badge call sites from `getStandardizedType` → `getDisplayCategory`
-
-Three files render the badge:
-
-- `src/pages/Inventory.tsx` (line ~488)
-- `src/pages/CreateSale.tsx` (lines ~536, ~639, ~737)
-- `src/pages/ShortItems.tsx` (line ~153)
-
-Each becomes:
-```tsx
-<span title={med.product_type || med.unit_format}
-      className={getProductTypeChipClasses(med.product_type || med.unit_format)}>
-  {getDisplayCategory(med.product_type || med.unit_format)}
-</span>
+```text
+Header:    [MediNist wordmark, blue]
+Heading:   Reset your password
+Body:      Hi there, we received a request to reset the password
+           for your MediNist account. Click the button below to
+           choose a new one. This link expires in 1 hour.
+CTA:       [ Reset Password ]   → ConfirmationURL
+Fallback:  Or copy this link: <url>
+Footer:    If you didn't request this, please ignore this email.
+           © 2026 MediNist
 ```
 
-Keep `getStandardizedType` for **logic** (tri-unit detection, stock alerts, strip/box rules) — that's where the 7-bucket collapse is correct. Only the **display** path changes.
+## Files that will be created/edited
 
-### 4. Make matching case-insensitive everywhere
+- `supabase/functions/auth-email-hook/index.ts` (new)
+- `supabase/functions/auth-email-hook/deno.json` (new)
+- `supabase/functions/_shared/email-templates/recovery.tsx` (new, branded)
+- `supabase/functions/_shared/email-templates/signup.tsx` (new, branded)
+- `supabase/functions/_shared/email-templates/magic-link.tsx` (new, branded)
+- `supabase/functions/_shared/email-templates/invite.tsx` (new, branded)
+- `supabase/functions/_shared/email-templates/email-change.tsx` (new, branded)
+- `supabase/functions/_shared/email-templates/reauthentication.tsx` (new, branded)
+- `supabase/config.toml` (updated)
 
-Existing patterns already use `/i`, but verify `fetchPharmacyProductTypes` dedupe uses `.toLowerCase()` keys (it does). No change needed beyond confirming.
+## What you'll see after approval
 
-### 5. Stale-data refresh
+- Email setup dialog (one-time, to add your sending subdomain)
+- Branded templates committed to your repo
+- Edge function deployed
+- Link to preview the Reset Password email in Cloud → Emails
 
-The Inventory list already refetches via its load effect after edit. No state-cache bug — the "Other" was always rendered fresh from the DB; the helper was the culprit. After the helper change, edits will reflect immediately on the next list mount/refetch with no further work.
+## If you truly want raw dashboard HTML instead
 
-## Files touched
-
-- `src/lib/productType.ts` — add `getDisplayCategory`, extend patterns + chip colors
-- `src/pages/Inventory.tsx` — swap badge text
-- `src/pages/CreateSale.tsx` — swap badge text (3 spots)
-- `src/pages/ShortItems.tsx` — swap badge text
-
-No DB changes, no migrations, no schema edits. Pure frontend helper refactor.
-
-## Mobile QA (390 px)
-
-Custom labels are truncated to 14 chars + ellipsis in the helper, so even long strings like "Dry Powder Inhalation Capsule" (which still maps to **Capsule** anyway) or a custom "Reconstitution Powder" → `Reconstitut…` won't push action buttons off-screen. Full string remains in the `title` tooltip.
+If you'd rather paste HTML directly into Supabase's auth template editor (bypassing Lovable's pipeline — works but isn't recommended for this project), say so and I'll generate the standalone HTML file instead. Note: it won't use a custom sender domain, will be overridden if Lovable Emails is later enabled, and won't be version-controlled with your code.
