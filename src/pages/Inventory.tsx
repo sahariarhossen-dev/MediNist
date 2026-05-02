@@ -510,7 +510,7 @@ const Inventory = () => {
                         </div>
                         {isExpanded ? (
                           <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? "Qty" : "Box"}</span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? (isPowderType(med.product_type || med.unit_format) ? detectPowderUnit(med.product_size || med.unit_format) : "Qty") : "Box"}</span>
                             <Input
                               ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
                               type="number"
@@ -530,7 +530,7 @@ const Inventory = () => {
                           </div>
                         ) : (
                           <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
                           </div>
                         )}
                       </div>
@@ -539,10 +539,10 @@ const Inventory = () => {
                           <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
                             <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
                             <span className="text-gray-400">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
                             </span>
                             <span className="text-emerald-600 font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} packSize={med.product_size} />
                             </span>
                           </div>
                         </div>
@@ -560,8 +560,9 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
-                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+                      const catalogIsPowder = isPowderType(med.format) || (med.pack_size ? /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(med.pack_size) : false);
+                      const catalogPcsPerStrip = catalogIsPowder ? null : parsePackSize(med.pack_size);
+                      const catalogStripPerPack = catalogIsPowder ? null : computeStripPerPack(med.pack_size, med.box_size);
                       return (
                         <div
                           key={med.id}
@@ -601,7 +602,7 @@ const Inventory = () => {
                           {isExpanded && (
                             <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2.5">
-                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit({ pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack }) ? "Box:" : "Qty (pcs):"}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">{!isSingleUnit({ pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack, product_type: med.format, unit_format: med.format }) ? "Box:" : (catalogIsPowder ? `${detectPowderUnit(med.pack_size)}s:` : "Qty (pcs):")}</span>
                                 <Input
                                   type="number"
                                   min={0}
