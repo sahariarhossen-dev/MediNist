@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
-import { getDisplayFormat } from "@/lib/productType";
+import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 
@@ -528,14 +528,19 @@ const CreateSale = () => {
                   <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
                     <span className="truncate">{truncateName(med.name)}</span>
                     {med.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">{truncateStrength(med.product_size)}</span>}
-                    {getDisplayFormat(med) && (
-                      <span className="text-[10px] font-semibold text-orange-600 align-super flex-shrink-0">{getDisplayFormat(med)}</span>
+                    {(med.product_type || med.unit_format) && (
+                      <span
+                        title={getDisplayFormat(med) || undefined}
+                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
+                      >
+                        {getStandardizedType(med.product_type || med.unit_format)}
+                      </span>
                     )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {med.company_name && <span className="text-[10px] text-secondary-foreground truncate max-w-[100px]">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type || med.unit_format) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-lime-900 text-sm font-bold">৳{formatMoney(med.price ?? 0)}</p>
@@ -626,8 +631,13 @@ const CreateSale = () => {
                       <p className="text-sm font-bold text-gray-900 min-w-0 truncate flex items-center gap-1">
                         <span className="truncate">{truncateName(item.medicine.name)}</span>
                         {item.medicine.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.medicine.product_size)}</span>}
-                        {getDisplayFormat(item.medicine) && (
-                          <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
+                        {(item.medicine.product_type || item.medicine.unit_format) && (
+                          <span
+                            title={getDisplayFormat(item.medicine) || undefined}
+                            className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
+                          >
+                            {getStandardizedType(item.medicine.product_type || item.medicine.unit_format)}
+                          </span>
                         )}
                       </p>
                       <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
@@ -645,7 +655,7 @@ const CreateSale = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type || item.medicine.unit_format) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
 
                       {/* Wholesale: item discount input */}
@@ -719,8 +729,13 @@ const CreateSale = () => {
                     <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
                       <span className="truncate">{truncateName(item.medicine.name)}</span>
                       {item.medicine.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-slate-800">{truncateStrength(item.medicine.product_size)}</span>}
-                      {getDisplayFormat(item.medicine) && (
-                        <span className="text-[10px] font-semibold text-red-500 align-super flex-shrink-0">{getDisplayFormat(item.medicine)}</span>
+                      {(item.medicine.product_type || item.medicine.unit_format) && (
+                        <span
+                          title={getDisplayFormat(item.medicine) || undefined}
+                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
+                        >
+                          {getStandardizedType(item.medicine.product_type || item.medicine.unit_format)}
+                        </span>
                       )}
                     </p>
                     {isWholesale ? (
