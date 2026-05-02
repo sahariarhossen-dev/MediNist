@@ -19,6 +19,7 @@ export type StandardCategory =
   | "Injection"
   | "Inhaler"
   | "Topical"
+  | "Powder"
   | "Other";
 
 export const STANDARD_CATEGORIES: StandardCategory[] = [
@@ -28,6 +29,7 @@ export const STANDARD_CATEGORIES: StandardCategory[] = [
   "Injection",
   "Inhaler",
   "Topical",
+  "Powder",
   "Other",
 ];
 
@@ -40,7 +42,40 @@ const CATEGORY_PATTERNS: Array<{ category: StandardCategory; pattern: RegExp }> 
   { category: "Injection", pattern: /\b(injection|iv|im|vial|ampoule|ampule)\b/i },
   { category: "Inhaler", pattern: /\b(inhaler|inhalation|mdi|dpi|aerosol|respule|nebul\w*)\b/i },
   { category: "Topical", pattern: /\b(cream|ointment|gel|lotion)\b/i },
+  { category: "Powder", pattern: /\b(powder|sachet|granules?|effervescent)\b/i },
 ];
+
+/**
+ * True when the raw product type / unit format string represents a
+ * powder-like product (Effervescent Powder, Sachet, Granules, etc.).
+ * Powders are inventoried as single units (containers / sachets) and
+ * never use the strip/box tri-unit model.
+ */
+export function isPowderType(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const s = raw.toLowerCase();
+  // "Dry Powder Inhalation Capsule" should NOT count as a powder for inventory
+  // purposes — it's still a capsule.
+  if (/\b(capsules?|tablets?|inhal\w*)\b/.test(s)) return false;
+  return /\b(powder|sachet|granules?|effervescent)\b/.test(s);
+}
+
+/** Allowed unit labels for powder-like products. */
+export const POWDER_UNIT_OPTIONS = ["Container", "Sachet", "Jar", "Bottle", "Tin"] as const;
+export type PowderUnit = (typeof POWDER_UNIT_OPTIONS)[number];
+
+/**
+ * Detect the most likely physical unit for a powder product from its
+ * pack_size / product_size string. Defaults to "Container".
+ */
+export function detectPowderUnit(packSize: string | null | undefined): PowderUnit {
+  const s = (packSize || "").toLowerCase();
+  if (/sachet/.test(s)) return "Sachet";
+  if (/jar/.test(s)) return "Jar";
+  if (/bottle/.test(s)) return "Bottle";
+  if (/\btin\b/.test(s)) return "Tin";
+  return "Container";
+}
 
 /**
  * Map any raw product_type / unit_format / catalog format string to a
@@ -157,7 +192,8 @@ export const SEED_PRODUCT_TYPES: readonly StandardCategory[] = STANDARD_CATEGORI
  */
 export function getFunctionalBucket(
   type: string | null | undefined
-): "tablet-like" | "liquid" | "topical" | "inhaler" | "other" {
+): "tablet-like" | "liquid" | "topical" | "inhaler" | "powder" | "other" {
+  if (isPowderType(type)) return "powder";
   switch (getStandardizedType(type)) {
     case "Tablet":
     case "Capsule":
@@ -188,6 +224,7 @@ export function getProductTypeChipClasses(type: string | null | undefined): stri
     case "Injection": return "bg-rose-50 text-rose-700";
     case "Topical":   return "bg-teal-50 text-teal-700";
     case "Inhaler":   return "bg-indigo-50 text-indigo-700";
+    case "Powder":    return "bg-orange-50 text-orange-700";
     default: {
       // Custom (unmapped) types — give them a neutral but intentional chip
       // instead of the washed-out "Other" gray, with a couple of soft
