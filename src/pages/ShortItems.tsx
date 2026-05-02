@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
+import { getStandardizedType, getProductTypeChipClasses } from "@/lib/productType";
 import {
   Select,
   SelectContent,
@@ -143,7 +144,18 @@ const ShortItems = () => {
                           {item.product_size && <span className="text-fluid-xs text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.product_size)}</span>}
                         </span>
                       </td>
-                      <td className="px-1.5 py-3 text-gray-500">{item.product_type ?? "—"}</td>
+                      <td className="px-1.5 py-3 text-gray-500">
+                        {item.product_type ? (
+                          <span
+                            title={item.product_type}
+                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${getProductTypeChipClasses(item.product_type)}`}
+                          >
+                            {getStandardizedType(item.product_type)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className={`px-1.5 py-3 font-mono text-left whitespace-nowrap tabular-nums ${stockColor(item.stock_quantity)}`}>
                         <span className="whitespace-nowrap tabular-nums">
                           {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
