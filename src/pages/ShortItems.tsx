@@ -158,7 +158,7 @@ const ShortItems = () => {
                       </td>
                       <td className={`px-1.5 py-3 font-mono text-left whitespace-nowrap tabular-nums ${stockColor(item.stock_quantity)}`}>
                         <span className="whitespace-nowrap tabular-nums">
-                          {isSingleUnit(item.product_type) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
+                          {isSingleUnit(item) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                         </span>
                       </td>
                       <td className="px-2 py-3 text-right text-gray-700 whitespace-nowrap tabular-nums">
