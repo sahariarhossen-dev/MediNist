@@ -241,7 +241,8 @@ const Inventory = () => {
 
   const getCalculatedStock = (med: Medicine) => {
     const units = Number(unitInputs[med.id] || 0);
-    const addedPieces = isSingleUnit(med) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    const single = isSingleUnit(med);
+    const addedPieces = single ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
     return (med.stock_quantity || 0) + addedPieces;
   };
 
@@ -268,15 +269,16 @@ const Inventory = () => {
       return;
     }
     setAddingCatalog(true);
-    const pcsPerStrip = parsePackSize(med.pack_size);
-    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+    const isPowder = isPowderType(med.format) || (med.pack_size ? /\b(container|jar|bottle|tin|tub|sachet)\b/i.test(med.pack_size) : false);
+    const pcsPerStrip = isPowder ? null : parsePackSize(med.pack_size);
+    const stripPerPack = isPowder ? null : computeStripPerPack(med.pack_size, med.box_size);
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
     // Keep verbatim format for unmappable types so the pharmacy still gets a
     // sensible custom bucket (e.g. "Eye Drop") in the product-type dropdown.
     const productTypeBucket =
       functionalType === "Other" && med.format ? med.format : functionalType;
-    const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack });
+    const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productTypeBucket, unit_format: med.format });
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
