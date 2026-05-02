@@ -171,9 +171,13 @@ const AddProduct = () => {
     const payload = {
       name: name.trim(),
       company_name: companyName.trim() || null,
-      // Standardized category drives all UI logic / grouping…
-      product_type: productType ? standardizedType : null,
-      // …while the verbatim string the user picked is preserved for display.
+      // Standardized category drives UI logic / grouping. For non-standard
+      // custom types (e.g. "Eye Drop"), keep the verbatim string so this
+      // pharmacy gets its own custom bucket in the dropdown.
+      product_type: productType
+        ? (standardizedType === "Other" ? productType : standardizedType)
+        : null,
+      // Verbatim label the user picked — preserved for tooltips / display.
       unit_format: productType || null,
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
