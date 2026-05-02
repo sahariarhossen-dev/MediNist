@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import DOMPurify from "dompurify";
 
 interface BlockTextProps {
   html: string;
@@ -41,7 +42,7 @@ const BlockText = forwardRef<BlockTextHandle, BlockTextProps>(
       // Only sync from props when the incoming html differs from
       // both the live DOM AND the last value we set. This means
       // local user edits do not trigger a re-set, preserving caret.
-      const next = html || "";
+      const next = DOMPurify.sanitize(html || "", { USE_PROFILES: { html: true } });
       if (el.innerHTML === next) return;
       if (lastSetHtmlRef.current === next) return;
       el.innerHTML = next;
