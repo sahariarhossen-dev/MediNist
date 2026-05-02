@@ -11,10 +11,18 @@ interface NoteCardProps {
 }
 
 function stripHtml(html: string): string {
-  if (typeof document === "undefined") return html.replace(/<[^>]+>/g, "");
-  const div = document.createElement("div");
-  div.innerHTML = html;
-  return div.textContent || div.innerText || "";
+  // Strip tags via regex only — never assign untrusted HTML to innerHTML,
+  // because event handlers (e.g. <img onerror>) would still fire.
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 const NoteCard = ({ note, creatorName, isMine, onClick }: NoteCardProps) => {
