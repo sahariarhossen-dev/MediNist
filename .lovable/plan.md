@@ -1,62 +1,85 @@
-# Notification System Overhaul
+# Subscription Management Page
 
-## 1. Scroll/Freeze Fix (`NotificationPanel.tsx`)
+Add a new route `/subscription` rendered inside `AppLayout`, plus a "Subscription" entry on the More page. All data is mocked for now and structured to map cleanly onto a future Supabase `subscriptions` + `subscription_payments` schema.
 
-The current `ScrollArea` uses `max-h-[60vh]` but is wrapped inside a Radix Popover which can intercept wheel/touch events on certain mobile browsers, causing the "frozen" feel. Fix:
+## Files
 
-- Replace `ScrollArea` with a plain `div` using `max-h-[70vh] overflow-y-auto overscroll-contain` so native scrolling works reliably on mobile.
-- Add `onWheel`/`onTouchMove` `stopPropagation` on the scroll container to prevent Popover from swallowing gestures.
-- Make the panel width responsive: `w-[min(360px,calc(100vw-24px))]` (already close, just confirm).
+**New**
+- `src/pages/Subscription.tsx` — page shell, sections, mock data
+- `src/components/subscription/StatusCard.tsx` — hero card with countdown + progress
+- `src/components/subscription/CountdownTimer.tsx` — live ticking timer with subtle number animation
+- `src/components/subscription/ExtendPlans.tsx` — three plan cards (1m / 3m popular / 6m)
+- `src/components/subscription/PaymentHistory.tsx` — transactions list
+- `src/hooks/useCountdown.ts` — `useEffect` based 1s tick returning `{days, hours, minutes, seconds, totalMs}`
+- `src/lib/subscriptionMock.ts` — mock expiry, plans, transactions, helper `stackExpiry(currentExpiry, days)`
 
-## 2. Restrict Notification Sources (`useNotifications.ts`)
+**Edited**
+- `src/App.tsx` — register `/subscription` route (ProtectedRoute + AppLayout)
+- `src/pages/More.tsx` — add menu item "Subscription" (icon `CreditCard`) routing to `/subscription`
 
-Remove all current sources (low-stock, completed sales, payments-received, generic ledger). Replace with **only** these three:
+## Sections
 
-### A. New Customer Due
-- Query `customer_ledger` where `entry_type = 'due'` AND `sale_id IS NOT NULL` (i.e., due created by completing a sale with outstanding amount). Also include manual dues if desired — spec says "transaction completed where Due Amount is recorded", so filter to `sale_id IS NOT NULL`.
-- Join customer name.
-- Title: `New Due Recorded`
-- Message: `{customerName} - ৳{amount} TK`
-- Link: `/more/customers/{customer_id}`
-- id: `due:{ledger.id}`
+### 1. Status Card (Hero)
+- Badge: green dot + "Active"
+- Big countdown: `21d : 12h : 25m : 30s` — each unit in its own pill; on value change apply `animate-fade-in` + `key={value}` so React remounts and re-animates the digit
+- Background tint via remaining days:
+  - `>= 7d` → emerald (`bg-emerald-50`, accent `text-emerald-700`, border `border-emerald-200`)
+  - `3–7d` → amber
+  - `< 3d` → rose
+- Progress bar (`@/components/ui/progress`) = `remainingMs / totalPlanMs * 100`
+- Subtext: "Renews on {formatted expiry}" + plan name
 
-### B. Public Note Shared
-- Query `notes` where `is_public = true`, ordered by `updated_at desc`.
-- Join creator full_name from `get_pharmacy_member_names` rpc.
-- Title: `Note Shared`
-- Message: `{userName} published a new note: {title || "Untitled"}`
-- Link: `/notes` (or `/notes/{id}` if route exists — check and fall back).
-- id: `note:{note.id}`
-- Category: reuse `payment` icon slot or add new `note` category.
+### 2. Extend Plans
+- Three cards in a responsive grid: `grid-cols-1 sm:grid-cols-3`
+- Each card: duration title, price (e.g., ৳499 / ৳1,299 / ৳2,399), bullet features, "Pay Now" button
+- Middle card has "Popular" ribbon and primary border
+- Click "Pay Now" → calls `stackExpiry(currentExpiry, days)` and shows a toast "New expiry: {date}" (mock; ready to swap for a Supabase insert + RPC)
 
-### C. Internal Broadcast
-- Query `pharmacy_broadcasts` where `is_active = true`, recent.
-- Title: `Shop Broadcast`
-- Message: broadcast.message (truncated in UI via existing line-clamp).
-- Link: `/` (home, where BroadcastBanner shows) or none.
-- id: `bcast:{id}`
+### 3. Payment History
+- Card with header "Payment History"
+- Mobile: stacked rows (date + amount on top line, duration + status badge below)
+- ≥ sm: `@/components/ui/table` with columns Date | Amount | Duration Added | Status
+- Status pill: success = emerald, pending = amber
 
-Add a new `NotificationCategory` value `note` and `broadcast` in `NotificationItem.tsx` ICON_MAP (e.g., `FileText` for note, `Megaphone` for broadcast). Keep existing `due` icon for dues.
+## Technical Details
 
-## 3. Realtime Sync
+```ts
+// useCountdown.ts
+export function useCountdown(target: Date) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const diff = Math.max(0, target.getTime() - now);
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff / 3_600_000) % 24);
+  const minutes = Math.floor((diff / 60_000) % 60);
+  const seconds = Math.floor((diff / 1000) % 60);
+  return { days, hours, minutes, seconds, diff };
+}
+```
 
-Update the Supabase realtime channel subscription in `useNotifications.ts`:
-- Subscribe to INSERT on `customer_ledger` filtered by `pharmacy_id` (already there) — keep.
-- Subscribe to INSERT/UPDATE on `notes` filtered by `pharmacy_id` — new.
-- Subscribe to INSERT/UPDATE on `pharmacy_broadcasts` filtered by `pharmacy_id` — new.
-- Remove `sales` and `medicines` subscriptions.
+```ts
+// stackExpiry — extend from later of (now, currentExpiry)
+export function stackExpiry(current: Date, addDays: number) {
+  const base = current.getTime() > Date.now() ? current : new Date();
+  return new Date(base.getTime() + addDays * 86_400_000);
+}
+```
 
-Each event refetches via `fetchAll()`. Read-state uses existing localStorage `markAsRead` flow — no DB changes needed.
+Mock shape (ready for Supabase mapping):
+```ts
+type Subscription = { plan: string; started_at: string; expiry_date: string; total_days: number };
+type Payment = { id: string; date: string; amount_bdt: number; duration_days: number; status: "success" | "pending" };
+```
 
-## 4. Click Behavior
-Already handled in `NotificationItem.tsx`: clicking calls `onRead(id)` (marks read in localStorage) then navigates via `notification.link`. Confirm `/more/customers/{id}` route works (it does, line 89 of App.tsx).
-
-## Files to Edit
-- `src/hooks/useNotifications.ts` — replace fetch logic and realtime subscriptions
-- `src/components/notifications/NotificationPanel.tsx` — fix scroll container
-- `src/components/notifications/NotificationItem.tsx` — add `note` and `broadcast` categories to icon map
-- Type update: `NotificationCategory = "due" | "note" | "broadcast"`
+## Styling
+- Page wrapper: `min-h-screen bg-[#F4F6FB] max-w-md md:max-w-2xl mx-auto pb-24 px-page`
+- Cards: `bg-white rounded-2xl shadow-sm p-4`
+- Icons: `CreditCard`, `Clock`, `Zap`, `CheckCircle2`, `Receipt` from lucide-react
+- All sizes use existing fluid tokens (`text-fluid-sm`, etc.) and Tailwind responsive classes for 100% mobile-first behavior
 
 ## Out of Scope
-- No DB migrations needed (all tables and RLS already exist).
-- No edge function changes.
+- Real payment gateway integration
+- Supabase tables / RLS — schema noted via mock types so it can be added in a follow-up
