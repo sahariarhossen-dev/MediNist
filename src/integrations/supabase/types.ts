@@ -672,6 +672,9 @@ export type Database = {
           name: string
           phone: string | null
           proprietor_name: string | null
+          subscription_expiry: string | null
+          subscription_plan: string | null
+          subscription_started_at: string | null
           trade_license: string | null
           upazila: string | null
         }
@@ -690,6 +693,9 @@ export type Database = {
           name: string
           phone?: string | null
           proprietor_name?: string | null
+          subscription_expiry?: string | null
+          subscription_plan?: string | null
+          subscription_started_at?: string | null
           trade_license?: string | null
           upazila?: string | null
         }
@@ -708,6 +714,9 @@ export type Database = {
           name?: string
           phone?: string | null
           proprietor_name?: string | null
+          subscription_expiry?: string | null
+          subscription_plan?: string | null
+          subscription_started_at?: string | null
           trade_license?: string | null
           upazila?: string | null
         }
@@ -1053,6 +1062,36 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_payments: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          duration_days: number
+          id: string
+          pharmacy_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount_bdt: number
+          created_at?: string
+          duration_days: number
+          id?: string
+          pharmacy_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          duration_days?: number
+          id?: string
+          pharmacy_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1068,6 +1107,10 @@ export type Database = {
       }
       create_group_room: {
         Args: { _avatar_url?: string; _member_ids: string[]; _name: string }
+        Returns: string
+      }
+      extend_subscription: {
+        Args: { _amount: number; _days: number }
         Returns: string
       }
       get_chat_inbox: {
