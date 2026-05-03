@@ -1,46 +1,19 @@
 import { useState } from "react";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import StatusCard from "@/components/subscription/StatusCard";
-import ExtendPlans from "@/components/subscription/ExtendPlans";
 import PaymentHistory from "@/components/subscription/PaymentHistory";
 import {
-  formatDate,
   mockPayments,
   mockSubscription,
-  stackExpiry,
-  type ExtendPlan,
   type PaymentRecord,
   type SubscriptionInfo,
 } from "@/lib/subscriptionMock";
 
 export default function Subscription() {
   const navigate = useNavigate();
-  const [sub, setSub] = useState<SubscriptionInfo>(mockSubscription);
-  const [payments, setPayments] = useState<PaymentRecord[]>(mockPayments);
-
-  const handlePay = (plan: ExtendPlan) => {
-    const newExpiry = stackExpiry(new Date(sub.expiry_date), plan.days);
-    setSub((s) => ({
-      ...s,
-      expiry_date: newExpiry.toISOString(),
-      total_days: s.total_days + plan.days,
-    }));
-    setPayments((list) => [
-      {
-        id: `p${Date.now()}`,
-        date: new Date().toISOString(),
-        amount_bdt: plan.price_bdt,
-        duration_days: plan.days,
-        status: "success",
-      },
-      ...list,
-    ]);
-    toast.success("Subscription extended", {
-      description: `New expiry: ${formatDate(newExpiry.toISOString())}`,
-    });
-  };
+  const [sub] = useState<SubscriptionInfo>(mockSubscription);
+  const [payments] = useState<PaymentRecord[]>(mockPayments);
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-24">
@@ -60,7 +33,6 @@ export default function Subscription() {
 
       <main className="px-page space-y-5 mt-2">
         <StatusCard sub={sub} />
-        <ExtendPlans onPay={handlePay} />
         <PaymentHistory payments={payments} />
       </main>
     </div>
