@@ -19,7 +19,6 @@ import {
   getFunctionalBucket,
   SEED_PRODUCT_TYPES,
   getStandardizedType,
-  isTriUnitCategory,
 } from "@/lib/productType";
 
 const ADD_NEW_SENTINEL = "__add_new__";
@@ -77,7 +76,6 @@ const AddProduct = () => {
   const [stripPerBox, setStripPerBox] = useState("");
 
   const standardizedType = getStandardizedType(productType);
-  const isTabletOrCapsule = isTriUnitCategory(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -183,8 +181,11 @@ const AddProduct = () => {
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
-      pcs_per_strip: isTabletOrCapsule && pcsPerStrip ? Number(pcsPerStrip) : null,
-      strip_per_pack: isTabletOrCapsule && stripPerBox ? Number(stripPerBox) : null,
+      // Persist whatever pack data the user entered (>0). Visibility of the
+      // strip/box UI is no longer tied to product_type — it follows the
+      // actual packaging numbers, matching the master JSON catalog shape.
+      pcs_per_strip: pcsPerStrip && Number(pcsPerStrip) > 0 ? Number(pcsPerStrip) : null,
+      strip_per_pack: stripPerBox && Number(stripPerBox) > 0 ? Number(stripPerBox) : null,
     };
 
     let error;
@@ -318,10 +319,13 @@ const AddProduct = () => {
           </div>
         )}
 
-        {/* 3b. Strip & Pack Details (Tablet/Capsule only) */}
-        {isTabletOrCapsule && (
-          <div className="space-y-3">
+        {/* 3b. Strip & Pack Details — driven by data, not product type.
+            Leave both blank (or 1) for single-unit products. */}
+        <div className="space-y-3">
             <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
+            <p className="text-xs text-muted-foreground">
+              Leave blank or set to 1 for single-unit products (bottles, tubes, vials).
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
@@ -349,8 +353,7 @@ const AddProduct = () => {
                 Total Box Size: <span className="font-semibold text-foreground">{pcsPerStrip} × {stripPerBox} = {totalBoxSize} pcs</span>
               </p>
             )}
-          </div>
-        )}
+        </div>
 
         {/* 4. Company Name */}
         <div className="space-y-2">

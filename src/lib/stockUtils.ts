@@ -1,5 +1,3 @@
-import { isTriUnitCategory, getStandardizedType } from "./productType";
-
 /**
  * Tri-Unit Inventory System: Box : Strip : Pcs
  *
@@ -13,6 +11,31 @@ export interface TriUnit {
   strips: number;
   pcs: number;
 }
+
+/**
+ * Pack mode is derived purely from the medicine's actual packaging numbers
+ * (mirrors what the master JSON catalog stores). It replaces the previous
+ * `product_type === Tablet/Capsule` heuristic so a Syrup that ships in a box
+ * of 5 still gets the box UI, and a Tablet sold as a single piece behaves
+ * like a single-unit product.
+ */
+export type PackMode = "single" | "strip" | "box" | "full";
+
+export interface PackInfo {
+  pcs_per_strip?: number | null;
+  strip_per_pack?: number | null;
+}
+
+export const getPackMode = (med: PackInfo | null | undefined): PackMode => {
+  const pps = Number(med?.pcs_per_strip ?? 0);
+  const spp = Number(med?.strip_per_pack ?? 0);
+  const hasStrip = pps > 1;
+  const hasBox = spp > 1;
+  if (hasStrip && hasBox) return "full";
+  if (hasBox) return "box";
+  if (hasStrip) return "strip";
+  return "single";
+};
 
 /**
  * Convert total pieces into a TriUnit breakdown.
@@ -60,13 +83,12 @@ export const totalPiecesToTriUnitLabeled = (
 };
 
 /**
- * Convert a number of boxes into total pieces.
+ * True when a medicine's packaging data indicates a single-unit product
+ * (no strip or box subdivisions). Driven by the actual pack numbers, not
+ * the product_type string.
  */
-/**
- * Check if a product type uses single-unit quantity (not Box:Strip:Pcs).
- */
-export const isSingleUnit = (productType: string | null): boolean => {
-  return !isTriUnitCategory(productType);
+export const isSingleUnit = (med: PackInfo | null | undefined): boolean => {
+  return getPackMode(med) === "single";
 };
 
 /**
@@ -94,21 +116,17 @@ export const boxesToPieces = (
  *     → 2 units.
  */
 export const getEffectiveStockAlert = (med: {
-  product_type?: string | null;
   stock_alert?: number | null;
   strip_per_pack?: number | null;
   pcs_per_strip?: number | null;
 }): number => {
   if (med.stock_alert && med.stock_alert > 0) return med.stock_alert;
 
-  const std = getStandardizedType(med.product_type);
-  if (std === "Tablet" || std === "Capsule") {
-    const spp = med.strip_per_pack || 0;
-    const pps = med.pcs_per_strip || 0;
-    const oneBox = spp * pps;
-    return oneBox > 0 ? oneBox : 10;
-  }
-  return 2;
+  const spp = med.strip_per_pack || 0;
+  const pps = med.pcs_per_strip || 0;
+  const oneBox = spp * pps;
+  if (oneBox > 0) return oneBox; // multi-unit → 1 box
+  return 2; // single-unit → 2 pieces
 };
 
 /**
@@ -116,7 +134,6 @@ export const getEffectiveStockAlert = (med: {
  * effective low-stock threshold.
  */
 export const isLowStock = (med: {
-  product_type?: string | null;
   stock_alert?: number | null;
   strip_per_pack?: number | null;
   pcs_per_strip?: number | null;
