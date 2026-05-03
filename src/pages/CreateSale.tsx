@@ -540,7 +540,7 @@ const CreateSale = () => {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {med.company_name && <span className="text-[10px] text-secondary-foreground truncate max-w-[100px]">{med.company_name}</span>}
                     {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med.product_type || med.unit_format) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {isSingleUnit(med) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
                   </div>
                 </div>
                 <p className="text-lime-900 text-sm font-bold">৳{formatMoney(med.price ?? 0)}</p>
@@ -655,7 +655,7 @@ const CreateSale = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine.product_type || item.medicine.unit_format) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {isSingleUnit(item.medicine) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
                       </div>
 
                       {/* Wholesale: item discount input */}
