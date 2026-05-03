@@ -1,4 +1,4 @@
-import { Package, ShoppingCart, Wallet, AlertCircle } from "lucide-react";
+import { AlertCircle, FileText, Megaphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/relativeTime";
@@ -12,10 +12,9 @@ interface Props {
 }
 
 const ICON_MAP: Record<NotificationCategory, { Icon: any; bg: string; fg: string }> = {
-  inventory: { Icon: Package, bg: "bg-amber-100", fg: "text-amber-600" },
-  sale: { Icon: ShoppingCart, bg: "bg-green-100", fg: "text-green-600" },
-  payment: { Icon: Wallet, bg: "bg-emerald-100", fg: "text-emerald-600" },
   due: { Icon: AlertCircle, bg: "bg-orange-100", fg: "text-orange-600" },
+  note: { Icon: FileText, bg: "bg-blue-100", fg: "text-blue-600" },
+  broadcast: { Icon: Megaphone, bg: "bg-purple-100", fg: "text-purple-600" },
 };
 
 const NotificationItem = ({ notification, unread, onRead, onClose }: Props) => {

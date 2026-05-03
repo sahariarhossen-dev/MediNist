@@ -1,62 +1,62 @@
-## Goal
+# Notification System Overhaul
 
-Stop deciding "show strips/box fields" and "tri-unit vs single-unit" from the `product_type` string (`Tablet`/`Capsule` → tri-unit, everything else → single-unit). Instead, drive that purely from each medicine's actual packaging data (`pcs_per_strip`, `strip_per_pack`) — the same shape the master JSON catalog already uses. A Syrup with `strip_per_pack=5` shows the box field; a Tablet sold as a single piece shows only Qty.
+## 1. Scroll/Freeze Fix (`NotificationPanel.tsx`)
 
-Note: there is no `src/components/ProductForm.tsx` in this repo — the equivalent screen is `src/pages/AddProduct.tsx` (Add + Edit). That is what gets refactored.
+The current `ScrollArea` uses `max-h-[60vh]` but is wrapped inside a Radix Popover which can intercept wheel/touch events on certain mobile browsers, causing the "frozen" feel. Fix:
 
-## Pack-mode rules (single source of truth)
+- Replace `ScrollArea` with a plain `div` using `max-h-[70vh] overflow-y-auto overscroll-contain` so native scrolling works reliably on mobile.
+- Add `onWheel`/`onTouchMove` `stopPropagation` on the scroll container to prevent Popover from swallowing gestures.
+- Make the panel width responsive: `w-[min(360px,calc(100vw-24px))]` (already close, just confirm).
 
-New helper in `src/lib/stockUtils.ts`:
+## 2. Restrict Notification Sources (`useNotifications.ts`)
 
-```ts
-type PackMode = "single" | "strip" | "box" | "full";
+Remove all current sources (low-stock, completed sales, payments-received, generic ledger). Replace with **only** these three:
 
-getPackMode({ pcs_per_strip, strip_per_pack }) // pure function
-```
+### A. New Customer Due
+- Query `customer_ledger` where `entry_type = 'due'` AND `sale_id IS NOT NULL` (i.e., due created by completing a sale with outstanding amount). Also include manual dues if desired — spec says "transaction completed where Due Amount is recorded", so filter to `sale_id IS NOT NULL`.
+- Join customer name.
+- Title: `New Due Recorded`
+- Message: `{customerName} - ৳{amount} TK`
+- Link: `/more/customers/{customer_id}`
+- id: `due:{ledger.id}`
 
-| pcs_per_strip | strip_per_pack | mode   | UI shown                | Stock unit
-|---------------|----------------|--------|-------------------------|-----------
-| ≤1 / null     | ≤1 / null      | single | none (Qty only)         | Pcs
-| >1            | ≤1 / null      | strip  | "Pcs per Strip"         | Strip-based
-| ≤1 / null     | >1             | box    | "Strips per Box"        | Box-based
-| >1            | >1             | full   | both fields             | Full tri-unit
+### B. Public Note Shared
+- Query `notes` where `is_public = true`, ordered by `updated_at desc`.
+- Join creator full_name from `get_pharmacy_member_names` rpc.
+- Title: `Note Shared`
+- Message: `{userName} published a new note: {title || "Untitled"}`
+- Link: `/notes` (or `/notes/{id}` if route exists — check and fall back).
+- id: `note:{note.id}`
+- Category: reuse `payment` icon slot or add new `note` category.
 
-`isSingleUnit(med)` becomes `getPackMode(med) === "single"` — accepts the medicine record, not the product_type string.
+### C. Internal Broadcast
+- Query `pharmacy_broadcasts` where `is_active = true`, recent.
+- Title: `Shop Broadcast`
+- Message: broadcast.message (truncated in UI via existing line-clamp).
+- Link: `/` (home, where BroadcastBanner shows) or none.
+- id: `bcast:{id}`
 
-`totalPiecesToTriUnit*` already works generically; no math change needed (it falls back to 1 when either factor is null, which naturally degrades to single-unit display). We just stop gating it by `isTriUnitCategory(product_type)`.
+Add a new `NotificationCategory` value `note` and `broadcast` in `NotificationItem.tsx` ICON_MAP (e.g., `FileText` for note, `Megaphone` for broadcast). Keep existing `due` icon for dues.
 
-## Changes
+## 3. Realtime Sync
 
-### 1. `src/lib/stockUtils.ts`
-- Add `PackMode` + `getPackMode(med)`.
-- Replace `isSingleUnit(productType)` signature with `isSingleUnit(med: { pcs_per_strip?, strip_per_pack? })`. Keep a thin overload accepting just numbers for the few call sites that already destructure.
-- Update `getEffectiveStockAlert`: smart default = "1 box" whenever `pcs_per_strip * strip_per_pack > 0`, else `2`. Drop the `Tablet/Capsule` branch.
+Update the Supabase realtime channel subscription in `useNotifications.ts`:
+- Subscribe to INSERT on `customer_ledger` filtered by `pharmacy_id` (already there) — keep.
+- Subscribe to INSERT/UPDATE on `notes` filtered by `pharmacy_id` — new.
+- Subscribe to INSERT/UPDATE on `pharmacy_broadcasts` filtered by `pharmacy_id` — new.
+- Remove `sales` and `medicines` subscriptions.
 
-### 2. `src/pages/AddProduct.tsx` (Add + Edit Product)
-- Remove `isTabletOrCapsule = isTriUnitCategory(productType)`.
-- Compute `packMode` from current form state (`pcsPerStrip`, `stripPerBox`).
-- Always render the Strip & Pack Details section, but:
-  - show "Pcs per Strip" input when user wants strip data (always available)
-  - show "Strips per Box" input (always available)
-  - show the "Total Box Size = a × b = N pcs" hint only when both > 1
-- Save logic: persist `pcs_per_strip` / `strip_per_pack` whenever the user entered values >1, regardless of product_type. Drop the `isTabletOrCapsule &&` guard on the payload.
-- Edit mode: already hydrates from DB row → fields just appear when row has data. No product_type coupling needed.
+Each event refetches via `fetchAll()`. Read-state uses existing localStorage `markAsRead` flow — no DB changes needed.
 
-### 3. `src/pages/Inventory.tsx`
-- Replace every `isSingleUnit(med.product_type)` call with `isSingleUnit(med)`.
-- Box-vs-Qty label and the add-stock math switch on `getPackMode(med)` instead of category.
-- `TriUnitDisplay` keeps rendering; when mode is `single` show plain Pcs.
+## 4. Click Behavior
+Already handled in `NotificationItem.tsx`: clicking calls `onRead(id)` (marks read in localStorage) then navigates via `notification.link`. Confirm `/more/customers/{id}` route works (it does, line 89 of App.tsx).
 
-### 4. `src/pages/ShortItems.tsx` & `src/pages/CreateSale.tsx`
-- Same swap: `isSingleUnit(med)` instead of `isSingleUnit(med.product_type | unit_format)`.
-- All select queries already pull `pcs_per_strip, strip_per_pack`, so no schema work.
+## Files to Edit
+- `src/hooks/useNotifications.ts` — replace fetch logic and realtime subscriptions
+- `src/components/notifications/NotificationPanel.tsx` — fix scroll container
+- `src/components/notifications/NotificationItem.tsx` — add `note` and `broadcast` categories to icon map
+- Type update: `NotificationCategory = "due" | "note" | "broadcast"`
 
-### 5. `src/pages/CatalogSearch.tsx`
-- When importing a master_medicines row, pass through `pcs_per_strip` / `strip_per_pack` directly from the JSON. Don't synthesize them from `product_type`. (Already mostly the case — verify the import path.)
-
-### 6. Keep `productType.ts` for what it actually does
-`isTriUnitCategory`, `getFunctionalBucket` etc. remain for **strength input label** ("mg" vs "ml" vs "puffs") and chip colors — those genuinely depend on form factor. They are no longer used to decide pack visibility or stock math.
-
-## Out of scope
-- DB schema changes — `medicines.pcs_per_strip` / `strip_per_pack` already exist and are nullable.
-- Backfilling existing rows. Old Tablet rows with NULL pack fields will simply render as single-unit until edited; that matches the new rule and is the user's intent.
+## Out of Scope
+- No DB migrations needed (all tables and RLS already exist).
+- No edge function changes.
