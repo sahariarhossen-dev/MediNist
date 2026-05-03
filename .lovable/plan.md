@@ -1,66 +1,62 @@
+## Goal
 
-# Brand MediNist auth emails (incl. Reset Password)
+Stop deciding "show strips/box fields" and "tri-unit vs single-unit" from the `product_type` string (`Tablet`/`Capsule` → tri-unit, everything else → single-unit). Instead, drive that purely from each medicine's actual packaging data (`pcs_per_strip`, `strip_per_pack`) — the same shape the master JSON catalog already uses. A Syrup with `strip_per_pack=5` shows the box field; a Tablet sold as a single piece shows only Qty.
 
-## Approach
+Note: there is no `src/components/ProductForm.tsx` in this repo — the equivalent screen is `src/pages/AddProduct.tsx` (Add + Edit). That is what gets refactored.
 
-Instead of pasting raw HTML into the Supabase dashboard (which doesn't apply cleanly in Lovable Cloud), we'll scaffold Lovable's managed React Email templates, brand them for MediNist, and deploy. The **Reset Password** template is one of six that get scaffolded — we'll style all of them consistently so your auth emails look unified.
+## Pack-mode rules (single source of truth)
 
-## Prerequisite: Email domain
+New helper in `src/lib/stockUtils.ts`:
 
-Lovable's email system requires a verified sender subdomain (e.g. `notify.medinist.app`). The project currently has none configured. You'll be shown a setup dialog to add one — DNS verification can finish in the background; we don't need to wait to scaffold/style.
+```ts
+type PackMode = "single" | "strip" | "box" | "full";
 
-## Brand spec (extracted from project)
-
-- **Primary blue**: `#2463eb` (from `LogoFull.tsx`)
-- **App name**: MediNist
-- **Body bg**: `#ffffff` (required)
-- **Button radius**: `8px` (from `--radius: 0.5rem`)
-- **Heading color**: `#0a1729` (foreground)
-- **Body text**: `#55687a` (muted-foreground)
-- **Font**: System sans (`-apple-system, Segoe UI, Roboto, Arial, sans-serif`)
-- **Footer**: `© 2026 MediNist` + "If you didn't request this, please ignore this email."
-
-## Steps
-
-1. **Add email domain** — open the email setup dialog, enter your sending subdomain, complete DNS info.
-2. **Scaffold templates** — creates `auth-email-hook` Edge Function + 6 React Email templates (signup, magic-link, **recovery**, invite, email-change, reauthentication) in `supabase/functions/_shared/email-templates/`.
-3. **Brand the templates** — apply MediNist palette/typography, mobile-responsive layout, MediNist wordmark header (text logo, matches app), CTA button using `{{ .ConfirmationURL }}` equivalent, and the requested footer copy.
-4. **Deploy** the `auth-email-hook` edge function.
-5. **Confirm** — once DNS verifies (tracked in Cloud → Emails), Supabase routes auth emails through your branded templates automatically.
-
-## Recovery (Reset Password) template — content blueprint
-
-```text
-Header:    [MediNist wordmark, blue]
-Heading:   Reset your password
-Body:      Hi there, we received a request to reset the password
-           for your MediNist account. Click the button below to
-           choose a new one. This link expires in 1 hour.
-CTA:       [ Reset Password ]   → ConfirmationURL
-Fallback:  Or copy this link: <url>
-Footer:    If you didn't request this, please ignore this email.
-           © 2026 MediNist
+getPackMode({ pcs_per_strip, strip_per_pack }) // pure function
 ```
 
-## Files that will be created/edited
+| pcs_per_strip | strip_per_pack | mode   | UI shown                | Stock unit
+|---------------|----------------|--------|-------------------------|-----------
+| ≤1 / null     | ≤1 / null      | single | none (Qty only)         | Pcs
+| >1            | ≤1 / null      | strip  | "Pcs per Strip"         | Strip-based
+| ≤1 / null     | >1             | box    | "Strips per Box"        | Box-based
+| >1            | >1             | full   | both fields             | Full tri-unit
 
-- `supabase/functions/auth-email-hook/index.ts` (new)
-- `supabase/functions/auth-email-hook/deno.json` (new)
-- `supabase/functions/_shared/email-templates/recovery.tsx` (new, branded)
-- `supabase/functions/_shared/email-templates/signup.tsx` (new, branded)
-- `supabase/functions/_shared/email-templates/magic-link.tsx` (new, branded)
-- `supabase/functions/_shared/email-templates/invite.tsx` (new, branded)
-- `supabase/functions/_shared/email-templates/email-change.tsx` (new, branded)
-- `supabase/functions/_shared/email-templates/reauthentication.tsx` (new, branded)
-- `supabase/config.toml` (updated)
+`isSingleUnit(med)` becomes `getPackMode(med) === "single"` — accepts the medicine record, not the product_type string.
 
-## What you'll see after approval
+`totalPiecesToTriUnit*` already works generically; no math change needed (it falls back to 1 when either factor is null, which naturally degrades to single-unit display). We just stop gating it by `isTriUnitCategory(product_type)`.
 
-- Email setup dialog (one-time, to add your sending subdomain)
-- Branded templates committed to your repo
-- Edge function deployed
-- Link to preview the Reset Password email in Cloud → Emails
+## Changes
 
-## If you truly want raw dashboard HTML instead
+### 1. `src/lib/stockUtils.ts`
+- Add `PackMode` + `getPackMode(med)`.
+- Replace `isSingleUnit(productType)` signature with `isSingleUnit(med: { pcs_per_strip?, strip_per_pack? })`. Keep a thin overload accepting just numbers for the few call sites that already destructure.
+- Update `getEffectiveStockAlert`: smart default = "1 box" whenever `pcs_per_strip * strip_per_pack > 0`, else `2`. Drop the `Tablet/Capsule` branch.
 
-If you'd rather paste HTML directly into Supabase's auth template editor (bypassing Lovable's pipeline — works but isn't recommended for this project), say so and I'll generate the standalone HTML file instead. Note: it won't use a custom sender domain, will be overridden if Lovable Emails is later enabled, and won't be version-controlled with your code.
+### 2. `src/pages/AddProduct.tsx` (Add + Edit Product)
+- Remove `isTabletOrCapsule = isTriUnitCategory(productType)`.
+- Compute `packMode` from current form state (`pcsPerStrip`, `stripPerBox`).
+- Always render the Strip & Pack Details section, but:
+  - show "Pcs per Strip" input when user wants strip data (always available)
+  - show "Strips per Box" input (always available)
+  - show the "Total Box Size = a × b = N pcs" hint only when both > 1
+- Save logic: persist `pcs_per_strip` / `strip_per_pack` whenever the user entered values >1, regardless of product_type. Drop the `isTabletOrCapsule &&` guard on the payload.
+- Edit mode: already hydrates from DB row → fields just appear when row has data. No product_type coupling needed.
+
+### 3. `src/pages/Inventory.tsx`
+- Replace every `isSingleUnit(med.product_type)` call with `isSingleUnit(med)`.
+- Box-vs-Qty label and the add-stock math switch on `getPackMode(med)` instead of category.
+- `TriUnitDisplay` keeps rendering; when mode is `single` show plain Pcs.
+
+### 4. `src/pages/ShortItems.tsx` & `src/pages/CreateSale.tsx`
+- Same swap: `isSingleUnit(med)` instead of `isSingleUnit(med.product_type | unit_format)`.
+- All select queries already pull `pcs_per_strip, strip_per_pack`, so no schema work.
+
+### 5. `src/pages/CatalogSearch.tsx`
+- When importing a master_medicines row, pass through `pcs_per_strip` / `strip_per_pack` directly from the JSON. Don't synthesize them from `product_type`. (Already mostly the case — verify the import path.)
+
+### 6. Keep `productType.ts` for what it actually does
+`isTriUnitCategory`, `getFunctionalBucket` etc. remain for **strength input label** ("mg" vs "ml" vs "puffs") and chip colors — those genuinely depend on form factor. They are no longer used to decide pack visibility or stock math.
+
+## Out of scope
+- DB schema changes — `medicines.pcs_per_strip` / `strip_per_pack` already exist and are nullable.
+- Backfilling existing rows. Old Tablet rows with NULL pack fields will simply render as single-unit until edited; that matches the new rule and is the user's intent.
