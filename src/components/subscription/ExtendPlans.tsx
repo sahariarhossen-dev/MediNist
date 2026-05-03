@@ -1,9 +1,15 @@
 import { Button } from "@/components/ui/button";
-import { Zap, Check } from "lucide-react";
+import { Zap, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extendPlans, formatBDT, type ExtendPlan } from "@/lib/subscriptionMock";
 
-export default function ExtendPlans({ onPay }: { onPay: (plan: ExtendPlan) => void }) {
+export default function ExtendPlans({
+  onPay,
+  loadingId,
+}: {
+  onPay: (plan: ExtendPlan) => void;
+  loadingId?: string | null;
+}) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
@@ -38,12 +44,21 @@ export default function ExtendPlans({ onPay }: { onPay: (plan: ExtendPlan) => vo
             </ul>
             <Button
               onClick={() => onPay(p)}
+              disabled={!!loadingId}
               className={cn(
                 "mt-4 w-full",
-                p.popular ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-900 hover:bg-gray-800",
+                p.popular
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-gray-900 hover:bg-gray-800",
               )}
             >
-              Pay Now
+              {loadingId === p.id ? (
+                <>
+                  <Loader2 className="animate-spin" /> Processing…
+                </>
+              ) : (
+                "Pay Now"
+              )}
             </Button>
           </div>
         ))}
