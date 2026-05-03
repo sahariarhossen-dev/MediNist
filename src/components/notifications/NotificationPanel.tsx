@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Bell } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import NotificationItem from "./NotificationItem";
 import type { AppNotification } from "@/hooks/useNotifications";
 
@@ -42,7 +41,11 @@ const NotificationPanel = ({
       );
     }
     return (
-      <ScrollArea className="max-h-[60vh]">
+      <div
+        className="max-h-[65vh] overflow-y-auto overscroll-contain"
+        onWheel={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+      >
         <div className="divide-y divide-gray-100">
           {items.map((n) => (
             <NotificationItem
@@ -54,7 +57,7 @@ const NotificationPanel = ({
             />
           ))}
         </div>
-      </ScrollArea>
+      </div>
     );
   };
 
