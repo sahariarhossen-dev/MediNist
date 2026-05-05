@@ -36,6 +36,7 @@ import Messages from "./pages/Messages.tsx";
 import ChatRoom from "./pages/ChatRoom.tsx";
 import Subscription from "./pages/Subscription.tsx";
 import SubscriptionCheckout from "./pages/SubscriptionCheckout.tsx";
+import SubscriptionPaymentReturn from "./pages/SubscriptionPaymentReturn.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,7 @@ const App = () => (
             <Route path="/messages/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute><AppLayout><Subscription /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription/checkout" element={<ProtectedRoute><AppLayout><SubscriptionCheckout /></AppLayout></ProtectedRoute>} />
+            <Route path="/subscription/payment-return" element={<ProtectedRoute><AppLayout><SubscriptionPaymentReturn /></AppLayout></ProtectedRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
