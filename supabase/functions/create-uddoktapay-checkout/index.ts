@@ -39,8 +39,10 @@ Deno.serve(async (req) => {
     const amount = Number(body?.amount ?? 2000);
     const appUrl: string = body?.app_url ?? req.headers.get("origin") ?? "";
 
-    const base = (Deno.env.get("UDDOKTAPAY_BASE_URL") ?? "https://panel.uddoktapay.com")
-      .replace(/\/$/, "")
+    const rawBase = Deno.env.get("UDDOKTAPAY_BASE_URL") ?? "https://panel.uddoktapay.com";
+    const match = rawBase.match(/https?:\/\/[^\s\])]+/);
+    const base = (match ? match[0] : "https://panel.uddoktapay.com")
+      .replace(/\/+$/, "")
       .replace(/\/api$/, "");
     const apiKey = Deno.env.get("UDDOKTAPAY_API_KEY")!;
     const projectRef = (Deno.env.get("SUPABASE_URL") ?? "").match(/https:\/\/([^.]+)/)?.[1];
