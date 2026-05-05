@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     const amount = Number(body?.amount ?? 2000);
     const appUrl: string = body?.app_url ?? req.headers.get("origin") ?? "";
 
-    const base = (Deno.env.get("UDDOKTAPAY_BASE_URL") ?? "https://sandbox.uddoktapay.com").replace(/\/$/, "");
+    const base = (Deno.env.get("UDDOKTAPAY_BASE_URL") ?? "https://panel.uddoktapay.com").replace(/\/$/, "");
     const apiKey = Deno.env.get("UDDOKTAPAY_API_KEY")!;
     const projectRef = (Deno.env.get("SUPABASE_URL") ?? "").match(/https:\/\/([^.]+)/)?.[1];
     const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/uddoktapay-webhook`;
@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
       email,
       amount: String(amount),
       metadata: {
+        order_id: `sub_${Date.now()}`,
         user_id: userId,
         pharmacy_id: profile.pharmacy_id,
         days: String(days),
@@ -64,6 +65,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "RT-UDDOKTAPAY-API-KEY": apiKey,
+        "Api-Key": apiKey,
         "accept": "application/json",
         "content-type": "application/json",
       },
@@ -71,7 +73,7 @@ Deno.serve(async (req) => {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || !data?.payment_url) {
-      console.error("UddoktaPay create failed", resp.status, data);
+      console.error("UddoktaPay create failed", { status: resp.status, base, data });
       return json({ error: data?.message ?? "Failed to create checkout", details: data }, 502);
     }
 
