@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,10 +24,10 @@ export default function SubscriptionCheckout() {
       });
       if (error) throw error;
       const url = (data as any)?.payment_url;
-      if (!url) throw new Error((data as any)?.error ?? "Could not start checkout.");
+      if (!url) throw new Error((data as any)?.error ?? "no_url");
       window.location.href = url;
     } catch (e: any) {
-      toast.error("Could not start payment", { description: e?.message ?? "Please try again." });
+      toast.error("Could not connect to payment gateway. Please try again.");
       setProcessing(false);
     }
   };
@@ -75,6 +75,22 @@ export default function SubscriptionCheckout() {
             <span className="font-medium">Card</span>.
           </p>
         </section>
+
+        <Button
+          onClick={handlePay}
+          disabled={processing}
+          className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-base shadow-lg"
+        >
+          {processing ? (
+            <>
+              <Loader2 className="animate-spin !size-5" /> Connecting to gateway…
+            </>
+          ) : (
+            <>
+              <Lock className="!size-5" /> Confirm & Pay ৳{PLAN_PRICE.toLocaleString("en-IN")}
+            </>
+          )}
+        </Button>
 
         <div className="flex items-center gap-2 text-xs text-gray-500 px-1">
           <ShieldCheck size={14} className="text-emerald-600" />
