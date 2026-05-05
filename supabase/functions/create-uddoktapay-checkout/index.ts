@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
       return_type: "GET",
     };
 
-    const resp = await fetch(`${base}/api/checkout-v2`, {
+    const url = `${base}/api/checkout-v2`;
+    const resp = await fetch(url, {
       method: "POST",
       headers: {
         "RT-UDDOKTAPAY-API-KEY": apiKey,
@@ -74,10 +75,17 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify(payload),
     });
-    const data = await resp.json().catch(() => ({}));
+    const text = await resp.text();
+    let data: any = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!resp.ok || !data?.payment_url) {
-      console.error("UddoktaPay create failed", { status: resp.status, base, data });
-      return json({ error: data?.message ?? "Failed to create checkout", details: data }, 502);
+      console.error("UddoktaPay create failed", { status: resp.status, url, body: text?.slice(0, 500) });
+      return json({
+        error: data?.message ?? "Failed to create checkout",
+        hint: "Check that UDDOKTAPAY_BASE_URL points to your real gateway host (e.g. https://panel.uddoktapay.com) and that UDDOKTAPAY_API_KEY is valid.",
+        upstream_status: resp.status,
+        upstream_body: text?.slice(0, 500),
+      }, 502);
     }
 
     return json({ payment_url: data.payment_url, invoice_id: data.invoice_id ?? null });
