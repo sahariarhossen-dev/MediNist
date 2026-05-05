@@ -1,45 +1,37 @@
-## Plan: Switch checkout to live UddoktaPay panel + relabel pay button
+## Plan
 
-The checkout already has a working pay button wired to the `create-uddoktapay-checkout` edge function. The request is to (a) make sure the call hits the **live** UddoktaPay panel URL with the exact header and payload format you specified, (b) make the button visually prominent with the new label, and (c) keep the existing error toast contract.
+The current `UDDOKTAPAY_BASE_URL` secret is set to `https://panel.paymently.io`, which returns an "Access Denied - Paymently" HTML page (upstream status 200 with HTML body) — meaning that host is not your merchant gateway.
 
-### 1. Edge function `create-uddoktapay-checkout` updates
+You've asked to switch it to `https://medinist.paymently.io` and retest using the existing API key.
 
-- Default `UDDOKTAPAY_BASE_URL` to `https://panel.uddoktapay.com` (was sandbox). Still overridable via secret.
-- Send the API key under the header **`Api-Key`** (per your spec) in addition to `RT-UDDOKTAPAY-API-KEY` so it works whether your account expects either name.
-- Build the request body exactly as:
-  ```json
-  {
-    "full_name": "<profile.full_name>",
-    "email": "<auth user email>",
-    "amount": "2000",
-    "metadata": {
-      "order_id": "sub_<timestamp>",
-      "user_id": "<uid>",
-      "pharmacy_id": "<pid>",
-      "days": "30"
-    },
-    "redirect_url": "<app_url>/subscription/payment-return",
-    "cancel_url": "<app_url>/subscription?cancelled=1",
-    "webhook_url": "<functions>/uddoktapay-webhook",
-    "return_type": "GET"
-  }
-  ```
-- Keep `pharmacy_id` and `days` in metadata so the verify/webhook flow can still extend the subscription by exactly 30 days (don't break existing logic).
-- Log the upstream response on failure for easier debugging.
+### Steps
 
-### 2. `SubscriptionCheckout.tsx` UI tweaks
+1. **Update the `UDDOKTAPAY_BASE_URL` secret**
+   - Set value to: `https://medinist.paymently.io` (no trailing slash, no `/api`).
+   - The edge function already strips `/api` and trailing slashes defensively, but we want the secret clean.
 
-- Add a **non-sticky, in-flow** "Confirm & Pay ৳2,000" button right below the PAYMENT info card (in addition to keeping the sticky bottom CTA so the layout still feels like the screenshot on small screens). Both buttons call the same `handlePay`.
-- Button styling: full width, `h-14`, emerald primary, rounded-2xl, bold, with a lock/shield icon.
-- On error from `supabase.functions.invoke(...)`, show toast: **"Could not connect to payment gateway. Please try again."** (replaces current generic message).
-- On success, `window.location.href = payment_url` (already implemented).
+2. **Confirm `UDDOKTAPAY_API_KEY` secret**
+   - Keep the existing value `SKJDSE48iWwNgW2togoKtWvAQ5Hnivxphy3Vb6m7` (already stored). No change needed unless you want to rotate.
+   - Note: since this key has been shared in chat, you should rotate it in the Paymently/UddoktaPay dashboard afterwards for security.
 
-### 3. No DB changes
-Schema and verify/webhook flow stay as-is — the 30-day extension on success already works via `uddoktapay-verify` + `_shared/uddoktapay.ts`.
+3. **Test the edge function**
+   - After the secret is updated, call `create-uddoktapay-checkout` via `supabase--curl_edge_functions` with a small payload (`days: 30`, `amount: 2000`, `app_url`) to verify it now returns a real `payment_url` instead of the 502 + HTML access-denied response.
+   - Inspect logs if it still fails and surface the upstream body so we can diagnose (e.g., wrong subdomain, IP allowlist, or wrong API key header name).
 
-### Files to edit
-- `supabase/functions/create-uddoktapay-checkout/index.ts`
-- `src/pages/SubscriptionCheckout.tsx`
+4. **No code changes required**
+   - `supabase/functions/create-uddoktapay-checkout/index.ts` already:
+     - sends both `RT-UDDOKTAPAY-API-KEY` and `Api-Key` headers,
+     - normalizes the base URL,
+     - posts to `/api/checkout-v2`,
+     - surfaces upstream status/body on failure.
+   - `src/pages/SubscriptionCheckout.tsx` already invokes the function and redirects on success.
 
-### Note on the API key
-The key `SKJDSE48iWwNgW2togoKtWvAQ5Hnivxphy3Vb6m7` is already stored as the `UDDOKTAPAY_API_KEY` secret — we will keep using the secret rather than hardcoding it in the frontend (hardcoding a private key in client code would let anyone drain your gateway). Since you've now shared it in chat, please rotate it in the UddoktaPay dashboard and we'll update the secret.
+### If the test still fails
+
+Likely causes and what we'll do:
+- **Wrong subdomain** — confirm in your Paymently/UddoktaPay merchant dashboard the exact "API Base URL". Update secret accordingly.
+- **API key invalid/expired** — rotate in dashboard, update `UDDOKTAPAY_API_KEY` secret.
+- **Different header name expected** — adjust headers in the edge function based on the upstream error body (which we'll log).
+
+### Security note
+Please rotate the API key in your Paymently dashboard since it was shared in plain text — then I'll update the `UDDOKTAPAY_API_KEY` secret with the new value.
