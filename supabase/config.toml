@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.accept-invitation]
 verify_jwt = false
+
+[functions.uddoktapay-verify]
+verify_jwt = false
+
+[functions.uddoktapay-webhook]
+verify_jwt = false
