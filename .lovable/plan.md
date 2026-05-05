@@ -1,93 +1,44 @@
-# Subscription Page Upgrade
+## Plan: Simplified Subscription Renewal with Confirmation Modal & Checkout
 
-Restore an extend/renew action below the status card, wire it to Supabase so subscription expiry truly persists and stacks, and refresh the UI in real time with celebratory feedback.
+Replace the current multi-plan ExtendPlans flow with a single-plan renewal flow: Renew Now button → confirmation modal → checkout page with payment gateways → on success, +30 days added via existing `extend_subscription` RPC.
 
-## Layout (top → bottom)
-1. Header (Title)
-2. `StatusCard` (active badge + DD:HH:MM:SS countdown, dynamic green/amber/rose theme — already implemented)
-3. **NEW:** Full-width primary "Renew Now" button (emerald theme, `Zap` + `CreditCard` icons)
-4. `ExtendPlans` grid (1 / 3 / 6 month tiers) — collapsible, opens when "Renew Now" is tapped
-5. `PaymentHistory` table
+### 1. Update `Subscription.tsx` (page)
+- Remove `ExtendPlans` and `showPlans` toggle.
+- `RenewButton` (already emerald, full-width, lightning-bolt) directly opens a confirmation `Dialog`.
+- Modal shows:
+  - Title: "Renew Subscription"
+  - Body: "Plan Price: 2000 BDT | Validity: 1 Month (30 Days)"
+  - Primary button: "Proceed to Checkout" → `navigate('/subscription/checkout')`
+- StatusCard and PaymentHistory remain.
 
-## Database changes (migration)
-Add subscription tracking to the existing `pharmacies` table (we don't have a `shops` table — `pharmacies` is the equivalent):
+### 2. New page `src/pages/SubscriptionCheckout.tsx`
+- Header with back button, title "Checkout".
+- Order summary card: Pharmacy Pro, 30 days, ৳2000.
+- Payment gateway selection list (radio cards) with mock options:
+  - bKash, Nagad, Rocket, Card (Visa/Master)
+  - Each shown with brand-tinted icon/badge.
+- "Pay ৳2000" button (emerald). On click:
+  - Show loading state (mock 1.5s gateway processing).
+  - Call `supabase.rpc('extend_subscription', { _days: 30, _amount: 2000 })`.
+  - Fire confetti + toast "Subscription Extended Successfully!".
+  - Navigate back to `/subscription` (timer reflects new expiry instantly via existing realtime hook).
 
-```sql
-alter table public.pharmacies
-  add column if not exists subscription_expiry timestamptz,
-  add column if not exists subscription_plan text default 'Pharmacy Pro',
-  add column if not exists subscription_started_at timestamptz default now();
+### 3. Route
+Add `/subscription/checkout` in `src/App.tsx` (protected, inside `AppLayout`).
 
-create table if not exists public.subscription_payments (
-  id uuid primary key default gen_random_uuid(),
-  pharmacy_id uuid not null,
-  user_id uuid not null,
-  amount_bdt numeric not null,
-  duration_days int not null,
-  status text not null default 'success',
-  created_at timestamptz not null default now()
-);
-alter table public.subscription_payments enable row level security;
+### 4. StatusCard tweak
+Already matches spec (mint card, Active badge, 4 timer boxes, progress bar, "Renews on…" + "% remaining"). No changes needed beyond verifying current emerald tone renders as mint — keep as-is.
 
-create policy "Members view pharmacy subscription payments"
-  on public.subscription_payments for select to authenticated
-  using (pharmacy_id = public.get_user_pharmacy_id());
+### 5. PaymentHistory
+Already shows date, +days, ৳ amount, status pill. Keep as-is.
 
-create policy "Admins insert subscription payments"
-  on public.subscription_payments for insert to authenticated
-  with check (pharmacy_id = public.get_user_pharmacy_id()
-              and user_id = auth.uid()
-              and public.is_pharmacy_admin());
-```
+### 6. Files
+- Edit: `src/pages/Subscription.tsx`, `src/App.tsx`
+- Create: `src/pages/SubscriptionCheckout.tsx`
+- Optionally remove: `src/components/subscription/ExtendPlans.tsx`, `RenewButton.tsx` props (`open`) simplified
 
-Plus a SECURITY DEFINER RPC `extend_subscription(_days int, _amount numeric)` that:
-- Verifies the caller is admin of their pharmacy
-- Reads current `subscription_expiry`
-- Computes `base = greatest(current_expiry, now())` then `new_expiry = base + _days`
-- Updates `pharmacies.subscription_expiry`
-- Inserts a row into `subscription_payments`
-- Returns the new expiry
+### Database
+No schema changes — existing `extend_subscription(_days, _amount)` RPC handles +30 day stacking and inserts into `subscription_payments`. Realtime subscription in `useSubscription` already pushes the update to the timer instantly.
 
-This guarantees stacking happens server-side (cannot be bypassed by a manipulated client).
-
-## Frontend changes
-
-**New hook `useSubscription`**
-- Fetches current pharmacy's `subscription_expiry`, `subscription_plan`, `subscription_started_at` via `get_my_pharmacy_public` (extended) or a direct select
-- Fetches `subscription_payments` history
-- Subscribes to Supabase Realtime channels on both `pharmacies` (filtered to current id) and `subscription_payments` so the countdown jumps instantly after a renewal from any device
-- Exposes `{ sub, payments, loading, refetch }`
-
-**New component `RenewButton`**
-- Emerald gradient, `Zap` icon, full width, large
-- Toggles visibility of `<ExtendPlans />` (already exists, restored)
-
-**Restored `ExtendPlans`**
-- Already in the codebase — re-import in `Subscription.tsx`
-- Each plan's "Pay Now" calls `handleSubscriptionPayment(plan)`
-
-**`handleSubscriptionPayment(plan)` in `Subscription.tsx`**
-- Sets per-plan `loading` state on the button
-- Calls `supabase.rpc('extend_subscription', { _days: plan.days, _amount: plan.price_bdt })`
-- On success:
-  - Toast (sonner): "Subscription Extended Successfully!"
-  - Trigger confetti (canvas-confetti) burst from button position
-  - Realtime listener auto-refreshes — no manual refetch needed, but call `refetch()` as a fallback
-- On error: error toast, no DB write
-
-**Countdown tone thresholds** — already correct (`>=7` green, `3-7` amber, `<3` rose).
-
-## Dependencies
-- Add `canvas-confetti` (+ `@types/canvas-confetti`)
-
-## Files
-- `supabase/migrations/<timestamp>_subscription.sql` (new)
-- `src/hooks/useSubscription.ts` (new)
-- `src/components/subscription/RenewButton.tsx` (new)
-- `src/pages/Subscription.tsx` (rewire to live data + confetti + handler)
-- `src/components/subscription/ExtendPlans.tsx` (already exists — re-used as-is, accepts `loadingId` prop for per-card spinner)
-- `src/lib/subscriptionMock.ts` (keep `extendPlans` + formatters; remove unused mocks)
-
-## Notes
-- Only pharmacy admins can renew (matches RLS). Non-admins see the button disabled with a tooltip "Only admins can renew".
-- If `subscription_expiry` is null on first load, the hook seeds it client-side as `now() + 30 days` for display only; first successful payment persists a real value.
+### Notes
+- This is a mock checkout (no real payment integration). If you later want real Bangladeshi payment gateways (bKash/Nagad), that requires a separate edge-function integration with each provider's API.
