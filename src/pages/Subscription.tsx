@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CreditCard, Loader2, ArrowRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import StatusCard from "@/components/subscription/StatusCard";
 import PaymentHistory from "@/components/subscription/PaymentHistory";
 import RenewButton from "@/components/subscription/RenewButton";
@@ -19,6 +20,15 @@ export default function Subscription() {
   const navigate = useNavigate();
   const { sub, payments, loading } = useSubscription();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [params, setParams] = useSearchParams();
+
+  useEffect(() => {
+    if (params.get("cancelled") === "1") {
+      toast.info("Payment cancelled");
+      params.delete("cancelled");
+      setParams(params, { replace: true });
+    }
+  }, [params, setParams]);
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-24">
