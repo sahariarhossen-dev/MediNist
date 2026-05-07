@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { PaymentRecord, SubscriptionInfo } from "@/lib/subscriptionMock";
+import { getStatus, type SubStatus } from "@/lib/subscriptionStatus";
 
 export function useSubscription() {
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
@@ -98,5 +99,6 @@ export function useSubscription() {
     };
   }, [pharmacyId, refetch]);
 
-  return { sub, payments, loading, refetch, pharmacyId };
+  const status: SubStatus = getStatus(sub, payments);
+  return { sub, payments, loading, refetch, pharmacyId, status, isTrial: status === "trial", isExpired: status === "expired" };
 }
