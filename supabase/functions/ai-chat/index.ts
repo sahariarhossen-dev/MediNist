@@ -127,7 +127,7 @@ async function buildPharmacyContext(
         .from("sales")
         .select("id, total, created_at, sale_type, status, pharmacy_id, user_id")
         .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", new Date(Date.now() - 90 * 86400000).toISOString())
+        .gte("created_at", new Date(Date.now() - 120 * 86400000).toISOString())
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
