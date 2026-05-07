@@ -7,6 +7,7 @@ import RenewButton from "@/components/subscription/RenewButton";
 import { useSubscription } from "@/hooks/useSubscription";
 import WelcomeTrialModal from "@/components/subscription/WelcomeTrialModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -26,17 +27,31 @@ export default function Subscription() {
 
   useEffect(() => {
     if (!user || !isTrial) return;
-    const key = `trial_welcome_last_${user.id}`;
-    const today = new Date().toISOString().slice(0, 10);
-    if (localStorage.getItem(key) !== today) setShowWelcome(true);
+    let cancelled = false;
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("profiles")
+        .select("last_trial_popup_date")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if ((data as any)?.last_trial_popup_date !== today) setShowWelcome(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user, isTrial]);
 
-  const dismissWelcome = () => {
+  const dismissWelcome = async () => {
+    setShowWelcome(false);
     if (user) {
       const today = new Date().toISOString().slice(0, 10);
-      localStorage.setItem(`trial_welcome_last_${user.id}`, today);
+      await supabase
+        .from("profiles")
+        .update({ last_trial_popup_date: today } as any)
+        .eq("id", user.id);
     }
-    setShowWelcome(false);
   };
 
   return (
