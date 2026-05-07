@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CreditCard, Loader2, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import StatusCard from "@/components/subscription/StatusCard";
 import PaymentHistory from "@/components/subscription/PaymentHistory";
 import RenewButton from "@/components/subscription/RenewButton";
 import { useSubscription } from "@/hooks/useSubscription";
+import WelcomeTrialModal from "@/components/subscription/WelcomeTrialModal";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -17,8 +19,21 @@ import { Button } from "@/components/ui/button";
 
 export default function Subscription() {
   const navigate = useNavigate();
-  const { sub, payments, loading } = useSubscription();
+  const { sub, payments, loading, isTrial, isExpired } = useSubscription();
+  const { user } = useAuth();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (!user || !isTrial) return;
+    const key = `trial_welcome_seen_${user.id}`;
+    if (!localStorage.getItem(key)) setShowWelcome(true);
+  }, [user, isTrial]);
+
+  const dismissWelcome = () => {
+    if (user) localStorage.setItem(`trial_welcome_seen_${user.id}`, "1");
+    setShowWelcome(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-24">
@@ -43,12 +58,25 @@ export default function Subscription() {
           </div>
         ) : (
           <>
-            <StatusCard sub={sub} />
+            <StatusCard sub={sub} isTrial={isTrial} />
+            {isExpired && (
+              <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 font-medium">
+                Your access is paused — renew to unlock the app.
+              </div>
+            )}
             <RenewButton open={false} onClick={() => setShowConfirm(true)} />
             <PaymentHistory payments={payments} />
           </>
         )}
       </main>
+
+      {sub && (
+        <WelcomeTrialModal
+          open={showWelcome}
+          onClose={dismissWelcome}
+          expiryDate={sub.expiry_date}
+        />
+      )}
 
       <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
         <DialogContent className="max-w-sm rounded-2xl">
