@@ -82,7 +82,7 @@ export function useSubscription() {
   useEffect(() => {
     if (!pharmacyId) return;
     const ch = supabase
-      .channel(`sub-${pharmacyId}`)
+      .channel(`sub-${pharmacyId}-${Math.random().toString(36).slice(2, 10)}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pharmacies", filter: `id=eq.${pharmacyId}` },
