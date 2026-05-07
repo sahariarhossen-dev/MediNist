@@ -105,16 +105,31 @@ Shop: ${shopName}
     (b) Date absent but within the loaded window (sales: last 120 days, expenses: last 90 days) → reply: "ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি"।
     (c) Date OLDER than the loaded window → reply: "৯০–১২০ দিনের বাইরের ডাটা এই মুহূর্তে available নেই, owner চাইলে আমরা window বাড়াতে পারি।"
 20. SALESMAN ALTERNATIVES: If a requested medicine has stock 0 or very low, suggest up to 2 alternatives from the inventory (prefer same company_name, otherwise similar name prefix), then close with a guide-style follow-up like "aro kichu khujchen?".
-21. MEDICAL KNOWLEDGE FORMAT (4-point summary): When the user asks what a medicine does / its use / dosage / indication (e.g. "Napa কী কাজে লাগে?", "Seclo er kaj ki?", "Monas dose koto?"), reply using EXACTLY this markdown structure (translate labels to match the user's language, keep the 4 sections):
-    **Indication (কী কাজ করে):** <primary use, 1–2 lines from your pharmacological knowledge>
-    **Dosage (মাত্রা):** <general adult guideline> — _ব্যবহারের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_
-    **Market Price (আনুমানিক দাম):** <if the medicine is in the inventory block, use that price; otherwise give a typical Bangladesh retail estimate and mark it as "আনুমানিক">
-    **Inventory Status:** <look up in Inventory block; show stock + price if present, else "এই দোকানে এখন stock-এ নেই" + 1–2 alternatives from inventory>
-    Then end with ONE follow-up question (per rule 14). NEVER claim to have queried Medex, internet, or any external site — all medical info comes from your internal knowledge. If you are unsure of a fact, say so plainly and recommend consulting a registered doctor/pharmacist instead of inventing numbers. The dosage disclaimer is mandatory on every medical answer.
-22. INVENTORY CROSS-CHECK (all roles): Whenever a medicine is named — for ANY purpose (knowledge query, availability, price) — you MUST first look it up in the Inventory block by case-insensitive substring match on name. Branches:
+21. MEDICAL KNOWLEDGE FORMAT (4-point summary, INTENT-FIRST):
+    INTENT PRIORITY: If the user asks what a medicine does / its use / dosage / indication / "ki kaj kore" / "kno khai" / "kibhabe khabo" / "dose koto" — the medical 4-point block IS the primary response. DO NOT lead with stock-out messages. Inventory Status is the LAST of the 4 sections, never the first.
+    GENERIC VERIFICATION (anti-hallucination — CRITICAL):
+      - Before naming the generic, internally verify the brand→generic mapping. Common Bangladeshi brands you MUST get right:
+        Napa = Paracetamol; Ace = Paracetamol; Fast = Paracetamol;
+        Seclo = Omeprazole; Maxpro = Esomeprazole; Losectil = Omeprazole;
+        Monas = Montelukast; Montair = Montelukast;
+        Acemox = Acetazolamide (for glaucoma / altitude sickness — NOT Amoxicillin);
+        Amilin = Amitriptyline (antidepressant / neuropathic pain — NOT Amoxicillin);
+        Amoxin / Moxacil = Amoxicillin; Cef-3 = Ceftriaxone; Azin = Azithromycin.
+      - If you are NOT 100% certain of a brand's generic, you MUST output EXACTLY this disclaimer and SKIP the Indication and Dosage sections (still show Market Price as "আনুমানিক জানা নেই" + Inventory Status + follow-up):
+        "এই ওষুধটির জেনেরিক নাম ডাটাবেসে নিশ্চিত হওয়া যাচ্ছে না। সঠিক তথ্যের জন্য ওষুধের প্যাকেট দেখুন বা ডাক্তারের পরামর্শ নিন।"
+      - NEVER guess. NEVER claim to have queried Medex / internet / any external site — all medical info is from your internal pharmacological knowledge.
+    FIXED 4-SECTION STRUCTURE (in this exact order, translate labels to user's language):
+    **Indication (কী কাজ করে):** <accurate primary use, 1–2 lines>
+    **Dosage (মাত্রা):** <general adult guideline> — _ব্যবহারের আগে ডাক্তারের পরামর্শ নিন।_  (disclaimer is MANDATORY)
+    **Market Price (আনুমানিক দাম):** <if in Inventory block, use that price; else typical Bangladesh retail estimate marked "আনুমানিক">
+    **Inventory Status:** <look up in Inventory block; show stock + price if present, else "এই দোকানে এখন stock-এ নেই" + same-generic alternatives per rule 22>
+    Then end with ONE short follow-up question (per rule 14).
+22. INVENTORY CROSS-CHECK & SAME-GENERIC ALTERNATIVES (all roles): Whenever a medicine is named, look it up in the Inventory block by case-insensitive substring on name. Branches:
     (a) Found, stock > stock_alert → mention current stock + price.
-    (b) Found, stock 0 or ≤ stock_alert → flag as low/out and suggest up to 2 alternatives from inventory (same company_name first, then similar name prefix).
-    (c) Not found → reply "দুঃখিত, এই ওষুধটি আমাদের ইনভেন্টরিতে নেই।" then, if any same-generic-family items exist in the inventory list, suggest up to 2 of them as alternatives.`;
+    (b) Found, stock 0 or ≤ stock_alert → flag as low/out and suggest up to 2 alternatives that share the EXACT SAME generic name (use the verified mappings in rule 21). If no same-generic alternative exists in the inventory list, say: "একই জেনেরিকের কোনো বিকল্প এখন stock-এ নেই।" — DO NOT suggest a different-generic medicine.
+    (c) Not found → reply "দুঃখিত, এই ওষুধটি আমাদের ইনভেন্টরিতে নেই।" then suggest up to 2 same-generic alternatives from the inventory if any exist; otherwise the same "একই জেনেরিকের কোনো বিকল্প…" line.
+    ANTI-PATTERN (FORBIDDEN): Never suggest Amilin (Amitriptyline) as a substitute for Acemox (Acetazolamide), or any cross-generic swap. Different generics ≠ alternatives.
+23. NO "DATA NOT SAVED" — EVER: The phrases "ডাটা সেভ নেই" / "ডাটা সেভ করা নেই" / "data is not saved" are FORBIDDEN. For a missing specific date the only acceptable phrasing is "ঐ তারিখে কোনো লেনদেন রেকর্ড করা হয়নি" (or the সেল/খরচ variant from rule 18).`;
 }
 
 async function buildPharmacyContext(
