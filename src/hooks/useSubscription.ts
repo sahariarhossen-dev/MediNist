@@ -7,14 +7,13 @@ export function useSubscription() {
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [pharmacyId, setPharmacyId] = useState<string | null>(null);
+  const [lastPopupShown, setLastPopupShown] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const buildSub = useCallback(
-    (row: { subscription_plan: string | null; subscription_started_at: string | null; subscription_expiry: string | null }): SubscriptionInfo => {
-      const startedAt = row.subscription_started_at ?? new Date().toISOString();
-      const expiry =
-        row.subscription_expiry ??
-        new Date(Date.now() + 30 * 86_400_000).toISOString();
+    (row: { subscription_plan: string | null; subscription_started_at: string | null; subscription_expiry: string }): SubscriptionInfo => {
+      const startedAt = row.subscription_started_at ?? row.subscription_expiry;
+      const expiry = row.subscription_expiry;
       const totalDays = Math.max(
         1,
         Math.round((new Date(expiry).getTime() - new Date(startedAt).getTime()) / 86_400_000),
@@ -51,7 +50,7 @@ export function useSubscription() {
     const [{ data: pharm }, { data: pays }] = await Promise.all([
       supabase
         .from("pharmacies")
-        .select("subscription_plan, subscription_started_at, subscription_expiry")
+        .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown")
         .eq("id", pid)
         .maybeSingle(),
       supabase
@@ -62,7 +61,13 @@ export function useSubscription() {
         .limit(20),
     ]);
 
-    if (pharm) setSub(buildSub(pharm as any));
+    if (pharm && (pharm as any).subscription_expiry) {
+      setSub(buildSub(pharm as any));
+      setLastPopupShown(((pharm as any).last_popup_shown as string | null) ?? null);
+    } else {
+      setSub(null);
+      setLastPopupShown(null);
+    }
     setPayments(
       (pays ?? []).map((p: any) => ({
         id: p.id,
@@ -100,5 +105,5 @@ export function useSubscription() {
   }, [pharmacyId, refetch]);
 
   const status: SubStatus = getStatus(sub, payments);
-  return { sub, payments, loading, refetch, pharmacyId, status, isTrial: status === "trial", isExpired: status === "expired" };
+  return { sub, payments, loading, refetch, pharmacyId, lastPopupShown, status, isTrial: status === "trial", isExpired: status === "expired" };
 }

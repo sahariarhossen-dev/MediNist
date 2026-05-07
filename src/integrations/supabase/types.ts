@@ -668,6 +668,7 @@ export type Database = {
           email: string | null
           id: string
           invoice_footer: string | null
+          last_popup_shown: string | null
           logo_url: string | null
           name: string
           phone: string | null
@@ -689,6 +690,7 @@ export type Database = {
           email?: string | null
           id?: string
           invoice_footer?: string | null
+          last_popup_shown?: string | null
           logo_url?: string | null
           name: string
           phone?: string | null
@@ -710,6 +712,7 @@ export type Database = {
           email?: string | null
           id?: string
           invoice_footer?: string | null
+          last_popup_shown?: string | null
           logo_url?: string | null
           name?: string
           phone?: string | null
