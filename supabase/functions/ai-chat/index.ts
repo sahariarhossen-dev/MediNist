@@ -282,10 +282,34 @@ Salesmen: ${staffByRole.salesman.length} — ${staffByRole.salesman.map((s) => s
       const recentLines = includeRecent
         ? scoped.slice(0, 20).map((e) => `- ${(e.occurred_at ?? "").slice(0, 10)} | ${safeField(e.party_name) || "(no party)"} | ${safeField(e.category)} | ৳${Number(e.amount ?? 0).toFixed(2)}${e.note ? ` — ${safeField(e.note, 60)}` : ""}`)
         : [];
+      // Per-day expense totals (so date-specific expense queries work).
+      const dailyMap = new Map<string, { count: number; total: number; byParty: Map<string, number> }>();
+      for (const e of scoped) {
+        const d = (e.occurred_at ?? "").slice(0, 10);
+        if (!d) continue;
+        const cur = dailyMap.get(d) ?? { count: 0, total: 0, byParty: new Map<string, number>() };
+        const amt = Number(e.amount ?? 0);
+        cur.count += 1;
+        cur.total += amt;
+        const pk = (e.party_name && String(e.party_name).trim()) || "(unspecified)";
+        cur.byParty.set(pk, (cur.byParty.get(pk) ?? 0) + amt);
+        dailyMap.set(d, cur);
+      }
+      const dailyLines = [...dailyMap.entries()]
+        .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+        .map(([d, v]) => {
+          const partyBits = [...v.byParty.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([p, t]) => `${safeField(p)} ৳${t.toFixed(2)}`)
+            .join("; ");
+          return `${d}: ${v.count} payment${v.count === 1 ? "" : "s"}, ৳${v.total.toFixed(2)} — ${partyBits}`;
+        });
+      const dailyBlock = `\n\n== Daily expense totals (last ${limitDays} days) ==\n${dailyLines.length ? dailyLines.join("\n") : "(none)"}`;
       return `== Expenses & supplier payments (last ${limitDays} days) ==
 Total outflow: ৳${total.toFixed(2)} across ${scoped.length} transactions
 By party (top 15):
-${partyLines.join("\n")}${includeRecent ? `\n\nMost recent 20 outflows:\n${recentLines.join("\n")}` : ""}`;
+${partyLines.join("\n")}${includeRecent ? `\n\nMost recent 20 outflows:\n${recentLines.join("\n")}` : ""}${dailyBlock}`;
     };
 
     // Dues block (owner + manager)
