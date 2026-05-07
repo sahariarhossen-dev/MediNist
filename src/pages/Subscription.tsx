@@ -26,12 +26,16 @@ export default function Subscription() {
 
   useEffect(() => {
     if (!user || !isTrial) return;
-    const key = `trial_welcome_seen_${user.id}`;
-    if (!localStorage.getItem(key)) setShowWelcome(true);
+    const key = `trial_welcome_last_${user.id}`;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(key) !== today) setShowWelcome(true);
   }, [user, isTrial]);
 
   const dismissWelcome = () => {
-    if (user) localStorage.setItem(`trial_welcome_seen_${user.id}`, "1");
+    if (user) {
+      const today = new Date().toISOString().slice(0, 10);
+      localStorage.setItem(`trial_welcome_last_${user.id}`, today);
+    }
     setShowWelcome(false);
   };
 
