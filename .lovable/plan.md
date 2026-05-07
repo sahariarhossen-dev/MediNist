@@ -1,43 +1,66 @@
-## Status: Already Implemented (with one gap)
+## Goal
 
-Auditing the codebase against your 6 requirements — the DB-driven subscription system is **already in place**. Only the daily pop-up needs to be moved off localStorage to satisfy "use a database field" properly.
+Switch the daily welcome popup from `profiles.last_trial_popup_date` (per-user) to `pharmacies.last_popup_shown` (per-shop), and remove any chance of the countdown "resetting" on refresh by eliminating the silent 30-day fallback in `useSubscription`.
 
-### Current implementation map
+## Why the timer appeared to reset before
 
-| Requirement | Where it lives | Status |
-|---|---|---|
-| 1. DB fetch (`pharmacies.subscription_started_at`, `subscription_expiry`) | `src/hooks/useSubscription.ts` → `refetch()` | Done |
-| 1b. Trial init = registration + 30 days | `supabase/functions/register-pharmacy/index.ts` (sets `subscription_expiry` on shop creation); `buildSub` falls back to `now + 30d` if null | Done |
-| 2. 1-second countdown from DB expiry | `src/hooks/useCountdown.ts` (1000ms interval) consumed by `CountdownTimer` / `StatusCard` | Done |
-| 3. Dynamic progress bar (start → expiry) | `StatusCard.tsx`: `pct = diff / (total_days * 86_400_000) * 100` | Done |
-| 4. Daily welcome pop-up | `Subscription.tsx` uses `localStorage["trial_welcome_last_<uid>"]` (date string) | Works, but uses localStorage |
-| 5. Stacking renewals (`new = current + days`) | `extend_subscription` RPC: `v_base := GREATEST(current, now()); v_new := v_base + days` | Done |
-| 6. Global expired overlay | `AppLayout.tsx` renders `SubscriptionExpiredOverlay` whenever `isExpired` (except on `/subscription`) | Done |
+In `src/hooks/useSubscription.ts`, `buildSub` does:
 
-### The one fix to apply
+```ts
+const startedAt = row.subscription_started_at ?? new Date().toISOString();
+const expiry = row.subscription_expiry ?? new Date(Date.now() + 30 * 86_400_000).toISOString();
+```
 
-**Move the "last popup shown" flag into the database** so it survives device changes (matching your spec: *"Use a 'last_popup_shown' field in the database or local storage"* — currently it's localStorage, which resets when a user logs in on a new device).
+If a fetch ever resolved with a row missing `subscription_expiry`, the UI would compute a brand-new "now + 30 days" value on every mount — looking like a reset. We will remove that client-side fallback so the timer is **only** ever derived from the database.
 
-#### Plan
+## Changes
 
-1. **Migration** — add a per-user column:
-   ```sql
-   ALTER TABLE public.profiles
-     ADD COLUMN last_trial_popup_date date;
-   ```
-   No new RLS needed (profiles already restricts to `id = auth.uid()`).
+### 1. Database migration
 
-2. **`src/pages/Subscription.tsx`** — replace the localStorage check:
-   - On mount (when `isTrial` and profile loaded), read `profiles.last_trial_popup_date`. Show `WelcomeTrialModal` if it ≠ today (`YYYY-MM-DD`).
-   - In `dismissWelcome`, `update profiles set last_trial_popup_date = current_date where id = auth.uid()`.
-   - Remove the `localStorage` get/set lines.
+```sql
+ALTER TABLE public.pharmacies
+  ADD COLUMN IF NOT EXISTS last_popup_shown date;
 
-3. **No other files change.** The countdown, stacking RPC, expired overlay, and progress bar already meet spec.
+-- Backfill trial expiry for any shop missing it (defensive — prevents legacy rows
+-- from ever falling into the old client-side fallback path)
+UPDATE public.pharmacies
+SET subscription_expiry = COALESCE(subscription_started_at, created_at) + interval '30 days'
+WHERE subscription_expiry IS NULL;
+```
 
-### Why not rebuild more
+RLS check: existing `pharmacies` policies already let any pharmacy member read the row, and `Pharmacy admins can update their pharmacy` covers updates by the owner/admin. The new column is covered by these table-level policies — no extra policy needed. Non-admin staff can read the popup date but cannot update it; that's fine because only the admin's session needs to write it (the popup is shown to admins on the Subscription page).
 
-- `useSubscription` already pulls expiry strictly from `pharmacies` row — countdown can't drift across refresh/device.
-- `extend_subscription` RPC already does `GREATEST(current_expiry, now()) + days`, so a renewal with 3 days left correctly produces +33 days total.
-- The expired overlay already locks every route except `/subscription` so users can pay.
+If we want every staff member to be able to dismiss the popup for the shop, we'd need a narrower policy. **Decision: keep it admin-only** since the Subscription page itself is an admin surface.
 
-Approve and I'll run the migration + edit `Subscription.tsx`.
+### 2. `src/hooks/useSubscription.ts` — strict DB-only expiry
+
+- Add `last_popup_shown` to the select.
+- Remove the `?? now + 30d` fallback. If `subscription_expiry` is null after fetch, surface that as a transient "still loading / not initialized" state rather than fabricating a new expiry.
+- Keep `loading: true` until the pharmacy row is actually returned (currently `setLoading(false)` runs even when there is no pharmacy_id; we'll only flip `loading` once the fetch resolves with a row or a definitive null).
+- Expose `lastPopupShown: string | null` from the hook.
+
+### 3. `src/pages/Subscription.tsx` — read/write the new column
+
+- Replace the `profiles.last_trial_popup_date` read with `lastPopupShown` from `useSubscription`.
+- `dismissWelcome` updates `pharmacies.last_popup_shown = today` for the current `pharmacyId` (admin only — non-admins won't see the popup trigger).
+- Remove the old profile-based query.
+
+### 4. `src/integrations/supabase/types.ts`
+
+Auto-regenerated after the migration — no manual edit.
+
+### 5. Cleanup
+
+The previous `profiles.last_trial_popup_date` column becomes unused. We'll leave it in place (dropping it is not required and avoids breaking any cached client). Mention this to the user; they can drop later if desired.
+
+## Files touched
+
+- new migration: add `pharmacies.last_popup_shown` + backfill expiry
+- `src/hooks/useSubscription.ts`
+- `src/pages/Subscription.tsx`
+
+## Verification after build
+
+- Refresh the page repeatedly → countdown stays identical (no reset).
+- Open on a second device/browser as the same shop → popup does not re-appear the same day.
+- Inspect the `pharmacies` row: `subscription_expiry` is non-null and `last_popup_shown` updates to today after dismissing.
