@@ -1,33 +1,61 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Smartphone, CreditCard, ShieldCheck } from "lucide-react";
+import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 const PLAN_DAYS = 30;
 const PLAN_PRICE = 2000;
 
+type Gateway = {
+  id: string;
+  name: string;
+  desc: string;
+  tone: string;
+  icon: React.ReactNode;
+};
+
+const gateways: Gateway[] = [
+  { id: "bkash", name: "bKash", desc: "Mobile wallet", tone: "bg-pink-50 text-pink-600", icon: <Smartphone size={20} /> },
+  { id: "nagad", name: "Nagad", desc: "Mobile wallet", tone: "bg-orange-50 text-orange-600", icon: <Smartphone size={20} /> },
+  { id: "rocket", name: "Rocket", desc: "Mobile wallet", tone: "bg-purple-50 text-purple-600", icon: <Smartphone size={20} /> },
+  { id: "card", name: "Card", desc: "Visa / Mastercard", tone: "bg-blue-50 text-blue-600", icon: <CreditCard size={20} /> },
+];
+
 export default function SubscriptionCheckout() {
   const navigate = useNavigate();
+  const [selected, setSelected] = useState<string>("bkash");
   const [processing, setProcessing] = useState(false);
+
+  const fireConfetti = () => {
+    confetti({
+      particleCount: 140,
+      spread: 80,
+      origin: { y: 0.7 },
+      colors: ["#10b981", "#34d399", "#6ee7b7", "#facc15"],
+    });
+  };
 
   const handlePay = async () => {
     setProcessing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-uddoktapay-checkout", {
-        body: {
-          days: PLAN_DAYS,
-          amount: PLAN_PRICE,
-          app_url: window.location.origin,
-        },
+      // Mock gateway processing delay
+      await new Promise((r) => setTimeout(r, 1500));
+      const { error } = await supabase.rpc("extend_subscription", {
+        _days: PLAN_DAYS,
+        _amount: PLAN_PRICE,
       });
       if (error) throw error;
-      const url = (data as any)?.payment_url;
-      if (!url) throw new Error((data as any)?.error ?? "no_url");
-      window.location.href = url;
+      fireConfetti();
+      toast.success("Subscription Extended Successfully!", {
+        description: `+${PLAN_DAYS} days added to your plan.`,
+      });
+      setTimeout(() => navigate("/subscription"), 600);
     } catch (e: any) {
-      toast.error("Could not connect to payment gateway. Please try again.");
+      toast.error("Payment failed", { description: e?.message ?? "Please try again." });
       setProcessing(false);
     }
   };
@@ -65,32 +93,46 @@ export default function SubscriptionCheckout() {
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-            Payment
+        {/* Payment methods */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
+            Choose Payment Method
           </h2>
-          <p className="text-sm text-gray-700">
-            You'll be redirected to UddoktaPay's secure checkout to pay with{" "}
-            <span className="font-medium">bKash, Nagad, Rocket</span> or{" "}
-            <span className="font-medium">Card</span>.
-          </p>
+          <div className="space-y-2">
+            {gateways.map((g) => {
+              const active = selected === g.id;
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => setSelected(g.id)}
+                  disabled={processing}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-4 rounded-2xl border bg-white text-left transition",
+                    active
+                      ? "border-emerald-500 ring-2 ring-emerald-100"
+                      : "border-gray-200 hover:border-gray-300",
+                  )}
+                >
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", g.tone)}>
+                    {g.icon}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">{g.name}</p>
+                    <p className="text-xs text-gray-500">{g.desc}</p>
+                  </div>
+                  <div
+                    className={cn(
+                      "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                      active ? "border-emerald-500 bg-emerald-500" : "border-gray-300",
+                    )}
+                  >
+                    {active && <Check size={12} className="text-white" strokeWidth={3} />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </section>
-
-        <Button
-          onClick={handlePay}
-          disabled={processing}
-          className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-base shadow-lg"
-        >
-          {processing ? (
-            <>
-              <Loader2 className="animate-spin !size-5" /> Connecting to gateway…
-            </>
-          ) : (
-            <>
-              <Lock className="!size-5" /> Confirm & Pay ৳{PLAN_PRICE.toLocaleString("en-IN")}
-            </>
-          )}
-        </Button>
 
         <div className="flex items-center gap-2 text-xs text-gray-500 px-1">
           <ShieldCheck size={14} className="text-emerald-600" />
@@ -108,10 +150,10 @@ export default function SubscriptionCheckout() {
           >
             {processing ? (
               <>
-                <Loader2 className="animate-spin !size-5" /> Redirecting to gateway…
+                <Loader2 className="animate-spin !size-5" /> Processing payment…
               </>
             ) : (
-              <>Pay ৳{PLAN_PRICE.toLocaleString("en-IN")} with UddoktaPay</>
+              <>Pay ৳{PLAN_PRICE.toLocaleString("en-IN")}</>
             )}
           </Button>
         </div>
