@@ -95,7 +95,16 @@ Shop: ${shopName}
     - Salesman → friendly guide: focus on stock, price, expiry, and alternatives. Never mention profit, cost, or shop-wide totals.
 16. SENTIMENT: If the user sounds worried or frustrated (e.g., "sale kom keno?", "eto due keno?"), briefly acknowledge their concern in their language, THEN analyse using the data — compare today vs yesterday and this week vs last week from the "Daily sales" block, and point at obvious causes (low stock, lots of expired items, dues piling up) when the data supports it.
 17. COMPARISONS: When the user asks "kemon cholche" / "how is business" or repeats the same metric, proactively compare today vs yesterday and this week vs last week using the per-day block.
-18. SPECIFIC-DATE LOOKUP: For ANY specific date question (e.g., "27 April", "২৭-৪", "27/4", "gotokal"), look the date up in the "Daily sales" block by its YYYY-MM-DD key. If the date is missing from the block, say data for that date is not available — never approximate from a weekly/monthly total.`;
+18. SPECIFIC-DATE LOOKUP: For ANY specific date question (e.g., "27 April", "২৭-৪", "27/4", "gotokal"):
+    - For SALES → look the date up in the "Daily sales" block by its YYYY-MM-DD key.
+    - For EXPENSES / supplier payments → look it up in the "Daily expense totals" block.
+    - If the date key is MISSING from the relevant block (but is within the loaded window), reply EXACTLY: "ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি" (pick সেল or খরচ depending on which was asked).
+    - NEVER approximate from a weekly/monthly total. NEVER say generic "ডাটা সেভ করা নেই" / "data is not saved".
+19. NO FAKE "NOT SAVED": You are FORBIDDEN from telling the user their data is not saved when they ask about a specific day. Use this decision tree strictly:
+    (a) Date present in the per-day block → answer with that day's exact numbers.
+    (b) Date absent but within the loaded window (sales: last 120 days, expenses: last 90 days) → reply: "ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি"।
+    (c) Date OLDER than the loaded window → reply: "৯০–১২০ দিনের বাইরের ডাটা এই মুহূর্তে available নেই, owner চাইলে আমরা window বাড়াতে পারি।"
+20. SALESMAN ALTERNATIVES: If a requested medicine has stock 0 or very low, suggest up to 2 alternatives from the inventory (prefer same company_name, otherwise similar name prefix), then close with a guide-style follow-up like "aro kichu khujchen?".`;
 }
 
 async function buildPharmacyContext(
@@ -118,7 +127,7 @@ async function buildPharmacyContext(
         .from("sales")
         .select("id, total, created_at, sale_type, status, pharmacy_id, user_id")
         .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", new Date(Date.now() - 90 * 86400000).toISOString())
+        .gte("created_at", new Date(Date.now() - 120 * 86400000).toISOString())
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
@@ -273,10 +282,34 @@ Salesmen: ${staffByRole.salesman.length} — ${staffByRole.salesman.map((s) => s
       const recentLines = includeRecent
         ? scoped.slice(0, 20).map((e) => `- ${(e.occurred_at ?? "").slice(0, 10)} | ${safeField(e.party_name) || "(no party)"} | ${safeField(e.category)} | ৳${Number(e.amount ?? 0).toFixed(2)}${e.note ? ` — ${safeField(e.note, 60)}` : ""}`)
         : [];
+      // Per-day expense totals (so date-specific expense queries work).
+      const dailyMap = new Map<string, { count: number; total: number; byParty: Map<string, number> }>();
+      for (const e of scoped) {
+        const d = (e.occurred_at ?? "").slice(0, 10);
+        if (!d) continue;
+        const cur = dailyMap.get(d) ?? { count: 0, total: 0, byParty: new Map<string, number>() };
+        const amt = Number(e.amount ?? 0);
+        cur.count += 1;
+        cur.total += amt;
+        const pk = (e.party_name && String(e.party_name).trim()) || "(unspecified)";
+        cur.byParty.set(pk, (cur.byParty.get(pk) ?? 0) + amt);
+        dailyMap.set(d, cur);
+      }
+      const dailyLines = [...dailyMap.entries()]
+        .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+        .map(([d, v]) => {
+          const partyBits = [...v.byParty.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([p, t]) => `${safeField(p)} ৳${t.toFixed(2)}`)
+            .join("; ");
+          return `${d}: ${v.count} payment${v.count === 1 ? "" : "s"}, ৳${v.total.toFixed(2)} — ${partyBits}`;
+        });
+      const dailyBlock = `\n\n== Daily expense totals (last ${limitDays} days) ==\n${dailyLines.length ? dailyLines.join("\n") : "(none)"}`;
       return `== Expenses & supplier payments (last ${limitDays} days) ==
 Total outflow: ৳${total.toFixed(2)} across ${scoped.length} transactions
 By party (top 15):
-${partyLines.join("\n")}${includeRecent ? `\n\nMost recent 20 outflows:\n${recentLines.join("\n")}` : ""}`;
+${partyLines.join("\n")}${includeRecent ? `\n\nMost recent 20 outflows:\n${recentLines.join("\n")}` : ""}${dailyBlock}`;
     };
 
     // Dues block (owner + manager)
@@ -370,6 +403,13 @@ ${buildExpensesBlock(7, false)}
     );
     const last7Owner = sales.filter((sale: any) => new Date(sale.created_at).getTime() >= sevenDaysAgo);
     const last7OwnerRevenue = last7Owner.reduce((sum, s) => sum + Number(s.total ?? 0), 0);
+    const prev7Start = Date.now() - 14 * 86400000;
+    const prev7End = sevenDaysAgo;
+    const prev7Owner = sales.filter((sale: any) => {
+      const t = new Date(sale.created_at).getTime();
+      return t >= prev7Start && t < prev7End;
+    });
+    const prev7OwnerRevenue = prev7Owner.reduce((sum, s) => sum + Number(s.total ?? 0), 0);
     const ownerDaily = buildDailyMap(sales);
 
     // Restrict items tally to sales belonging to this pharmacy (defence in depth)
@@ -425,18 +465,19 @@ ${staffBlock}
 
 ${duesBlock}
 
-== Sales (last 30 days) ==
+== Sales (last 120 days) ==
 Total sales count: ${sales.length}
 Total revenue: ৳${totalRevenue30d.toFixed(2)}
 Today: ${todaySales.length} sales, revenue ৳${todayRevenue.toFixed(2)}
 Yesterday (${yesterdayStr}): ${yesterdaySales.length} sales, revenue ৳${yesterdayRevenue.toFixed(2)}
 Last 7 days: ${last7Owner.length} sales, revenue ৳${last7OwnerRevenue.toFixed(2)}
+Previous 7 days (days 8–14 ago): ${prev7Owner.length} sales, revenue ৳${prev7OwnerRevenue.toFixed(2)}
 
 == Cash vs Online (cash inflows) ==
 Today — Cash: ৳${today$.cash.toFixed(2)} | Online (bKash/Nagad/Card/Bank): ৳${today$.online.toFixed(2)} | Other: ৳${today$.other.toFixed(2)}
 Last 30 days — Cash: ৳${m30$.cash.toFixed(2)} | Online: ৳${m30$.online.toFixed(2)} | Other: ৳${m30$.other.toFixed(2)}
 
-${renderDailyBlock("Daily sales (last 90 days)", ownerDaily)}
+${renderDailyBlock("Daily sales (last 120 days)", ownerDaily)}
 
 ${buildExpensesBlock(90, true)}
 
@@ -608,7 +649,7 @@ Deno.serve(async (req) => {
         model: DEEPSEEK_MODEL,
         messages: openAiMessages,
         temperature: 0.7,
-        max_tokens: 1400,
+        max_tokens: 1600,
         stream: false,
       }),
     }).catch((error) => {
