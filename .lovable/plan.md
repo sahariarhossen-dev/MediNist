@@ -1,40 +1,43 @@
-## Audit vs your requirements
+## Status: Already Implemented (with one gap)
 
-Your spec asks for a `localStorage`-based `shopRegistrationDate`. The current app already implements the same date-driven behavior, but anchored to the database (`pharmacies.subscription_started_at` / `subscription_expiry`) instead of `localStorage`. DB-anchored is strictly better:
+Auditing the codebase against your 6 requirements — the DB-driven subscription system is **already in place**. Only the daily pop-up needs to be moved off localStorage to satisfy "use a database field" properly.
 
-- Survives cache clears, incognito, device switches, reinstalls
-- Cannot be tampered with by the user to extend their trial
-- Stays consistent across multiple staff devices for the same pharmacy
+### Current implementation map
 
-I recommend keeping the DB as the source of truth and only making the small fixes below. If you'd rather force pure-`localStorage` behavior, say so and I'll switch the anchor.
+| Requirement | Where it lives | Status |
+|---|---|---|
+| 1. DB fetch (`pharmacies.subscription_started_at`, `subscription_expiry`) | `src/hooks/useSubscription.ts` → `refetch()` | Done |
+| 1b. Trial init = registration + 30 days | `supabase/functions/register-pharmacy/index.ts` (sets `subscription_expiry` on shop creation); `buildSub` falls back to `now + 30d` if null | Done |
+| 2. 1-second countdown from DB expiry | `src/hooks/useCountdown.ts` (1000ms interval) consumed by `CountdownTimer` / `StatusCard` | Done |
+| 3. Dynamic progress bar (start → expiry) | `StatusCard.tsx`: `pct = diff / (total_days * 86_400_000) * 100` | Done |
+| 4. Daily welcome pop-up | `Subscription.tsx` uses `localStorage["trial_welcome_last_<uid>"]` (date string) | Works, but uses localStorage |
+| 5. Stacking renewals (`new = current + days`) | `extend_subscription` RPC: `v_base := GREATEST(current, now()); v_new := v_base + days` | Done |
+| 6. Global expired overlay | `AppLayout.tsx` renders `SubscriptionExpiredOverlay` whenever `isExpired` (except on `/subscription`) | Done |
 
-## Requirement-by-requirement status
+### The one fix to apply
 
-| # | Requirement | Status | Notes |
-|---|---|---|---|
-| 1 | Persistent registration date, expiry = +30 days | Done | `useSubscription.buildSub` reads `subscription_started_at` & `subscription_expiry`; trial seeded to +30d on signup. |
-| 2 | `setInterval` every 1000ms, cleared on unmount, `timeLeft = expiry - now` | Done | `useCountdown` (`src/hooks/useCountdown.ts`) does exactly this. |
-| 3 | UI derived from `timeLeft`, never resets on refresh / button click | Done | `StatusCard` + `CountdownTimer` render purely from `useCountdown(expiry)`. "Start Exploring" only closes the modal. |
-| 4 | Progress bar % updates every second | Done | `StatusCard` computes `pct = diff / totalMs * 100` from the live `diff`. |
-| 5 | Welcome pop-up once per calendar day | Done | `Subscription.tsx` uses `trial_welcome_last_${user.id}` = `YYYY-MM-DD`. |
-| 6 | Subscription stacking (new days added to current expiry) | Done | `extend_subscription` RPC: `GREATEST(expiry, now()) + _days`. |
-| 7 | Full-screen blurred overlay when expired, blocks app until Renew | Done | `SubscriptionExpiredOverlay` mounted from `AppLayout` with `backdrop-blur-md` + `z-[100]`; allowed only on `/subscription`. |
+**Move the "last popup shown" flag into the database** so it survives device changes (matching your spec: *"Use a 'last_popup_shown' field in the database or local storage"* — currently it's localStorage, which resets when a user logs in on a new device).
 
-## Small fixes worth making
+#### Plan
 
-1. **Progress bar smoothness** — `Progress` (Radix) currently has a `transition-all` CSS rule on the indicator. Combined with per-second value updates this can look laggy. Set `transition-none` on the indicator inside `StatusCard`'s usage (or pass a prop) so the bar tracks the per-second value exactly.
+1. **Migration** — add a per-user column:
+   ```sql
+   ALTER TABLE public.profiles
+     ADD COLUMN last_trial_popup_date date;
+   ```
+   No new RLS needed (profiles already restricts to `id = auth.uid()`).
 
-2. **`total_days` rounding** — `buildSub` uses `Math.ceil(...)` which can yield 31 for a fresh 30-day trial when `started_at` is microseconds after midnight boundaries. Switch to `Math.round` so the % math is anchored on the intended 30-day total.
+2. **`src/pages/Subscription.tsx`** — replace the localStorage check:
+   - On mount (when `isTrial` and profile loaded), read `profiles.last_trial_popup_date`. Show `WelcomeTrialModal` if it ≠ today (`YYYY-MM-DD`).
+   - In `dismissWelcome`, `update profiles set last_trial_popup_date = current_date where id = auth.uid()`.
+   - Remove the `localStorage` get/set lines.
 
-3. **Expired overlay — also block hardware back / nav** — the overlay currently dims & blurs but `BottomNav` underneath still receives clicks via the layout order. Confirmed it does not (overlay is `fixed inset-0 z-[100]`, BottomNav is lower z), so no change needed. Listed for transparency.
+3. **No other files change.** The countdown, stacking RPC, expired overlay, and progress bar already meet spec.
 
-No new files. No DB migration. No new dependencies.
+### Why not rebuild more
 
-## Files to edit
+- `useSubscription` already pulls expiry strictly from `pharmacies` row — countdown can't drift across refresh/device.
+- `extend_subscription` RPC already does `GREATEST(current_expiry, now()) + days`, so a renewal with 3 days left correctly produces +33 days total.
+- The expired overlay already locks every route except `/subscription` so users can pay.
 
-- `src/components/subscription/StatusCard.tsx` — pass `className="[&>div]:transition-none"` (or similar) to `<Progress>` so the bar updates instantly each tick.
-- `src/hooks/useSubscription.ts` — change `Math.ceil` to `Math.round` in `totalDays`.
-
-## Optional: switch anchor to localStorage
-
-Only if you confirm you want this (not recommended). Would replace `buildSub` to read `localStorage["shop_registration_date"]` (seeding it with `new Date().toISOString()` on first read) and ignore the DB columns. This makes trials trivially resettable by clearing site data — please confirm before I do it.
+Approve and I'll run the migration + edit `Subscription.tsx`.
