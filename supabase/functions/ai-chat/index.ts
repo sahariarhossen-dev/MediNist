@@ -403,6 +403,13 @@ ${buildExpensesBlock(7, false)}
     );
     const last7Owner = sales.filter((sale: any) => new Date(sale.created_at).getTime() >= sevenDaysAgo);
     const last7OwnerRevenue = last7Owner.reduce((sum, s) => sum + Number(s.total ?? 0), 0);
+    const prev7Start = Date.now() - 14 * 86400000;
+    const prev7End = sevenDaysAgo;
+    const prev7Owner = sales.filter((sale: any) => {
+      const t = new Date(sale.created_at).getTime();
+      return t >= prev7Start && t < prev7End;
+    });
+    const prev7OwnerRevenue = prev7Owner.reduce((sum, s) => sum + Number(s.total ?? 0), 0);
     const ownerDaily = buildDailyMap(sales);
 
     // Restrict items tally to sales belonging to this pharmacy (defence in depth)
@@ -458,18 +465,19 @@ ${staffBlock}
 
 ${duesBlock}
 
-== Sales (last 30 days) ==
+== Sales (last 120 days) ==
 Total sales count: ${sales.length}
 Total revenue: ৳${totalRevenue30d.toFixed(2)}
 Today: ${todaySales.length} sales, revenue ৳${todayRevenue.toFixed(2)}
 Yesterday (${yesterdayStr}): ${yesterdaySales.length} sales, revenue ৳${yesterdayRevenue.toFixed(2)}
 Last 7 days: ${last7Owner.length} sales, revenue ৳${last7OwnerRevenue.toFixed(2)}
+Previous 7 days (days 8–14 ago): ${prev7Owner.length} sales, revenue ৳${prev7OwnerRevenue.toFixed(2)}
 
 == Cash vs Online (cash inflows) ==
 Today — Cash: ৳${today$.cash.toFixed(2)} | Online (bKash/Nagad/Card/Bank): ৳${today$.online.toFixed(2)} | Other: ৳${today$.other.toFixed(2)}
 Last 30 days — Cash: ৳${m30$.cash.toFixed(2)} | Online: ৳${m30$.online.toFixed(2)} | Other: ৳${m30$.other.toFixed(2)}
 
-${renderDailyBlock("Daily sales (last 90 days)", ownerDaily)}
+${renderDailyBlock("Daily sales (last 120 days)", ownerDaily)}
 
 ${buildExpensesBlock(90, true)}
 
