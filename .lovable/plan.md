@@ -1,74 +1,61 @@
 ## Goal
 
-Upgrade `supabase/functions/ai-chat/index.ts` so MediNist AI:
+Tighten `supabase/functions/ai-chat/index.ts` so MediNist AI never falls back to "data not saved" for legitimate date queries, can answer expense questions for any specific date, and proactively compares periods.
 
-1. Answers **arbitrary specific-date** sales queries (e.g., "27-4 er sale koto?") accurately, not just today/yesterday/7d/30d.
-2. Knows about **expenses and payments to suppliers** (e.g., "Beximco-ke koto payment?").
-3. Talks like a smart business partner — context-aware, proactive, ends with a relevant follow-up question.
-4. Adapts **tone by role** (Owner = business partner, Salesman = guide).
-
-All work is in the edge function. **No DB migration, no client change.**
+All work is in the edge function. No DB migration, no client change.
 
 ## Changes to `supabase/functions/ai-chat/index.ts`
 
-### 1. Widen sales window + build a per-day index
+### 1. Per-day expenses map (owner + manager)
 
-- Change the `sales` query window from 30 days to **90 days** (still capped at limit 500) so common date-specific questions like "27 April" hit real rows even mid-May.
-- After fetching, build a `salesByDay` map: `{ "YYYY-MM-DD": { count, revenue } }` for every day in the window.
-- Render a **"Daily sales (last 90 days)"** block in the owner context as compact lines:
-  ```
-  2025-04-27: 5 sales, ৳3286.00
-  2025-04-26: 3 sales, ৳1240.00
-  ...
-  ```
-  Only include days that actually have sales (keeps the block small).
-- Manager gets the same per-day block but limited to the **last 7 days** (matches existing manager rule).
-- Salesman gets per-day block scoped to **own** sales, last 30 days.
+Inside `buildExpensesBlock`, after grouping by party, also build a `Map<string, { count, total, byParty: Map<string, number> }>` keyed by `YYYY-MM-DD` from the scoped `expenses` array. Render an additional section:
 
-### 2. Add expenses / supplier payments context (owner only)
+```
+== Daily expense totals (last N days) ==
+2025-04-27: 3 payments, ৳12,450 — Beximco ৳8,000; Square ৳4,450
+2025-04-26: 1 payment, ৳2,000 — Acme ৳2,000
+...
+```
 
-Add a 6th parallel query inside `Promise.all`:
+Owner gets full list (last 90d). Manager gets last 7d only.
 
-- `cash_transactions` where `direction='out'` and `pharmacy_id=...`, last 90 days, limit 300, ordered by `occurred_at desc`. Select `amount, category, party_name, note, occurred_at`.
+### 2. Tighten rule 18 (specific-date lookup)
 
-Render a new **"Expenses & supplier payments (last 90 days)"** block for owner:
+Update rule 18 so it explicitly covers BOTH sales and expenses/supplier payments. For ANY specific-date question:
+- Sales → look up the date in the "Daily sales" block.
+- Expenses / payments → look up the date in the "Daily expense totals" block.
+- If the date key is missing, reply plainly: `"ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি"` — never approximate from weekly/monthly totals, never say generic "ডাটা সেভ করা নেই".
 
-- Total outflow ৳X across N transactions
-- Group by `party_name` (top 15 by total amount): `Beximco: ৳12,450 (3 payments)`, etc.
-- List the most recent 20 individual outflows with date, party, category, amount.
+### 3. Strengthen rule 17 (comparisons)
 
-Manager gets a trimmed version (party totals only, no individual lines, last 7 days). Salesman: nothing.
+Replace with explicit phrasing: when answering any sales/business-health question, ALWAYS compute and mention comparison vs prior comparable period (today vs yesterday, this week vs last week). Frame as an insight ("আজকের বিক্রি গতকালের চেয়ে ১৫% কম"), not a raw stat dump. Pre-compute `prev7Revenue` / `prev7Count` (days 8–14 ago) and surface them in the owner sales block as `Previous 7 days: N sales, ৳X` so the model has the comparison number ready.
 
-### 3. Tighten security / behaviour rules in `buildSecurityBlock`
+### 4. New rule 19 — "no fake 'not saved'" guardrail
 
-Add/update these rules:
+NEVER respond with generic "ডাটা সেভ করা নেই" / "data is not saved" when the user asks for a specific day. Correct responses, in order:
+1. Date present in the per-day block → answer with that day's numbers.
+2. Date absent (within window) → `"ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি"`.
+3. Date older than the loaded window (e.g. older than 120d for sales, 90d for expenses) → `"৯০-১২০ দিনের বাইরের ডাটা এই মুহূর্তে available নেই, owner চাইলে আমরা window বাড়াতে পারি।"`
 
-- **Rule 9 (date-specific)** — extend: "If the user asks about ANY specific date (e.g. '27 April', '২৭-৪', '27/4'), look it up in the 'Daily sales' block by matching the YYYY-MM-DD key. If the date is missing from the block, say data for that date is not available — never approximate from a weekly/monthly total."
-- **New rule 13 (Payments / Expenses)** — "When asked about payments to a supplier (e.g., 'Beximco-ke koto diyeci?'), search the 'Expenses & supplier payments' block by `party_name`. Sum matching entries and list dates. If no match, say so plainly."
-- **New rule 14 (Conversational style)** — "End every substantive answer with ONE short, relevant follow-up question that helps run the pharmacy better (e.g., 'ajker due list ta dekhabo?', 'kon medicine stock-e kom seta check kori?'). Skip the follow-up only for refusals and trivial acknowledgements."
-- **New rule 15 (Tone by role)**:
-  - Owner → speak like a business partner: mention growth/decline vs prior period when relevant, use words like profit/loss/trend.
-  - Manager → operational coach tone.
-  - Salesman → friendly guide: focus on stock, price, alternatives. Never mention profit.
-- **New rule 16 (Sentiment)** — "If the user sounds worried (e.g., 'sale kom keno?'), acknowledge briefly, then analyse using the data (compare to previous day/week, point at low-stock or expiry issues if relevant)."
-- **New rule 17 (Comparisons)** — "When the user asks the same metric repeatedly or asks 'kemon cholche', proactively compare today vs yesterday and this week vs last week using the per-day block."
+### 5. Salesman alternatives
 
-### 4. Minor cleanup
+When stock is 0 or low for a requested medicine, suggest up to 2 alternatives from the inventory list (matching `company_name` first, then similar `name` prefix). End with guide-style follow-up like "aro kichu khujchen?". Add this as a one-liner in rule 5 (salesman section) and as a hint at the bottom of the salesman inventory block.
 
-- Increase `max_tokens` from 1024 → 1400 to fit the longer, more conversational answers + follow-up question.
-- Keep `temperature` at 0.7.
-- Update the inventory-block "rack info not configured" note to also remind the salesman role to suggest an alternative medicine if stock is 0.
+### 6. Tiny cleanup
 
-## Verification scenarios
-
-- Owner asks "27-4 er sale koto?" → answers with that exact date's count + revenue from the daily block, ends with a follow-up like "ajker due list ta dekhabo?".
-- Owner asks "Beximco-ke koto payment koreci?" → sums supplier payments to Beximco, lists dates, ends with "baki supplier der pending amount jante chan?".
-- Owner asks "Sale kom keno?" → sympathises, compares today vs yesterday + this week vs last week, suggests a check (low stock / expired items).
-- Salesman asks "Napa ase?" → gives stock + price; if 0, suggests alternative; ends with a guide-style follow-up.
-- Manager asks "Net profit?" → still refused with the existing exact phrase (no follow-up).
-- Owner asks about a date with no sales → says data not available for that date (no fabrication).
+- `sales` query window: 90 → **120 days** (still capped at limit 500).
+- `max_tokens`: 1400 → **1600**.
+- Rename `Daily sales (last 90 days)` label to `Daily sales (last 120 days)` in the owner block to match.
 
 ## Out of scope
 
-- No new DB columns, no rack/shelf data, no `expenses` table (uses existing `cash_transactions` with `direction='out'`).
-- No frontend / `AIAssistant.tsx` changes.
+- No new DB columns, no new tables, no frontend changes.
+
+## Verification scenarios
+
+- Owner asks "27-4 er sale koto?" → exact-day numbers + WoW comparison + follow-up.
+- Owner asks "26-4 e Beximco-ke koto diyeci?" → reads Daily expense totals for 26-4, returns Beximco line + follow-up.
+- Owner asks about a date with no entries → `"ঐ তারিখে কোনো সেল রেকর্ড করা হয়নি"` (NOT "data is not saved").
+- Owner asks "Sale kom keno?" → acknowledges, gives today vs yesterday + this week vs last week percentages, suggests stock check, follow-up.
+- Salesman asks "Napa ase?" with stock 0 → "Napa stock-e nei. Bikolpo: Ace 500, Fast 500. Aro kichu khujchen?"
+- Manager asks "Net profit?" → still refused with exact phrase, no follow-up.
