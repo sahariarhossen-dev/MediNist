@@ -1,66 +1,38 @@
-# Free Trial Welcome Modal + App Freeze on Expiry
+## Findings
 
-Build on top of the existing Subscription page and `useSubscription` hook (which already exposes `subscription_started_at` / `subscription_expiry`). No new tables — the trial is just the existing 30-day window assigned at pharmacy creation.
+After reviewing the current implementation, most of what you listed is already working correctly. Only the welcome pop-up needs a behavior change.
 
-## 1. Subscription status helper
+### Already correct (no changes needed)
 
-Create `src/lib/subscriptionStatus.ts`:
-- `getStatus(sub, hasPaidPayment)` → `"trial" | "active" | "expired"`
-  - `expired` if `expiry < now` and no successful payment beyond expiry
-  - `active` if a `success` payment exists in `subscription_payments`
-  - otherwise `trial` (initial 30-day window from `subscription_started_at`)
-- `isInTrial(sub, payments)` — true when no successful payment record exists yet and we're inside the original 30-day window.
+1. **Countdown anchored to fixed dates** — `StatusCard` builds `expiry = new Date(sub.expiry_date)` from `pharmacies.subscription_expiry` (DB value). `useCountdown` recomputes `target.getTime() - Date.now()` every second. It does NOT reset on refresh.
+2. **Total trial duration** — `useSubscription.buildSub` derives `total_days` from `subscription_expiry - subscription_started_at`, so for a fresh trial this is exactly 30.
+3. **Dynamic progress bar** — `StatusCard` already computes `pct = (diff / totalMs) * 100` using the live `diff` from `useCountdown`, and renders both the `<Progress value={pct}>` bar and the `Math.round(pct)` text. Updates every second.
+4. **Subscription stacking** — `extend_subscription` RPC uses `GREATEST(COALESCE(subscription_expiry, now()), now()) + _days`, so paying with 5 days left and buying 30 produces 35 days remaining. Payment History reads from `subscription_payments` which the RPC inserts on every successful renewal.
 
-Extend `useSubscription` to also return `status` and `isTrial` derived from `payments` + `sub`.
+### The one real bug — daily pop-up
 
-## 2. Welcome trial modal
+Current: `Subscription.tsx` uses `localStorage["trial_welcome_seen_${user.id}"] = "1"` — a permanent flag, so the modal shows exactly once forever.
 
-New component `src/components/subscription/WelcomeTrialModal.tsx`:
-- Branded soft emerald/teal gradient card inside our existing `Dialog`.
-- Sparkle/gift icon (lucide `Sparkles` + `Gift`) with a subtle CSS bounce/scale animation (no extra deps; pure Tailwind keyframes already present in `tailwind.config`).
-- Copy: "Welcome to the Pro Family! 🌟 You've unlocked 1 month of free premium access to manage your pharmacy effortlessly."
-- Sub-line shows trial end date.
-- Primary button: "Start Exploring" → closes modal and writes a flag.
+Required: show once per calendar day, only while the user is still in trial.
 
-Trigger logic in `Subscription.tsx`:
-- Show once per user when `isTrial === true` AND `localStorage.getItem("trial_welcome_seen_<user.id>")` is unset.
-- On dismiss, set that key.
+## Changes
 
-(Per-user localStorage key avoids cross-account leakage; no DB column needed for this lightweight first-visit flag.)
+### `src/pages/Subscription.tsx`
 
-## 3. App freeze overlay on expiry
+Replace the seen-once flag with a date-based check:
 
-New component `src/components/subscription/SubscriptionExpiredOverlay.tsx`:
-- Fixed full-screen overlay (`z-[100]`, backdrop blur, white card centered).
-- Lock icon, title "Subscription Expired", message "Your trial / subscription has ended. Renew now to continue using MediNist."
-- Single CTA "Renew Now to Continue" → `navigate("/subscription")`.
-- Blocks all interaction (covers BottomNav too).
+```text
+key  = `trial_welcome_last_${user.id}`
+today = new Date().toISOString().slice(0, 10)   // "YYYY-MM-DD" (local)
+last = localStorage.getItem(key)
 
-Mount it in `AppLayout.tsx`:
-- Use `useSubscription()` inside layout.
-- If `status === "expired"` AND current route is not `/subscription` or `/subscription/checkout`, render the overlay above children. On the subscription pages we still allow access so the user can pay.
-- Returning the overlay alongside children (not instead of) keeps state mounted but the overlay's `pointer-events` blocks everything beneath.
+if (isTrial && last !== today) setShowWelcome(true)
 
-## 4. Subscription page tweaks
+dismissWelcome():
+  localStorage.setItem(key, today)
+  setShowWelcome(false)
+```
 
-- StatusCard already shows the countdown + progress (`% remaining`). Add a small "Free Trial" pill (instead of "Active") when `isTrial` is true; keep emerald/amber/rose tone logic.
-- When `expired`, show a red banner above the renew button: "Your access is paused — renew to unlock the app."
+Guard already covers "only while trial active" because `isTrial` is false once expired or after a paid renewal.
 
-## 5. Mock / fallback for shop_created_at
-
-Already handled by `useSubscription.buildSub`: if `subscription_started_at` is null it falls back to "now"; if `subscription_expiry` is null it falls back to now + 30 days. This satisfies the "mock shop_created_at" requirement without schema changes.
-
-## Files
-
-Created:
-- `src/lib/subscriptionStatus.ts`
-- `src/components/subscription/WelcomeTrialModal.tsx`
-- `src/components/subscription/SubscriptionExpiredOverlay.tsx`
-
-Edited:
-- `src/hooks/useSubscription.ts` — derive & return `status`, `isTrial`.
-- `src/components/AppLayout.tsx` — mount expired overlay globally.
-- `src/pages/Subscription.tsx` — render welcome modal + trial pill + expired banner.
-- `src/components/subscription/StatusCard.tsx` — "Free Trial" badge variant.
-
-No DB migrations, no new dependencies.
+No other files need to change. No DB migration. No new dependencies.
