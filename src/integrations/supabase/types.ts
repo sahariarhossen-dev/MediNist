@@ -824,6 +824,7 @@ export type Database = {
           full_name: string | null
           id: string
           last_seen: string | null
+          last_trial_popup_date: string | null
           pharmacy_id: string | null
           phone: string | null
           role: string | null
@@ -834,6 +835,7 @@ export type Database = {
           full_name?: string | null
           id: string
           last_seen?: string | null
+          last_trial_popup_date?: string | null
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
@@ -844,6 +846,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_seen?: string | null
+          last_trial_popup_date?: string | null
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
