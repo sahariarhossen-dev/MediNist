@@ -649,7 +649,7 @@ Deno.serve(async (req) => {
         model: DEEPSEEK_MODEL,
         messages: openAiMessages,
         temperature: 0.7,
-        max_tokens: 1400,
+        max_tokens: 1600,
         stream: false,
       }),
     }).catch((error) => {
