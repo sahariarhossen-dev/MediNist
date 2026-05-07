@@ -6,7 +6,6 @@ import PaymentHistory from "@/components/subscription/PaymentHistory";
 import RenewButton from "@/components/subscription/RenewButton";
 import { useSubscription } from "@/hooks/useSubscription";
 import WelcomeTrialModal from "@/components/subscription/WelcomeTrialModal";
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -20,37 +19,25 @@ import { Button } from "@/components/ui/button";
 
 export default function Subscription() {
   const navigate = useNavigate();
-  const { sub, payments, loading, isTrial, isExpired } = useSubscription();
-  const { user } = useAuth();
+  const { sub, payments, loading, isTrial, isExpired, pharmacyId, lastPopupShown, refetch } = useSubscription();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
-    if (!user || !isTrial) return;
-    let cancelled = false;
-    (async () => {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data } = await supabase
-        .from("profiles")
-        .select("last_trial_popup_date")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (cancelled) return;
-      if ((data as any)?.last_trial_popup_date !== today) setShowWelcome(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, isTrial]);
+    if (loading || !isTrial || !pharmacyId) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (lastPopupShown !== today) setShowWelcome(true);
+  }, [loading, isTrial, pharmacyId, lastPopupShown]);
 
   const dismissWelcome = async () => {
     setShowWelcome(false);
-    if (user) {
+    if (pharmacyId) {
       const today = new Date().toISOString().slice(0, 10);
       await supabase
-        .from("profiles")
-        .update({ last_trial_popup_date: today } as any)
-        .eq("id", user.id);
+        .from("pharmacies")
+        .update({ last_popup_shown: today } as any)
+        .eq("id", pharmacyId);
+      refetch();
     }
   };
 
