@@ -56,7 +56,7 @@ export default function StatusCard({ sub, isTrial = false }: { sub: Subscription
       <CountdownTimer target={expiry} tone={tone} />
 
       <div className="mt-5 space-y-2">
-        <Progress value={pct} className="h-2" />
+        <Progress value={pct} className="h-2 [&>div]:transition-none" />
         <div className="flex justify-between text-xs text-gray-600">
           <span>Renews on {formatDate(sub.expiry_date)}</span>
           <span>{Math.round(pct)}% remaining</span>

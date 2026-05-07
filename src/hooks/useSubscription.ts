@@ -17,7 +17,7 @@ export function useSubscription() {
         new Date(Date.now() + 30 * 86_400_000).toISOString();
       const totalDays = Math.max(
         1,
-        Math.ceil((new Date(expiry).getTime() - new Date(startedAt).getTime()) / 86_400_000),
+        Math.round((new Date(expiry).getTime() - new Date(startedAt).getTime()) / 86_400_000),
       );
       return {
         plan: row.subscription_plan ?? "Pharmacy Pro",
