@@ -1,11 +1,11 @@
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, Sparkles } from "lucide-react";
 import CountdownTimer from "./CountdownTimer";
 import { Progress } from "@/components/ui/progress";
 import { useCountdown } from "@/hooks/useCountdown";
 import { cn } from "@/lib/utils";
 import { formatDate, type SubscriptionInfo } from "@/lib/subscriptionMock";
 
-export default function StatusCard({ sub }: { sub: SubscriptionInfo }) {
+export default function StatusCard({ sub, isTrial = false }: { sub: SubscriptionInfo; isTrial?: boolean }) {
   const expiry = new Date(sub.expiry_date);
   const { days, diff } = useCountdown(expiry);
 
@@ -37,9 +37,15 @@ export default function StatusCard({ sub }: { sub: SubscriptionInfo }) {
     <div className={cn("rounded-2xl border shadow-sm p-5", containerTone)}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white", badgeTone)}>
-            <CheckCircle2 size={12} /> Active
-          </span>
+          {isTrial ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-500">
+              <Sparkles size={12} /> Free Trial
+            </span>
+          ) : (
+            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white", badgeTone)}>
+              <CheckCircle2 size={12} /> Active
+            </span>
+          )}
           <span className="text-fluid-sm font-medium text-gray-700">{sub.plan}</span>
         </div>
         <div className={cn("flex items-center gap-1 text-xs font-medium", accentText)}>
