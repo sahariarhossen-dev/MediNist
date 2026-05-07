@@ -1068,7 +1068,10 @@ export type Database = {
           created_at: string
           duration_days: number
           id: string
+          invoice_id: string | null
+          metadata: Json | null
           pharmacy_id: string
+          provider: string
           status: string
           user_id: string
         }
@@ -1077,7 +1080,10 @@ export type Database = {
           created_at?: string
           duration_days: number
           id?: string
+          invoice_id?: string | null
+          metadata?: Json | null
           pharmacy_id: string
+          provider?: string
           status?: string
           user_id: string
         }
@@ -1086,7 +1092,10 @@ export type Database = {
           created_at?: string
           duration_days?: number
           id?: string
+          invoice_id?: string | null
+          metadata?: Json | null
           pharmacy_id?: string
+          provider?: string
           status?: string
           user_id?: string
         }
