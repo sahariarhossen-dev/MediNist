@@ -471,7 +471,6 @@ const Inventory = () => {
                 )}
                 {filteredMedicines.map((med) => {
                   const isExpanded = expandedId === med.id;
-                  const units = Number(unitInputs[med.id] || 0);
                   const calculatedStock = getCalculatedStock(med);
 
                   return (
