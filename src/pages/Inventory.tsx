@@ -539,8 +539,7 @@ const Inventory = () => {
                                 </button>
                               </div>
                             );
-                          })()
-                        ) : (
+                          })() : (
                           <div className="flex-shrink-0">
                             <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                           </div>
