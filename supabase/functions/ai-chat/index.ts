@@ -59,6 +59,9 @@ const STOPWORDS = new Set([
   "dose", "koto", "dosage", "side", "effect", "effects", "what", "is", "about",
   "the", "a", "an", "of", "for", "tell", "me", "please", "to", "and", "ki?",
   "generic", "jeneric", "tablet", "syrup", "capsule",
+  "mg", "mgr", "matra", "dam", "price", "khawa", "khabe", "parsho", "pasho",
+  "kano", "kibabe", "kibvabe", "use", "uses", "indication", "indications",
+  "kothay", "kobe", "kotokhon",
 ]);
 
 // Tokens that signal NON-medicine intents (sales, dues, staff, expenses, inventory ops).
@@ -232,17 +235,19 @@ function extractBrandCandidates(searchMd: string): MedexCandidate[] {
   const seen = new Set<string>();
   const out: MedexCandidate[] = [];
   // Match markdown links [Name](https://medex.com.bd/brands/...) OR [Name](/brands/...)
-  const re = /\[([^\]]{1,80})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
+  // Allow newlines inside the link text (Spider often emits `[\nName\n](url)`).
+  const re = /\[([\s\S]{1,120}?)\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(searchMd)) !== null) {
     const url = (m[2] || "https://medex.com.bd") + m[3];
     if (seen.has(url)) continue;
     seen.add(url);
-    const rawName = m[1].replace(/[*_`]/g, "").trim();
+    const rawName = m[1].replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
     if (!rawName || rawName.length < 2) continue;
     out.push({ name: rawName, url });
     if (out.length >= 8) break;
   }
+  console.log("medex: candidates extracted", out.slice(0, 5).map((c) => c.name).join(" | "));
   return out;
 }
 
@@ -288,18 +293,26 @@ async function fetchMedexData(
     return { kind: "miss" };
   }
 
-  // Match strategy: exact normalised match → unique substring match → ambiguous.
+  // Match strategy:
+  //  1. Exact head match (Brand head === user token). If 1+ candidates share the
+  //     same head as the user query, treat them as the same brand (different
+  //     strengths) and pick the first — MedEx returns lowest dose first.
+  //  2. Unique prefix match.
+  //  3. Unique substring match (only when target ≥ 5 chars).
+  //  4. Otherwise → ambiguous (top 5).
   const target = normaliseBrand(name);
-  const baseMatches = candidates.filter((c) => {
-    const head = c.name.split(/\s|\(/)[0];
-    return normaliseBrand(head) === target;
-  });
+  const headOf = (c: MedexCandidate) => normaliseBrand(c.name.split(/\s|\(/)[0] || "");
+  const headMatches = candidates.filter((c) => headOf(c) === target);
   let chosen: MedexCandidate | null = null;
-  if (baseMatches.length === 1) {
-    chosen = baseMatches[0];
-  } else if (baseMatches.length === 0) {
-    const subs = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
-    if (subs.length === 1) chosen = subs[0];
+  if (headMatches.length >= 1) {
+    chosen = headMatches[0];
+  } else {
+    const prefix = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
+    if (prefix.length === 1) chosen = prefix[0];
+    else if (prefix.length === 0 && target.length >= 5) {
+      const subs = candidates.filter((c) => normaliseBrand(c.name).includes(target));
+      if (subs.length === 1) chosen = subs[0];
+    }
   }
 
   if (!chosen) {
@@ -307,6 +320,7 @@ async function fetchMedexData(
     console.log("medex: ambiguous candidates", top.map((c) => c.name).join(" | "));
     return { kind: "ambiguous", candidates: top };
   }
+  console.log("medex: chose", chosen.name, "for token", name);
 
   // Step 2: scrape chosen brand page.
   const brandMd = await spiderScrape(chosen.url, apiKey);
