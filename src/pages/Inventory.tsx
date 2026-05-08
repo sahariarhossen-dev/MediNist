@@ -228,8 +228,8 @@ const Inventory = () => {
     if (!value) return { addedPieces: 0, isTriple: false };
     const spp = med.strip_per_pack || 1;
     const pps = med.pcs_per_strip || 1;
-    if (value.includes(":")) {
-      const [bRaw = "", sRaw = "", pRaw = ""] = value.split(":");
+    if (value.includes(".")) {
+      const [bRaw = "", sRaw = "", pRaw = ""] = value.split(".");
       const b = Math.max(0, parseInt(bRaw, 10) || 0);
       const s = Math.max(0, parseInt(sRaw, 10) || 0);
       const p = Math.max(0, parseInt(pRaw, 10) || 0);
@@ -507,20 +507,27 @@ const Inventory = () => {
                          {isExpanded ? (() => {
                             const rawInput = unitInputs[med.id] || "";
                             const { addedPieces, isTriple } = parseStockInput(rawInput, med);
-                            const label = isTriple ? "B:S:P" : isSingleUnit(med) ? "Qty" : "Box";
+                            const label = isTriple ? "B.S.P" : isSingleUnit(med) ? "Qty" : "Box";
                             return (
                               <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{label}</span>
                                 <Input
                                   autoFocus
                                   type="text"
-                                  inputMode="numeric"
-                                  pattern="[0-9:]*"
-                                  placeholder="B:S:P e.g. 0:1:0"
-                                  title="Box:Strip:Piece (e.g. 0:1:0 = 1 strip). Single number = Boxes."
+                                  inputMode="decimal"
+                                  pattern="[0-9.]*"
+                                  placeholder="B.S.P e.g. 0.1.0"
+                                  title="Box.Strip.Piece (e.g. 0.1.0 = 1 strip). Single number = Boxes."
                                   value={rawInput}
                                   onChange={(e) => {
-                                    const cleaned = e.target.value.replace(/[^0-9:]/g, "");
+                                    let cleaned = e.target.value
+                                      .replace(/[^0-9.]/g, "")
+                                      .replace(/\.{2,}/g, ".");
+                                    // Cap at two dots (B.S.P = three segments)
+                                    const parts = cleaned.split(".");
+                                    if (parts.length > 3) {
+                                      cleaned = parts.slice(0, 3).join(".") + parts.slice(3).join("");
+                                    }
                                     setUnitInputs((prev) => ({ ...prev, [med.id]: cleaned }));
                                   }}
                                   className="w-24 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
