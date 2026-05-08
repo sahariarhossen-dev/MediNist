@@ -256,8 +256,9 @@ function extractBrandCandidates(searchMd: string): MedexCandidate[] {
   const seen = new Set<string>();
   const out: MedexCandidate[] = [];
   // Match markdown links [Name](https://medex.com.bd/brands/...) OR [Name](/brands/...)
-  // Allow newlines inside the link text (Spider often emits `[\nName\n](url)`).
-  const re = /\[([\s\S]{1,120}?)\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
+  // Allow newlines inside the link text (Spider often emits `[\nName\n](url)`),
+  // but never `[` / `]` so we don't swallow neighbouring image-link markup.
+  const re = /\[([^\[\]]{1,120})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(searchMd)) !== null) {
     const url = (m[2] || "https://medex.com.bd") + m[3];
