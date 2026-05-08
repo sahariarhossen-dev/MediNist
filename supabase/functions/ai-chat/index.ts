@@ -1043,12 +1043,16 @@ Deno.serve(async (req) => {
           Deno.env.get("SUPABASE_URL")!,
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
-        const medex = await fetchMedexData(candidate, adminClient);
-        if (medex) {
-          medexBlock = "\n\n" + renderMedexBlock(medex);
-          console.log("ai-chat: medex data injected for", medex.brand);
+        const result = await fetchMedexData(candidate, adminClient);
+        if (result.kind === "hit") {
+          medexBlock = "\n\n" + renderMedexBlock(result.data);
+          console.log("ai-chat: medex HIT for", result.data.brand);
+        } else if (result.kind === "ambiguous") {
+          medexBlock = "\n\n" + renderMedexCandidatesBlock(candidate, result.candidates);
+          console.log("ai-chat: medex AMBIGUOUS for", candidate);
         } else {
-          console.log("ai-chat: medex lookup returned nothing for", candidate);
+          medexBlock = "\n\n" + renderMedexMissBlock(candidate);
+          console.log("ai-chat: medex MISS for", candidate);
         }
       }
     } catch (e) {
