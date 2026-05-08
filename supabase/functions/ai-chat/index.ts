@@ -158,10 +158,25 @@ async function spiderScrape(url: string, apiKey: string): Promise<string | null>
 
 function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   if (!md || md.length < 200) return null;
-  // Brand name: usually first H1 or H2.
-  const brandMatch = md.match(/^#{1,2}\s+(.+)$/m);
-  const brand = brandMatch ? brandMatch[1].replace(/\(.+?\)/g, "").trim() : "";
-  if (!brand) return null;
+  // Brand name: MedEx renders it as `#\nFineron Tablet` (hash on its own line)
+  // OR as `# Fineron Tablet` on the same line. Tolerate both shapes, plus a
+  // first-line `<title>`-style fallback.
+  let brand = "";
+  const sameLine = md.match(/^#{1,3}\s+([^\n]{2,120})$/m);
+  if (sameLine) brand = sameLine[1];
+  if (!brand) {
+    const split = md.match(/^#{1,3}\s*\n+([^\n]{2,120})$/m);
+    if (split) brand = split[1];
+  }
+  if (!brand) {
+    // Fallback: first non-image, non-link line near the top.
+    const head = md.split("\n").slice(0, 5).find(
+      (l) => l.trim().length > 2 && !l.startsWith("!") && !l.startsWith("["),
+    );
+    if (head) brand = head;
+  }
+  brand = brand.replace(/\(.+?\)/g, "").replace(/\|.*$/, "").trim();
+  if (!brand) brand = "Unknown brand";
 
   const sectionRe = (label: string) =>
     new RegExp(`#{2,4}\\s*${label}[^\\n]*\\n+([\\s\\S]*?)(?=\\n#{2,4}\\s|\\n\\*\\*|$)`, "i");
@@ -204,6 +219,7 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   }
 
   if (!generic && !indications && !dosage) return null;
+  console.log("medex: parsed brand", brand, "generic=", generic ? "yes" : "no");
 
   return {
     brand,
