@@ -1,67 +1,41 @@
-## Root cause
+## Goal
+Let the inventory "Add Stock" input accept a triple-unit value `Box:Strip:Piece` (e.g. `0:1:0`) in addition to the current single-number behavior. Single number with no colon keeps existing semantics (treated as Boxes for multi-unit products, Pieces for single-unit).
 
-The MedEx pipeline is fully wired (Spider call → search → parse → brand page → inject `<medex_data>`), and `SPIDER_API_KEY` is set. Live testing against Spider for "fineron" returns 2 valid brand links, yet the edge-function log shows `medex: no brand link found for fineron` and the AI falls back to its own (incorrect) knowledge. Three concrete bugs in `supabase/functions/ai-chat/index.ts` are responsible:
+## Files to change
+Only `src/pages/Inventory.tsx`.
 
-1. **`extractBrandCandidates` regex / name handling.** Spider returns link text with embedded newlines:  `[\nFineron 10 mg (Tablet)\n](https://medex.com.bd/brands/33032/...)`. The current code captures the name with the leading `\n`, then `name.split(/\s|\(/)[0]` becomes `""`, so the "exact head match" path can never succeed. In some Spider payload variants the regex also fails outright, producing `candidates.length === 0` → false MISS.
+## Changes
 
-2. **`fetchMedexData` matching is too strict.** When MedEx returns multiple strengths of the same brand (Fineron 10 mg + Fineron 20 mg), both are valid for the brand name "Fineron", but the code marks them ambiguous because uniqueness is required even when all candidates share the same brand head. With bug 1 the head is empty, so it falls through to `miss`.
+### 1. New parser helper (top of file, near other helpers)
+Add a small helper that converts the raw input string into total added pieces using the medicine's `strip_per_pack` and `pcs_per_strip`:
 
-3. **`parseBrandPage` brand extraction.** Brand pages render as `#\nFineron Tablet` (hash on its own line). The regex `/^#{1,2}\s+(.+)$/m` requires `#` followed by space then text on the same line, so it returns `null` and the whole result is downgraded to `miss` even when the page was scraped successfully.
+- If string contains `:` → split into up to 3 segments `[boxes, strips, pcs]`. Missing segments default to 0. Non-numeric/negative → treated as 0.
+  - `addedPieces = boxes * (strip_per_pack||1) * (pcs_per_strip||1) + strips * (pcs_per_strip||1) + pcs`
+- Else (no colon) → fall back to existing logic via `boxesToPieces` for multi-unit, raw number for single-unit (reuse `isSingleUnit`).
 
-Secondary issues:
-- `pickCandidateToken` can pick a non-medicine token first when a sentence has multiple words (e.g. "Fineron er dose koto" → may pick "dose"). It should prefer the longest non-stopword and skip Banglish helper words like `dose`, `kaj`, `khawa`, `mg`, etc.
-- No diagnostic log of how many candidates were extracted, making future failures hard to triage.
+Return `{ addedPieces, isTriple, valid }` so the UI can disable the confirm button when input is empty / parses to 0.
 
-## Changes (single file: `supabase/functions/ai-chat/index.ts`)
+### 2. Update `getCalculatedStock` and `handleConfirmStock` (around lines 226–247)
+Replace the current `Number(unitInputs[med.id])` + `boxesToPieces` math with a call to the new helper. The Supabase update keeps the same shape: `stock_quantity = existing + addedPieces`. No schema change.
 
-### 1. `extractBrandCandidates`
-- After regex match, `trim()` the captured name and collapse internal whitespace before pushing.
-- Add a second-pass scanner for the alternate Spider shape `[ Name ](url)` with a leading newline already stripped, so both serialisations work.
-- Log `medex: candidates extracted` with names + URLs (first 5) for debugging.
+### 3. Update the input UI (around lines 493–512)
+- Change `<Input type="number">` to `type="text"` with `inputMode="numeric"` and `pattern="[0-9:]*"` so the colon is allowed on mobile keyboards.
+- Update `placeholder` to `"B:S:P e.g. 0:1:0"` (kept short to fit the 16-px wide input — widen `w-16` to `w-24` to fit).
+- Keep the small left-side label, but make it dynamic: show `"B:S:P"` when input contains `:`, otherwise the existing `"Box"` / `"Qty"` label, so the user always knows how the number will be interpreted.
+- Add a `title` tooltip on the input: `"Box:Strip:Piece (e.g. 0:1:0 = 1 strip). Single number = Boxes."`
+- Strip any disallowed characters in `onChange` (`value.replace(/[^0-9:]/g, "")`).
+- Disable the confirm button when parsed `addedPieces <= 0`.
 
-### 2. `fetchMedexData` matching strategy
-Replace the current strict logic with:
-- `target = normaliseBrand(userToken)`
-- For each candidate compute `head = normaliseBrand(name.split(/\s|\(/)[0])` after trimming.
-- **Exact head match:** all candidates whose `head === target`. If ≥1, pick the first (shortest/lowest dose, MedEx already returns them in that order). This treats "Fineron 10 mg" + "Fineron 20 mg" as a single confident hit.
-- **Prefix fallback:** if no head matches, take candidates whose `normaliseBrand(name).startsWith(target)`. If exactly one → hit; if >1 → `ambiguous`.
-- **Substring fallback:** else candidates whose `normaliseBrand(name).includes(target)` and `target.length ≥ 5`. Same uniqueness rule.
-- Else → `ambiguous` (top 5) or `miss` (zero).
-
-### 3. `parseBrandPage` brand extraction
-Replace the single regex with a tolerant lookup:
-- Strip image markdown lines first.
-- Find the first `#`, `##`, or `###` heading; the brand name may be on the same line OR the immediately following non-empty line. Trim, drop trailing "Tablet"/"Capsule"/"Syrup" boilerplate, drop parenthetical strength.
-- If still empty, fall back to the `<title>` analogue at the very top of the markdown (first line before the first image).
-- Only return `null` if neither heading nor title yields a non-empty string AND no `Indications` section exists.
-
-### 4. `pickCandidateToken`
-- Extend `STOPWORDS` / `NON_MED_KEYWORDS` with Banglish helper tokens: `dose`, `mg`, `mgr`, `tablet`, `capsule`, `syrup`, `kaj`, `kno`, `kano`, `khawa`, `khabo`, `khabo`, `parsho`, `pasho`, `matra`, `dam`, `price`, `kivabe`, `kibhabe`.
-- Prefer a token that matches `/^[A-Z][a-z]+/` (capitalised brand) first, then the longest remaining token ≥ 4 chars.
-
-### 5. Prompt tightening (rule 21)
-Currently rule 21 still allows the model to "answer from MedEx data only" but does not aggressively forbid internal knowledge when the block is missing for a non-medicine reason. Update:
-- Add a hard line: *"If none of `<medex_data>`, `<medex_candidates>`, `<medex_miss>` is present and the user's message names a medicine, you MUST reply exactly: 'Verified data পাওয়া যায়নি, kindly check spelling from medicine packet.' Do NOT guess generic, indications, dosage, price, or alternatives from internal memory under any circumstance."*
-- Keep existing branches (A/B/C) unchanged.
-
-### 6. Diagnostics
-Add `console.log("medex: lookup", { token, kind, candidates: n })` at the end of `fetchMedexData`, and log brand-page parse outcome with `brand` field, so future failures are visible in `supabase--edge_function_logs`.
+### 4. Live preview row (lines 519–531)
+The existing "pre-stock / Current" row already renders the new total via `getCalculatedStock`, so it automatically reflects the parsed B:S:P value — no change needed beyond wiring the helper.
 
 ## Out of scope
+- The "Add from Catalog" quantity field (line 594) stays single-number for now, since the user's request is specifically about the inventory Add Stock input.
+- No DB migration; `stock_quantity` already stores total pieces.
 
-- No DB changes (cache table unchanged).
-- No frontend changes.
-- No new secrets.
-- Caching behaviour unchanged (24h on hit only).
-
-## Verification
-
-After deploy, send these messages in the AI chat and confirm via edge-function logs + reply:
-
-| Input | Expected log | Expected reply |
-|---|---|---|
-| `Fineron er kaj ki?` | `medex HIT for Fineron Tablet` | 6-section report citing Finerenone, CKD/T2D indications, ৳ 80.00 unit price |
-| `Valmor` | `medex HIT for Valmor` | 6-section report from MedEx |
-| `Valm` | `medex AMBIGUOUS` | Disambiguation question listing brands, no 6-section |
-| `Xyzbrand` | `medex MISS` | "Verified data পাওয়া যায়নি…" line + footer + inventory CTA |
-| `Ajker sale koto?` | no medex log | normal sales answer |
+## Validation steps after implementing
+1. Single-unit medicine: type `5` → adds 5 pcs (unchanged).
+2. Multi-unit medicine (e.g. 10 strips × 10 pcs): type `2` → adds 200 pcs (unchanged "Box" fallback).
+3. Same medicine: type `0:1:0` → adds 10 pcs.
+4. Same medicine: type `1:2:3` → adds 100 + 20 + 3 = 123 pcs.
+5. Type `abc` or empty → confirm button disabled, no DB write.

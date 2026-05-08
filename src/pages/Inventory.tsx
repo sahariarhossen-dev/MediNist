@@ -223,15 +223,34 @@ const Inventory = () => {
     setCatalogQty("");
   };
 
+  const parseStockInput = (raw: string, med: Medicine) => {
+    const value = (raw || "").trim();
+    if (!value) return { addedPieces: 0, isTriple: false };
+    if (value.includes(":")) {
+      const parts = value.split(":").map((p) => {
+        const n = parseInt(p.trim(), 10);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      });
+      const [boxes = 0, strips = 0, pcs = 0] = parts;
+      const spp = med.strip_per_pack || 1;
+      const pps = med.pcs_per_strip || 1;
+      return { addedPieces: boxes * spp * pps + strips * pps + pcs, isTriple: true };
+    }
+    const num = Number(value) || 0;
+    const addedPieces = isSingleUnit(med)
+      ? num
+      : boxesToPieces(num, med.strip_per_pack, med.pcs_per_strip);
+    return { addedPieces, isTriple: false };
+  };
+
   const getCalculatedStock = (med: Medicine) => {
-    const units = Number(unitInputs[med.id] || 0);
-    const addedPieces = isSingleUnit(med) ? units : boxesToPieces(units, med.strip_per_pack, med.pcs_per_strip);
+    const { addedPieces } = parseStockInput(unitInputs[med.id] || "", med);
     return (med.stock_quantity || 0) + addedPieces;
   };
 
   const handleConfirmStock = async (med: Medicine) => {
-    const units = Number(unitInputs[med.id] || 0);
-    if (units <= 0) return;
+    const { addedPieces } = parseStockInput(unitInputs[med.id] || "", med);
+    if (addedPieces <= 0) return;
     setSavingId(med.id);
     const newStock = getCalculatedStock(med);
     const { error } = await supabase.from("medicines").update({ stock_quantity: newStock }).eq("id", med.id);
@@ -490,26 +509,37 @@ const Inventory = () => {
                             )}
                           </div>
                         </div>
-                        {isExpanded ? (
-                          <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{isSingleUnit(med) ? "Qty" : "Box"}</span>
-                            <Input
-                              ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
-                              type="number"
-                              min={0}
-                              placeholder="0"
-                              value={unitInputs[med.id] || ""}
-                              onChange={(e) => setUnitInputs((prev) => ({ ...prev, [med.id]: e.target.value }))}
-                              className="w-16 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
-                            />
-                            <button
-                              onClick={() => handleConfirmStock(med)}
-                              disabled={units <= 0 || savingId === med.id}
-                              className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
-                            >
-                              <Check size={16} />
-                            </button>
-                          </div>
+                         {isExpanded ? (() => {
+                            const rawInput = unitInputs[med.id] || "";
+                            const { addedPieces, isTriple } = parseStockInput(rawInput, med);
+                            const label = isTriple ? "B:S:P" : isSingleUnit(med) ? "Qty" : "Box";
+                            return (
+                              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <span className="text-[10px] text-muted-foreground flex-shrink-0">{label}</span>
+                                <Input
+                                  ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9:]*"
+                                  placeholder="B:S:P e.g. 0:1:0"
+                                  title="Box:Strip:Piece (e.g. 0:1:0 = 1 strip). Single number = Boxes."
+                                  value={rawInput}
+                                  onChange={(e) => {
+                                    const cleaned = e.target.value.replace(/[^0-9:]/g, "");
+                                    setUnitInputs((prev) => ({ ...prev, [med.id]: cleaned }));
+                                  }}
+                                  className="w-24 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
+                                />
+                                <button
+                                  onClick={() => handleConfirmStock(med)}
+                                  disabled={addedPieces <= 0 || savingId === med.id}
+                                  className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
+                                >
+                                  <Check size={16} />
+                                </button>
+                              </div>
+                            );
+                          })()
                         ) : (
                           <div className="flex-shrink-0">
                             <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
