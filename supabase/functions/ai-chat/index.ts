@@ -59,6 +59,9 @@ const STOPWORDS = new Set([
   "dose", "koto", "dosage", "side", "effect", "effects", "what", "is", "about",
   "the", "a", "an", "of", "for", "tell", "me", "please", "to", "and", "ki?",
   "generic", "jeneric", "tablet", "syrup", "capsule",
+  "mg", "mgr", "matra", "dam", "price", "khawa", "khabe", "parsho", "pasho",
+  "kano", "kibabe", "kibvabe", "use", "uses", "indication", "indications",
+  "kothay", "kobe", "kotokhon",
 ]);
 
 // Tokens that signal NON-medicine intents (sales, dues, staff, expenses, inventory ops).
@@ -155,10 +158,25 @@ async function spiderScrape(url: string, apiKey: string): Promise<string | null>
 
 function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   if (!md || md.length < 200) return null;
-  // Brand name: usually first H1 or H2.
-  const brandMatch = md.match(/^#{1,2}\s+(.+)$/m);
-  const brand = brandMatch ? brandMatch[1].replace(/\(.+?\)/g, "").trim() : "";
-  if (!brand) return null;
+  // Brand name: MedEx renders it as `#\nFineron Tablet` (hash on its own line)
+  // OR as `# Fineron Tablet` on the same line. Tolerate both shapes, plus a
+  // first-line `<title>`-style fallback.
+  let brand = "";
+  const sameLine = md.match(/^#{1,3}\s+([^\n]{2,120})$/m);
+  if (sameLine) brand = sameLine[1];
+  if (!brand) {
+    const split = md.match(/^#{1,3}\s*\n+([^\n]{2,120})$/m);
+    if (split) brand = split[1];
+  }
+  if (!brand) {
+    // Fallback: first non-image, non-link line near the top.
+    const head = md.split("\n").slice(0, 5).find(
+      (l) => l.trim().length > 2 && !l.startsWith("!") && !l.startsWith("["),
+    );
+    if (head) brand = head;
+  }
+  brand = brand.replace(/\(.+?\)/g, "").replace(/\|.*$/, "").trim();
+  if (!brand) brand = "Unknown brand";
 
   const sectionRe = (label: string) =>
     new RegExp(`#{2,4}\\s*${label}[^\\n]*\\n+([\\s\\S]*?)(?=\\n#{2,4}\\s|\\n\\*\\*|$)`, "i");
@@ -171,7 +189,12 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
       .slice(0, 800) || null;
   };
 
-  const generic = grab("Generic Name") || grab("Generic");
+  let generic = grab("Generic Name") || grab("Generic");
+  if (!generic) {
+    // MedEx brand pages link the generic name as `[\nFinerenone\n](https://medex.com.bd/generics/...)`.
+    const gMatch = md.match(/\[([^\[\]]{1,80})\]\((?:https?:\/\/medex\.com\.bd)?\/generics\/[^)\s]+\)/i);
+    if (gMatch) generic = gMatch[1].replace(/\s+/g, " ").trim();
+  }
   const indications = grab("Indications") || grab("Indication");
   const dosage = grab("Dosage\\s*&?\\s*Administration") || grab("Dosage") || grab("Administration");
   const side_effects = grab("Side\\s*Effects?");
@@ -201,6 +224,7 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   }
 
   if (!generic && !indications && !dosage) return null;
+  console.log("medex: parsed brand", brand, "generic=", generic ? "yes" : "no");
 
   return {
     brand,
@@ -232,17 +256,20 @@ function extractBrandCandidates(searchMd: string): MedexCandidate[] {
   const seen = new Set<string>();
   const out: MedexCandidate[] = [];
   // Match markdown links [Name](https://medex.com.bd/brands/...) OR [Name](/brands/...)
-  const re = /\[([^\]]{1,80})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
+  // Allow newlines inside the link text (Spider often emits `[\nName\n](url)`),
+  // but never `[` / `]` so we don't swallow neighbouring image-link markup.
+  const re = /\[([^\[\]]{1,120})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(searchMd)) !== null) {
     const url = (m[2] || "https://medex.com.bd") + m[3];
     if (seen.has(url)) continue;
     seen.add(url);
-    const rawName = m[1].replace(/[*_`]/g, "").trim();
+    const rawName = m[1].replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
     if (!rawName || rawName.length < 2) continue;
     out.push({ name: rawName, url });
     if (out.length >= 8) break;
   }
+  console.log("medex: candidates extracted", out.slice(0, 5).map((c) => c.name).join(" | "));
   return out;
 }
 
@@ -288,18 +315,26 @@ async function fetchMedexData(
     return { kind: "miss" };
   }
 
-  // Match strategy: exact normalised match → unique substring match → ambiguous.
+  // Match strategy:
+  //  1. Exact head match (Brand head === user token). If 1+ candidates share the
+  //     same head as the user query, treat them as the same brand (different
+  //     strengths) and pick the first — MedEx returns lowest dose first.
+  //  2. Unique prefix match.
+  //  3. Unique substring match (only when target ≥ 5 chars).
+  //  4. Otherwise → ambiguous (top 5).
   const target = normaliseBrand(name);
-  const baseMatches = candidates.filter((c) => {
-    const head = c.name.split(/\s|\(/)[0];
-    return normaliseBrand(head) === target;
-  });
+  const headOf = (c: MedexCandidate) => normaliseBrand(c.name.split(/\s|\(/)[0] || "");
+  const headMatches = candidates.filter((c) => headOf(c) === target);
   let chosen: MedexCandidate | null = null;
-  if (baseMatches.length === 1) {
-    chosen = baseMatches[0];
-  } else if (baseMatches.length === 0) {
-    const subs = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
-    if (subs.length === 1) chosen = subs[0];
+  if (headMatches.length >= 1) {
+    chosen = headMatches[0];
+  } else {
+    const prefix = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
+    if (prefix.length === 1) chosen = prefix[0];
+    else if (prefix.length === 0 && target.length >= 5) {
+      const subs = candidates.filter((c) => normaliseBrand(c.name).includes(target));
+      if (subs.length === 1) chosen = subs[0];
+    }
   }
 
   if (!chosen) {
@@ -307,6 +342,7 @@ async function fetchMedexData(
     console.log("medex: ambiguous candidates", top.map((c) => c.name).join(" | "));
     return { kind: "ambiguous", candidates: top };
   }
+  console.log("medex: chose", chosen.name, "for token", name);
 
   // Step 2: scrape chosen brand page.
   const brandMd = await spiderScrape(chosen.url, apiKey);
@@ -481,6 +517,7 @@ Shop: ${shopName}
       <medex_candidates>  → ambiguous brand (ask the user which one)
       <medex_miss>  → MedEx returned no data (say "verified data not found")
     You are STRICTLY FORBIDDEN from using internal pharmacological knowledge for generic, indications, dosage, side effects, contraindications, price, or alternatives. There is NO internal-knowledge fallback. If none of the three blocks is present, do NOT volunteer any medicine info.
+    HARD FALLBACK: If the user clearly named a medicine but NONE of the three blocks is present in this prompt, reply EXACTLY: "Verified data পাওয়া যায়নি — kindly check spelling from the medicine packet." (translate to user's language) and STOP. Never guess generic / indications / dosage / price / alternatives from your own memory under any circumstance.
     The first reply MUST NOT mention shop stock, prices-from-inventory, or "out of stock" — inventory is gated behind user consent on the NEXT turn (rule 22).
 
     (A) When <medex_data> is present → produce this 6-section report from those fields ONLY (translate labels to user's language; mobile-friendly bold headers + bullets):

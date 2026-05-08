@@ -1,64 +1,67 @@
-## Goal
+## Root cause
 
-Tighten the medicine-lookup pipeline so MedEx is the sole source of truth for every medicine query, with zero internal-knowledge fallback and explicit disambiguation when the user's brand doesn't match exactly.
+The MedEx pipeline is fully wired (Spider call → search → parse → brand page → inject `<medex_data>`), and `SPIDER_API_KEY` is set. Live testing against Spider for "fineron" returns 2 valid brand links, yet the edge-function log shows `medex: no brand link found for fineron` and the AI falls back to its own (incorrect) knowledge. Three concrete bugs in `supabase/functions/ai-chat/index.ts` are responsible:
 
-## Gaps vs. the new directive
+1. **`extractBrandCandidates` regex / name handling.** Spider returns link text with embedded newlines:  `[\nFineron 10 mg (Tablet)\n](https://medex.com.bd/brands/33032/...)`. The current code captures the name with the leading `\n`, then `name.split(/\s|\(/)[0]` becomes `""`, so the "exact head match" path can never succeed. In some Spider payload variants the regex also fails outright, producing `candidates.length === 0` → false MISS.
 
-| New rule | Current behaviour | Fix |
-|---|---|---|
-| Trigger MedEx on **every** medicine mention (even bare "Valmor?") | Only fires when a Banglish/EN intent phrase is present (`er kaj ki`, `dose koto`, …) | Broaden `detectMedicineQuery` to also fire on a single capitalised/unknown token that isn't a stopword and isn't an inventory/sales/staff keyword |
-| **Exact brand match** required, else ask "Did you mean A or B?" | First brand link is silently used; no disambiguation | Search step returns up to 5 brand links + names → if none equals user's token (case-insensitive), inject a `<medex_candidates>` block listing them so the model asks the disambiguation question |
-| If MedEx returns nothing → reply "Verified data not found…" | Falls back to internal pharmacological knowledge (verified-mapping list in rule 21) | Drop the internal-knowledge fallback path. When no `<medex_data>` and intent was detected, inject a `<medex_miss>` block instructing the model to output the exact "Verified data not found" line + footer + inventory CTA |
-| Pricing & alternatives from **MedEx only** | Rule 21 says "popular brand names from your knowledge" for alternatives | Rewrite rule 21 section 5 to use `Same-generic alternative brands` from the `<medex_data>` block only; if empty, say "(কোনো সমজেনেরিক বিকল্প তালিকাভুক্ত নেই)" |
-| Inventory CTA wording | "...available in our shop's inventory?" | Already matches — keep |
+2. **`fetchMedexData` matching is too strict.** When MedEx returns multiple strengths of the same brand (Fineron 10 mg + Fineron 20 mg), both are valid for the brand name "Fineron", but the code marks them ambiguous because uniqueness is required even when all candidates share the same brand head. With bug 1 the head is empty, so it falls through to `miss`.
+
+3. **`parseBrandPage` brand extraction.** Brand pages render as `#\nFineron Tablet` (hash on its own line). The regex `/^#{1,2}\s+(.+)$/m` requires `#` followed by space then text on the same line, so it returns `null` and the whole result is downgraded to `miss` even when the page was scraped successfully.
+
+Secondary issues:
+- `pickCandidateToken` can pick a non-medicine token first when a sentence has multiple words (e.g. "Fineron er dose koto" → may pick "dose"). It should prefer the longest non-stopword and skip Banglish helper words like `dose`, `kaj`, `khawa`, `mg`, etc.
+- No diagnostic log of how many candidates were extracted, making future failures hard to triage.
 
 ## Changes (single file: `supabase/functions/ai-chat/index.ts`)
 
-### 1. `detectMedicineQuery` — broaden intent
-- Keep existing intent regexes as a fast path.
-- Add a fallback: if the message is short (≤ 6 tokens) and contains a token that (a) is ≥ 4 chars, (b) isn't in `STOPWORDS`, (c) isn't in a new `NON_MED_KEYWORDS` set (`sale`, `due`, `stock`, `customer`, `staff`, `expense`, `profit`, `cash`, `bikri`, `kharch`, etc.), treat that token as a medicine candidate.
-- Still skips for clearly non-medicine numeric/sales prompts.
+### 1. `extractBrandCandidates`
+- After regex match, `trim()` the captured name and collapse internal whitespace before pushing.
+- Add a second-pass scanner for the alternate Spider shape `[ Name ](url)` with a leading newline already stripped, so both serialisations work.
+- Log `medex: candidates extracted` with names + URLs (first 5) for debugging.
 
-### 2. `fetchMedexData` — return candidates on miss
-- Change return type to `{ kind: "hit"; data: MedexData } | { kind: "ambiguous"; candidates: { name: string; url: string }[] } | { kind: "miss" }`.
-- After scraping the search page, parse **all** `https://medex.com.bd/brands/...` links + their visible link text (top 5).
-- If exactly one candidate's name (normalised) equals the user token → scrape that brand page → `hit`.
-- If the user token matches one candidate as a substring uniquely → use it.
-- If multiple candidates and none is an exact match → return `ambiguous` (no brand-page scrape, saves a Spider call).
-- If zero candidates → `miss`.
-- Cache only `hit` results (24 h, unchanged).
+### 2. `fetchMedexData` matching strategy
+Replace the current strict logic with:
+- `target = normaliseBrand(userToken)`
+- For each candidate compute `head = normaliseBrand(name.split(/\s|\(/)[0])` after trimming.
+- **Exact head match:** all candidates whose `head === target`. If ≥1, pick the first (shortest/lowest dose, MedEx already returns them in that order). This treats "Fineron 10 mg" + "Fineron 20 mg" as a single confident hit.
+- **Prefix fallback:** if no head matches, take candidates whose `normaliseBrand(name).startsWith(target)`. If exactly one → hit; if >1 → `ambiguous`.
+- **Substring fallback:** else candidates whose `normaliseBrand(name).includes(target)` and `target.length ≥ 5`. Same uniqueness rule.
+- Else → `ambiguous` (top 5) or `miss` (zero).
 
-### 3. New render helpers
-- `renderMedexCandidatesBlock(candidates)` → `<medex_candidates>` block instructing: "Ask the user: 'Did you mean **A**, **B**, or **C**?' Do NOT proceed with sections 1–6 until they confirm."
-- `renderMedexMissBlock(name)` → `<medex_miss>` block instructing: output exactly the "Verified data not found for this name. Please check the spelling from the medicine packet." line in the user's language, then the doctor footer + inventory CTA. No 6-section report.
+### 3. `parseBrandPage` brand extraction
+Replace the single regex with a tolerant lookup:
+- Strip image markdown lines first.
+- Find the first `#`, `##`, or `###` heading; the brand name may be on the same line OR the immediately following non-empty line. Trim, drop trailing "Tablet"/"Capsule"/"Syrup" boilerplate, drop parenthetical strength.
+- If still empty, fall back to the `<title>` analogue at the very top of the markdown (first line before the first image).
+- Only return `null` if neither heading nor title yields a non-empty string AND no `Indications` section exists.
 
-### 4. Request handler (around line 914)
-- After `detectMedicineQuery`, branch on the new union return:
-  - `hit` → inject `medex_data` block (as today)
-  - `ambiguous` → inject `medex_candidates` block
-  - `miss` → inject `medex_miss` block
+### 4. `pickCandidateToken`
+- Extend `STOPWORDS` / `NON_MED_KEYWORDS` with Banglish helper tokens: `dose`, `mg`, `mgr`, `tablet`, `capsule`, `syrup`, `kaj`, `kno`, `kano`, `khawa`, `khabo`, `khabo`, `parsho`, `pasho`, `matra`, `dam`, `price`, `kivabe`, `kibhabe`.
+- Prefer a token that matches `/^[A-Z][a-z]+/` (capitalised brand) first, then the longest remaining token ≥ 4 chars.
 
-### 5. System prompt rule 21 — rewrite
-- Remove the Bangladeshi brand→generic mapping list (no internal-knowledge path remains).
-- New rule 21 text:
-  - "Medicine intent ⇒ this prompt will contain exactly one of `<medex_data>`, `<medex_candidates>`, or `<medex_miss>`. You MUST honour whichever block is present and never use internal pharmacological knowledge."
-  - `<medex_data>` → output 6-section report from those fields ONLY. Section 5 alternatives = the `Same-generic alternative brands` field verbatim (top 3); price = the `Price` field verbatim (mark "আনুমানিক" only if "(not listed…)").
-  - `<medex_candidates>` → respond with the disambiguation question only, listing brands as a bulleted choice. No 6-section report. No footer yet.
-  - `<medex_miss>` → respond with the "Verified data not found…" line in the user's language, then the doctor footer, then the inventory CTA.
-- Keep the inventory CTA wording aligned with the user's directive: "Would you like to check if this is in our shop's inventory?" (BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?").
-- Keep rule 22 (consent-gated inventory) and the doctor footer unchanged.
+### 5. Prompt tightening (rule 21)
+Currently rule 21 still allows the model to "answer from MedEx data only" but does not aggressively forbid internal knowledge when the block is missing for a non-medicine reason. Update:
+- Add a hard line: *"If none of `<medex_data>`, `<medex_candidates>`, `<medex_miss>` is present and the user's message names a medicine, you MUST reply exactly: 'Verified data পাওয়া যায়নি, kindly check spelling from medicine packet.' Do NOT guess generic, indications, dosage, price, or alternatives from internal memory under any circumstance."*
+- Keep existing branches (A/B/C) unchanged.
+
+### 6. Diagnostics
+Add `console.log("medex: lookup", { token, kind, candidates: n })` at the end of `fetchMedexData`, and log brand-page parse outcome with `brand` field, so future failures are visible in `supabase--edge_function_logs`.
 
 ## Out of scope
 
-- No DB schema changes (cache table already exists).
+- No DB changes (cache table unchanged).
 - No frontend changes.
-- No new secrets (`SPIDER_API_KEY` already configured).
+- No new secrets.
+- Caching behaviour unchanged (24h on hit only).
 
-## Verification scenarios
+## Verification
 
-- **"Valmor"** alone → search returns Valmor + Valmore → exact match Valmor → 6-section reply from MedEx.
-- **"Valmor er kaj ki?"** → same as above (intent regex still matches).
-- **"Valm"** → search returns Valmor + Valmore + Valmac → no exact match → "Did you mean Valmor, Valmore, or Valmac?" question; no 6-section.
-- **"Acemox"** → MedEx returns Acetazolamide page → correct generic, even though internal knowledge previously had a manual mapping — the mapping list is gone, so MedEx is the only source.
-- **"Xyzbrand"** → search returns 0 brand links → `<medex_miss>` → "Verified data not found…" + footer + inventory CTA.
-- **"27-4 er sale koto?"** → no medicine intent, `NON_MED_KEYWORDS` blocks "sale" → no Spider call, normal sales flow.
+After deploy, send these messages in the AI chat and confirm via edge-function logs + reply:
+
+| Input | Expected log | Expected reply |
+|---|---|---|
+| `Fineron er kaj ki?` | `medex HIT for Fineron Tablet` | 6-section report citing Finerenone, CKD/T2D indications, ৳ 80.00 unit price |
+| `Valmor` | `medex HIT for Valmor` | 6-section report from MedEx |
+| `Valm` | `medex AMBIGUOUS` | Disambiguation question listing brands, no 6-section |
+| `Xyzbrand` | `medex MISS` | "Verified data পাওয়া যায়নি…" line + footer + inventory CTA |
+| `Ajker sale koto?` | no medex log | normal sales answer |
