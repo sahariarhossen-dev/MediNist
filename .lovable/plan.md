@@ -1,73 +1,64 @@
 ## Goal
 
-Make medicine queries fetch real data from medex.com.bd live (via Spider.cloud), then summarize it in the existing 6-section MediNist Standard Format. If the scrape fails or returns nothing, fall back to internal pharmacological knowledge with the existing "could not find verified data" disclaimer. Inventory check stays consent-gated on the next turn.
+Tighten the medicine-lookup pipeline so MedEx is the sole source of truth for every medicine query, with zero internal-knowledge fallback and explicit disambiguation when the user's brand doesn't match exactly.
 
-## Required secret
+## Gaps vs. the new directive
 
-- `SPIDER_API_KEY` — Spider.cloud API key. I will request it via the secrets tool before writing code; the function will not deploy any scrape calls until it is set.
+| New rule | Current behaviour | Fix |
+|---|---|---|
+| Trigger MedEx on **every** medicine mention (even bare "Valmor?") | Only fires when a Banglish/EN intent phrase is present (`er kaj ki`, `dose koto`, …) | Broaden `detectMedicineQuery` to also fire on a single capitalised/unknown token that isn't a stopword and isn't an inventory/sales/staff keyword |
+| **Exact brand match** required, else ask "Did you mean A or B?" | First brand link is silently used; no disambiguation | Search step returns up to 5 brand links + names → if none equals user's token (case-insensitive), inject a `<medex_candidates>` block listing them so the model asks the disambiguation question |
+| If MedEx returns nothing → reply "Verified data not found…" | Falls back to internal pharmacological knowledge (verified-mapping list in rule 21) | Drop the internal-knowledge fallback path. When no `<medex_data>` and intent was detected, inject a `<medex_miss>` block instructing the model to output the exact "Verified data not found" line + footer + inventory CTA |
+| Pricing & alternatives from **MedEx only** | Rule 21 says "popular brand names from your knowledge" for alternatives | Rewrite rule 21 section 5 to use `Same-generic alternative brands` from the `<medex_data>` block only; if empty, say "(কোনো সমজেনেরিক বিকল্প তালিকাভুক্ত নেই)" |
+| Inventory CTA wording | "...available in our shop's inventory?" | Already matches — keep |
 
-## Changes
+## Changes (single file: `supabase/functions/ai-chat/index.ts`)
 
-### 1. New helper inside `supabase/functions/ai-chat/index.ts`
+### 1. `detectMedicineQuery` — broaden intent
+- Keep existing intent regexes as a fast path.
+- Add a fallback: if the message is short (≤ 6 tokens) and contains a token that (a) is ≥ 4 chars, (b) isn't in `STOPWORDS`, (c) isn't in a new `NON_MED_KEYWORDS` set (`sale`, `due`, `stock`, `customer`, `staff`, `expense`, `profit`, `cash`, `bikri`, `kharch`, etc.), treat that token as a medicine candidate.
+- Still skips for clearly non-medicine numeric/sales prompts.
 
-Add `fetchMedexData(name: string)`:
-- Detects "medicine intent" in the latest user turn with a small regex/keyword list (English + Banglish: `er kaj ki`, `kno khai`, `dose`, `kibhabe khabo`, `about <X>`, `what is <X>`, `side effect`, etc.) and extracts the candidate brand token (last capitalised word OR token immediately before the trigger phrase).
-- Calls Spider.cloud `POST https://api.spider.cloud/crawl` with:
-  - `url`: `https://medex.com.bd/search?search=<name>`
-  - `limit: 2`, `return_format: "markdown"`, `request: "smart_mode"`, `country_code: "bd"`
-  - First page = search results → extract first `/brands/<id>/...` link from the markdown. Then second crawl call on that brand URL.
-- Parses the brand-page markdown to pull: `brand`, `generic`, `indication`, `dose & administration`, `side effects`, `contraindications`, `unit price`, and "Brands of same generic" list (top 3 by price/popularity).
-- Returns a typed object `{ source: "medex", brand, generic, indications, dosage, timing?, price, alternatives[], warnings }` or `null` on miss.
-- Caches results for 24h in a new lightweight table `medex_cache (name_key text primary key, payload jsonb, fetched_at timestamptz)` so repeat lookups are free. Created via migration.
+### 2. `fetchMedexData` — return candidates on miss
+- Change return type to `{ kind: "hit"; data: MedexData } | { kind: "ambiguous"; candidates: { name: string; url: string }[] } | { kind: "miss" }`.
+- After scraping the search page, parse **all** `https://medex.com.bd/brands/...` links + their visible link text (top 5).
+- If exactly one candidate's name (normalised) equals the user token → scrape that brand page → `hit`.
+- If the user token matches one candidate as a substring uniquely → use it.
+- If multiple candidates and none is an exact match → return `ambiguous` (no brand-page scrape, saves a Spider call).
+- If zero candidates → `miss`.
+- Cache only `hit` results (24 h, unchanged).
 
-### 2. Wire it into the chat handler
+### 3. New render helpers
+- `renderMedexCandidatesBlock(candidates)` → `<medex_candidates>` block instructing: "Ask the user: 'Did you mean **A**, **B**, or **C**?' Do NOT proceed with sections 1–6 until they confirm."
+- `renderMedexMissBlock(name)` → `<medex_miss>` block instructing: output exactly the "Verified data not found for this name. Please check the spelling from the medicine packet." line in the user's language, then the doctor footer + inventory CTA. No 6-section report.
 
-Before composing the LLM call:
-- If medicine-intent detected on the latest user message, call `fetchMedexData`.
-- If hit → inject a fenced `MEDEX_DATA` block into the system prompt right under the LIVE PHARMACY DATA block, containing the parsed JSON. Add a new system rule (rule 24): "When a `MEDEX_DATA` block is present, you MUST build the 6-section reply using ONLY those fields. Do NOT use internal knowledge for generic/indication/dose. Mark price as 'আনুমানিক' if missing."
-- If miss → no MEDEX_DATA block; existing rule 21 fallback (`could not find verified data` if uncertain, otherwise internal-knowledge 6-section) takes over.
+### 4. Request handler (around line 914)
+- After `detectMedicineQuery`, branch on the new union return:
+  - `hit` → inject `medex_data` block (as today)
+  - `ambiguous` → inject `medex_candidates` block
+  - `miss` → inject `medex_miss` block
 
-Inventory CTA (rule 22) and doctor footer remain unchanged.
-
-### 3. Edit rule 21 in the system prompt
-
-- Remove the "all medical info comes from your internal pharmacological knowledge" sentence.
-- Replace with: "When a `MEDEX_DATA` block is present, treat it as the source of truth and cite nothing else. When it is absent, you may use internal pharmacological knowledge, and if not 100% certain, output the verified-data-not-found disclaimer."
-- Keep the verified brand→generic mapping list as a safety net for the no-MEDEX_DATA path.
-
-### 4. New migration
-
-```sql
-create table public.medex_cache (
-  name_key text primary key,
-  payload jsonb not null,
-  fetched_at timestamptz not null default now()
-);
-alter table public.medex_cache enable row level security;
--- Only the edge function (service role) reads/writes; no user-facing policies needed.
-```
-
-### 5. No frontend changes
-
-`ChatMessage`, `AIAssistant`, and the DB schema for chat are untouched. Inventory shop name continues to use the logged-in pharmacy (no hardcoded "Naseer Medical Hall").
-
-## Technical details
-
-- Spider.cloud chosen over direct fetch because medex.com.bd uses Cloudflare + dynamic content; Spider's `smart_mode` handles JS rendering and returns clean markdown.
-- Two Spider calls per uncached query (~1.5–3s total). Cache makes subsequent same-medicine lookups instant.
-- Robust parser uses simple regex on markdown headings (`### Generic Name`, `### Dosage & Administration`, etc. — MedEx is consistent). On parse failure, returns `null` and the AI falls back gracefully.
-- Cost control: only crawl when medicine intent is detected — non-medicine prompts (sales, dues, stock numerics) skip Spider entirely.
-
-## Verification scenarios
-
-- "Napa er kaj ki?" → Spider hits MedEx → 6-section reply with real Square Pharma data, real ৳ price, real same-generic alternatives from MedEx → CTA → footer. Cached for 24h.
-- "Acemox kno khai?" → MedEx returns Acetazolamide page → correct glaucoma/altitude info, NOT amoxicillin.
-- "Xyzbrand er kaj ki?" → Spider returns 0 brand links → fallback → "could not find verified data" disclaimer + footer + CTA.
-- Spider down / no `SPIDER_API_KEY` → silent fallback to internal-knowledge path; user still gets a useful reply.
-- "27-4 er sale koto?" → no medicine intent → no Spider call → unchanged behaviour.
+### 5. System prompt rule 21 — rewrite
+- Remove the Bangladeshi brand→generic mapping list (no internal-knowledge path remains).
+- New rule 21 text:
+  - "Medicine intent ⇒ this prompt will contain exactly one of `<medex_data>`, `<medex_candidates>`, or `<medex_miss>`. You MUST honour whichever block is present and never use internal pharmacological knowledge."
+  - `<medex_data>` → output 6-section report from those fields ONLY. Section 5 alternatives = the `Same-generic alternative brands` field verbatim (top 3); price = the `Price` field verbatim (mark "আনুমানিক" only if "(not listed…)").
+  - `<medex_candidates>` → respond with the disambiguation question only, listing brands as a bulleted choice. No 6-section report. No footer yet.
+  - `<medex_miss>` → respond with the "Verified data not found…" line in the user's language, then the doctor footer, then the inventory CTA.
+- Keep the inventory CTA wording aligned with the user's directive: "Would you like to check if this is in our shop's inventory?" (BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?").
+- Keep rule 22 (consent-gated inventory) and the doctor footer unchanged.
 
 ## Out of scope
 
-- Frontend UI changes.
-- Schema additions beyond `medex_cache`.
-- Replacing DeepSeek / Lovable AI.
+- No DB schema changes (cache table already exists).
+- No frontend changes.
+- No new secrets (`SPIDER_API_KEY` already configured).
+
+## Verification scenarios
+
+- **"Valmor"** alone → search returns Valmor + Valmore → exact match Valmor → 6-section reply from MedEx.
+- **"Valmor er kaj ki?"** → same as above (intent regex still matches).
+- **"Valm"** → search returns Valmor + Valmore + Valmac → no exact match → "Did you mean Valmor, Valmore, or Valmac?" question; no 6-section.
+- **"Acemox"** → MedEx returns Acetazolamide page → correct generic, even though internal knowledge previously had a manual mapping — the mapping list is gone, so MedEx is the only source.
+- **"Xyzbrand"** → search returns 0 brand links → `<medex_miss>` → "Verified data not found…" + footer + inventory CTA.
+- **"27-4 er sale koto?"** → no medicine intent, `NON_MED_KEYWORDS` blocks "sale" → no Spider call, normal sales flow.
