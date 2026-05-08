@@ -192,7 +192,7 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   let generic = grab("Generic Name") || grab("Generic");
   if (!generic) {
     // MedEx brand pages link the generic name as `[\nFinerenone\n](https://medex.com.bd/generics/...)`.
-    const gMatch = md.match(/\[([\s\S]{1,80}?)\]\((?:https?:\/\/medex\.com\.bd)?\/generics\/[^)\s]+\)/i);
+    const gMatch = md.match(/\[([^\[\]]{1,80})\]\((?:https?:\/\/medex\.com\.bd)?\/generics\/[^)\s]+\)/i);
     if (gMatch) generic = gMatch[1].replace(/\s+/g, " ").trim();
   }
   const indications = grab("Indications") || grab("Indication");
