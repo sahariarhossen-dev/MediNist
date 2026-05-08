@@ -189,7 +189,12 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
       .slice(0, 800) || null;
   };
 
-  const generic = grab("Generic Name") || grab("Generic");
+  let generic = grab("Generic Name") || grab("Generic");
+  if (!generic) {
+    // MedEx brand pages link the generic name as `[\nFinerenone\n](https://medex.com.bd/generics/...)`.
+    const gMatch = md.match(/\[([\s\S]{1,80}?)\]\((?:https?:\/\/medex\.com\.bd)?\/generics\/[^)\s]+\)/i);
+    if (gMatch) generic = gMatch[1].replace(/\s+/g, " ").trim();
+  }
   const indications = grab("Indications") || grab("Indication");
   const dosage = grab("Dosage\\s*&?\\s*Administration") || grab("Dosage") || grab("Administration");
   const side_effects = grab("Side\\s*Effects?");
