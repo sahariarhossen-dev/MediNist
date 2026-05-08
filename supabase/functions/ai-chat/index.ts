@@ -61,18 +61,60 @@ const STOPWORDS = new Set([
   "generic", "jeneric", "tablet", "syrup", "capsule",
 ]);
 
+// Tokens that signal NON-medicine intents (sales, dues, staff, expenses, inventory ops).
+// If the message contains any of these, do NOT treat it as a medicine query.
+const NON_MED_KEYWORDS = new Set([
+  "sale", "sales", "bikri", "revenue", "profit", "loss", "margin",
+  "due", "dues", "baki", "bokeya", "borrow",
+  "stock", "inventory", "low", "expire", "expiry", "expired", "meyad",
+  "customer", "customers", "kheta", "ghorek",
+  "staff", "salesman", "manager", "employee", "karmochari",
+  "expense", "expenses", "kharch", "khoroch", "spending", "supplier",
+  "cash", "online", "bkash", "nagad", "rocket",
+  "today", "ajker", "aj", "gotokal", "yesterday", "month", "mash", "sapt",
+  "rack", "shelf", "location",
+  "salary", "betan", "advance",
+  "hi", "hello", "salam", "assalamu", "alaikum", "thanks", "dhonnobad",
+]);
+
 function detectMedicineQuery(text: string): string | null {
   if (!text) return null;
   const hasIntent = MEDICINE_INTENT_PATTERNS.some((re) => re.test(text));
-  if (!hasIntent) return null;
-  // Strip punctuation, find tokens that aren't stopwords. Pick the longest as the candidate.
-  const tokens = text
+  // Tokenise.
+  const rawTokens = text
     .replace(/[?,.!।]/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 3 && !STOPWORDS.has(t.toLowerCase()) && !/^\d+$/.test(t));
+    .filter(Boolean);
+  if (rawTokens.length === 0) return null;
+
+  // If any non-medicine keyword is present, this is NOT a medicine query
+  // (covers "ajker sale koto?", "kon stock e kom?", etc.).
+  const lowerSet = new Set(rawTokens.map((t) => t.toLowerCase()));
+  for (const kw of NON_MED_KEYWORDS) {
+    if (lowerSet.has(kw)) return hasIntent ? pickCandidateToken(rawTokens) : null;
+  }
+
+  // Fast path: explicit medicine intent phrase present.
+  if (hasIntent) return pickCandidateToken(rawTokens);
+
+  // Fallback: short message (≤ 6 tokens) with at least one plausible brand token.
+  if (rawTokens.length <= 6) {
+    const candidate = pickCandidateToken(rawTokens);
+    if (candidate && candidate.length >= 4) return candidate;
+  }
+  return null;
+}
+
+function pickCandidateToken(rawTokens: string[]): string | null {
+  const tokens = rawTokens.filter(
+    (t) =>
+      t.length >= 3 &&
+      !STOPWORDS.has(t.toLowerCase()) &&
+      !NON_MED_KEYWORDS.has(t.toLowerCase()) &&
+      !/^\d+$/.test(t),
+  );
   if (tokens.length === 0) return null;
-  // Prefer a capitalised English token; otherwise the longest token.
   const cap = tokens.find((t) => /^[A-Z][a-zA-Z0-9-]+$/.test(t));
   return (cap ?? tokens.sort((a, b) => b.length - a.length)[0]).slice(0, 60);
 }
