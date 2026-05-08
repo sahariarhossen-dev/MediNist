@@ -909,7 +909,31 @@ Deno.serve(async (req) => {
     });
 
     const context = await buildPharmacyContext(supabase, profile.pharmacy_id, role, userData.user.id);
-    const systemPrompt = `${SYSTEM_BASE}\n\n${securityBlock}\n\n${context}`;
+
+    // Live MedEx lookup for the latest user turn — only when medicine intent detected.
+    let medexBlock = "";
+    try {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      const candidate = lastUser ? detectMedicineQuery(lastUser.content) : null;
+      if (candidate) {
+        console.log("ai-chat: medicine intent detected, candidate=", candidate);
+        const adminClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const medex = await fetchMedexData(candidate, adminClient);
+        if (medex) {
+          medexBlock = "\n\n" + renderMedexBlock(medex);
+          console.log("ai-chat: medex data injected for", medex.brand);
+        } else {
+          console.log("ai-chat: medex lookup returned nothing for", candidate);
+        }
+      }
+    } catch (e) {
+      console.warn("ai-chat: medex pipeline failed", safeErrorMessage(e));
+    }
+
+    const systemPrompt = `${SYSTEM_BASE}\n\n${securityBlock}\n\n${context}${medexBlock}`;
 
     const openAiMessages = [
       { role: "system", content: systemPrompt },
