@@ -10,10 +10,258 @@ const SYSTEM_BASE = `You are an expert Bangladeshi Pharmacy Assistant for MediNi
 const DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_TIMEOUT_MS = 30000;
+const SPIDER_URL = "https://api.spider.cloud/crawl";
+const SPIDER_TIMEOUT_MS = 12000;
+const MEDEX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+}
+
+// =============== MedEx live lookup ===============
+
+interface MedexData {
+  brand: string;
+  generic: string | null;
+  indications: string | null;
+  dosage: string | null;
+  side_effects: string | null;
+  contraindications: string | null;
+  price: string | null;
+  alternatives: string[];
+  source_url: string;
+}
+
+const MEDICINE_INTENT_PATTERNS: RegExp[] = [
+  /\ber\s+kaj\s+ki\b/i,
+  /\bkaj\s+ki\b/i,
+  /\bkno\s+khai\b/i,
+  /\bkeno\s+khai\b/i,
+  /\bkibhabe\s+khabo\b/i,
+  /\bkivabe\s+khabo\b/i,
+  /\bdose\s+koto\b/i,
+  /\bdosage\b/i,
+  /\bside\s+effect/i,
+  /\bwhat\s+is\s+\w+/i,
+  /\babout\s+\w+/i,
+  /\bjeneric\b/i,
+  /\bgeneric\b/i,
+  /কাজ\s*কি/,
+  /কেন\s*খা/,
+  /কিভাবে\s*খা/,
+  /মাত্রা/,
+  /পার্শ্ব/,
+];
+
+const STOPWORDS = new Set([
+  "er", "kaj", "ki", "kno", "keno", "khai", "kibhabe", "kivabe", "khabo",
+  "dose", "koto", "dosage", "side", "effect", "effects", "what", "is", "about",
+  "the", "a", "an", "of", "for", "tell", "me", "please", "to", "and", "ki?",
+  "generic", "jeneric", "tablet", "syrup", "capsule",
+]);
+
+function detectMedicineQuery(text: string): string | null {
+  if (!text) return null;
+  const hasIntent = MEDICINE_INTENT_PATTERNS.some((re) => re.test(text));
+  if (!hasIntent) return null;
+  // Strip punctuation, find tokens that aren't stopwords. Pick the longest as the candidate.
+  const tokens = text
+    .replace(/[?,.!।]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t.toLowerCase()) && !/^\d+$/.test(t));
+  if (tokens.length === 0) return null;
+  // Prefer a capitalised English token; otherwise the longest token.
+  const cap = tokens.find((t) => /^[A-Z][a-zA-Z0-9-]+$/.test(t));
+  return (cap ?? tokens.sort((a, b) => b.length - a.length)[0]).slice(0, 60);
+}
+
+async function spiderScrape(url: string, apiKey: string): Promise<string | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), SPIDER_TIMEOUT_MS);
+    const res = await fetch(SPIDER_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        url,
+        limit: 1,
+        return_format: "markdown",
+        request: "smart_mode",
+        country_code: "bd",
+      }),
+    });
+    clearTimeout(t);
+    if (!res.ok) {
+      console.warn("spider: non-OK status", res.status, (await res.text()).slice(0, 200));
+      return null;
+    }
+    const data = await res.json();
+    const arr = Array.isArray(data) ? data : (data?.content ? [data] : []);
+    const first = arr[0];
+    return first?.content || first?.markdown || null;
+  } catch (e) {
+    console.warn("spider: fetch failed", safeErrorMessage(e));
+    return null;
+  }
+}
+
+function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
+  if (!md || md.length < 200) return null;
+  // Brand name: usually first H1 or H2.
+  const brandMatch = md.match(/^#{1,2}\s+(.+)$/m);
+  const brand = brandMatch ? brandMatch[1].replace(/\(.+?\)/g, "").trim() : "";
+  if (!brand) return null;
+
+  const sectionRe = (label: string) =>
+    new RegExp(`#{2,4}\\s*${label}[^\\n]*\\n+([\\s\\S]*?)(?=\\n#{2,4}\\s|\\n\\*\\*|$)`, "i");
+  const grab = (label: string): string | null => {
+    const m = md.match(sectionRe(label));
+    if (!m) return null;
+    return m[1]
+      .replace(/\n{2,}/g, "\n")
+      .trim()
+      .slice(0, 800) || null;
+  };
+
+  const generic = grab("Generic Name") || grab("Generic");
+  const indications = grab("Indications") || grab("Indication");
+  const dosage = grab("Dosage\\s*&?\\s*Administration") || grab("Dosage") || grab("Administration");
+  const side_effects = grab("Side\\s*Effects?");
+  const contraindications = grab("Contraindications") || grab("Precautions");
+
+  // Price: look for "Unit Price", "৳", or "Tk" line.
+  const priceMatch =
+    md.match(/Unit\s*Price[:\s]*([^\n]{2,80})/i) ||
+    md.match(/(৳\s*\d[\d,.]*[^\n]{0,40})/) ||
+    md.match(/Tk\.?\s*\d[\d,.]*[^\n]{0,40}/);
+  const price = priceMatch ? priceMatch[1] || priceMatch[0] : null;
+
+  // Alternatives: lines under "Brands" / "Brand Names" section listing other brand names.
+  const altSection =
+    md.match(/Brands?\s*of\s*[^\n]*\n([\s\S]{0,2000})/i) ||
+    md.match(/Brand\s*Names?[^\n]*\n([\s\S]{0,2000})/i);
+  const alternatives: string[] = [];
+  if (altSection) {
+    const lines = altSection[1].split("\n");
+    for (const l of lines) {
+      const m = l.match(/[-*]\s*\[?([A-Z][A-Za-z0-9 \-]{2,40})\]?/);
+      if (m && m[1].toLowerCase() !== brand.toLowerCase()) {
+        alternatives.push(m[1].trim());
+        if (alternatives.length >= 3) break;
+      }
+    }
+  }
+
+  if (!generic && !indications && !dosage) return null;
+
+  return {
+    brand,
+    generic,
+    indications,
+    dosage,
+    side_effects,
+    contraindications,
+    price,
+    alternatives,
+    source_url: sourceUrl,
+  };
+}
+
+async function fetchMedexData(
+  name: string,
+  admin: any,
+): Promise<MedexData | null> {
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+
+  // Cache hit?
+  try {
+    const { data: cached } = await admin
+      .from("medex_cache")
+      .select("payload, fetched_at")
+      .eq("name_key", key)
+      .maybeSingle();
+    if (cached?.payload && cached.fetched_at) {
+      const age = Date.now() - new Date(cached.fetched_at).getTime();
+      if (age < MEDEX_CACHE_TTL_MS) {
+        console.log("medex: cache hit", key);
+        return cached.payload as MedexData;
+      }
+    }
+  } catch (e) {
+    console.warn("medex: cache read failed", safeErrorMessage(e));
+  }
+
+  const apiKey = Deno.env.get("SPIDER_API_KEY");
+  if (!apiKey) {
+    console.warn("medex: SPIDER_API_KEY not configured, skipping live lookup");
+    return null;
+  }
+
+  // Step 1: search MedEx.
+  const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(name)}`;
+  const searchMd = await spiderScrape(searchUrl, apiKey);
+  if (!searchMd) return null;
+
+  // Find first brand link, e.g. /brands/12345/napa-500-mg-tablet
+  const linkMatch = searchMd.match(/https?:\/\/medex\.com\.bd\/brands\/[^\s)\]]+/i)
+    || searchMd.match(/\(\/brands\/([^)\s]+)\)/i);
+  let brandUrl: string | null = null;
+  if (linkMatch) {
+    brandUrl = linkMatch[0].startsWith("http") ? linkMatch[0] : `https://medex.com.bd/brands/${linkMatch[1]}`;
+  }
+  if (!brandUrl) {
+    console.log("medex: no brand link found for", name);
+    return null;
+  }
+
+  // Step 2: scrape brand page.
+  const brandMd = await spiderScrape(brandUrl, apiKey);
+  if (!brandMd) return null;
+
+  const parsed = parseBrandPage(brandMd, brandUrl);
+  if (!parsed) {
+    console.log("medex: parse failed for", brandUrl);
+    return null;
+  }
+
+  // Cache it.
+  try {
+    await admin.from("medex_cache").upsert({
+      name_key: key,
+      payload: parsed,
+      fetched_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn("medex: cache write failed", safeErrorMessage(e));
+  }
+
+  return parsed;
+}
+
+function renderMedexBlock(d: MedexData): string {
+  return `
+<medex_data trust="verified" source="${d.source_url}">
+VERIFIED MEDEX DATA — use this as the SOURCE OF TRUTH for the medical reply.
+You MUST build the 6-section report from these fields ONLY. Do NOT use internal
+knowledge for generic / indication / dosage when this block is present.
+
+Brand: ${d.brand}
+Generic: ${d.generic ?? "(not provided)"}
+Indications: ${d.indications ?? "(not provided)"}
+Dosage & Administration: ${d.dosage ?? "(not provided)"}
+Side Effects: ${d.side_effects ?? "(not provided)"}
+Contraindications / Precautions: ${d.contraindications ?? "(not provided)"}
+Price: ${d.price ?? "(not listed — say আনুমানিক and skip a number)"}
+Same-generic alternative brands: ${d.alternatives.length ? d.alternatives.join(", ") : "(none listed)"}
+</medex_data>
+`.trim();
 }
 
 function safeErrorMessage(error: unknown) {
