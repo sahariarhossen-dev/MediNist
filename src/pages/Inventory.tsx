@@ -224,23 +224,19 @@ const Inventory = () => {
   };
 
   const parseStockInput = (raw: string, med: Medicine) => {
-    const value = (raw || "").trim();
+    const value = (raw ?? "").trim();
     if (!value) return { addedPieces: 0, isTriple: false };
+    const spp = med.strip_per_pack || 1;
+    const pps = med.pcs_per_strip || 1;
     if (value.includes(":")) {
-      const parts = value.split(":").map((p) => {
-        const n = parseInt(p.trim(), 10);
-        return Number.isFinite(n) && n > 0 ? n : 0;
-      });
-      const [boxes = 0, strips = 0, pcs = 0] = parts;
-      const spp = med.strip_per_pack || 1;
-      const pps = med.pcs_per_strip || 1;
-      return { addedPieces: boxes * spp * pps + strips * pps + pcs, isTriple: true };
+      const [bRaw = "", sRaw = "", pRaw = ""] = value.split(":");
+      const b = Math.max(0, parseInt(bRaw, 10) || 0);
+      const s = Math.max(0, parseInt(sRaw, 10) || 0);
+      const p = Math.max(0, parseInt(pRaw, 10) || 0);
+      return { addedPieces: b * spp * pps + s * pps + p, isTriple: true };
     }
-    const num = Number(value) || 0;
-    const addedPieces = isSingleUnit(med)
-      ? num
-      : boxesToPieces(num, med.strip_per_pack, med.pcs_per_strip);
-    return { addedPieces, isTriple: false };
+    const num = Math.max(0, parseInt(value, 10) || 0);
+    return { addedPieces: num * spp * pps, isTriple: false };
   };
 
   const getCalculatedStock = (med: Medicine) => {
@@ -516,7 +512,7 @@ const Inventory = () => {
                               <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{label}</span>
                                 <Input
-                                  ref={(el) => { if (el && isExpanded) setTimeout(() => el.focus(), 50); }}
+                                  autoFocus
                                   type="text"
                                   inputMode="numeric"
                                   pattern="[0-9:]*"
