@@ -152,9 +152,7 @@ const DailyTransactions = () => {
     const channel = supabase
       .channel(`daily-tx-${pharmacyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "sales", filter }, debounced)
-      .on("postgres_changes", { event: "*", schema: "public", table: "cash_transactions", filter }, debounced)
       .on("postgres_changes", { event: "*", schema: "public", table: "customer_ledger", filter }, debounced)
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_closings", filter }, debounced)
       .subscribe();
     return () => {
       if (timer) clearTimeout(timer);
