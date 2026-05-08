@@ -215,12 +215,43 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   };
 }
 
+interface MedexCandidate {
+  name: string;
+  url: string;
+}
+type MedexResult =
+  | { kind: "hit"; data: MedexData }
+  | { kind: "ambiguous"; candidates: MedexCandidate[] }
+  | { kind: "miss" };
+
+function normaliseBrand(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractBrandCandidates(searchMd: string): MedexCandidate[] {
+  const seen = new Set<string>();
+  const out: MedexCandidate[] = [];
+  // Match markdown links [Name](https://medex.com.bd/brands/...) OR [Name](/brands/...)
+  const re = /\[([^\]]{1,80})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(searchMd)) !== null) {
+    const url = (m[2] || "https://medex.com.bd") + m[3];
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const rawName = m[1].replace(/[*_`]/g, "").trim();
+    if (!rawName || rawName.length < 2) continue;
+    out.push({ name: rawName, url });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 async function fetchMedexData(
   name: string,
   admin: any,
-): Promise<MedexData | null> {
+): Promise<MedexResult> {
   const key = name.trim().toLowerCase();
-  if (!key) return null;
+  if (!key) return { kind: "miss" };
 
   // Cache hit?
   try {
@@ -233,7 +264,7 @@ async function fetchMedexData(
       const age = Date.now() - new Date(cached.fetched_at).getTime();
       if (age < MEDEX_CACHE_TTL_MS) {
         console.log("medex: cache hit", key);
-        return cached.payload as MedexData;
+        return { kind: "hit", data: cached.payload as MedexData };
       }
     }
   } catch (e) {
@@ -243,34 +274,48 @@ async function fetchMedexData(
   const apiKey = Deno.env.get("SPIDER_API_KEY");
   if (!apiKey) {
     console.warn("medex: SPIDER_API_KEY not configured, skipping live lookup");
-    return null;
+    return { kind: "miss" };
   }
 
   // Step 1: search MedEx.
   const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(name)}`;
   const searchMd = await spiderScrape(searchUrl, apiKey);
-  if (!searchMd) return null;
+  if (!searchMd) return { kind: "miss" };
 
-  // Find first brand link, e.g. /brands/12345/napa-500-mg-tablet
-  const linkMatch = searchMd.match(/https?:\/\/medex\.com\.bd\/brands\/[^\s)\]]+/i)
-    || searchMd.match(/\(\/brands\/([^)\s]+)\)/i);
-  let brandUrl: string | null = null;
-  if (linkMatch) {
-    brandUrl = linkMatch[0].startsWith("http") ? linkMatch[0] : `https://medex.com.bd/brands/${linkMatch[1]}`;
-  }
-  if (!brandUrl) {
+  const candidates = extractBrandCandidates(searchMd);
+  if (candidates.length === 0) {
     console.log("medex: no brand link found for", name);
-    return null;
+    return { kind: "miss" };
   }
 
-  // Step 2: scrape brand page.
-  const brandMd = await spiderScrape(brandUrl, apiKey);
-  if (!brandMd) return null;
+  // Match strategy: exact normalised match → unique substring match → ambiguous.
+  const target = normaliseBrand(name);
+  const baseMatches = candidates.filter((c) => {
+    const head = c.name.split(/\s|\(/)[0];
+    return normaliseBrand(head) === target;
+  });
+  let chosen: MedexCandidate | null = null;
+  if (baseMatches.length === 1) {
+    chosen = baseMatches[0];
+  } else if (baseMatches.length === 0) {
+    const subs = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
+    if (subs.length === 1) chosen = subs[0];
+  }
 
-  const parsed = parseBrandPage(brandMd, brandUrl);
+  if (!chosen) {
+    const top = candidates.slice(0, 5);
+    console.log("medex: ambiguous candidates", top.map((c) => c.name).join(" | "));
+    return { kind: "ambiguous", candidates: top };
+  }
+
+  // Step 2: scrape chosen brand page.
+  const brandMd = await spiderScrape(chosen.url, apiKey);
+  if (!brandMd) return { kind: "miss" };
+
+  const parsed = parseBrandPage(brandMd, chosen.url);
   if (!parsed) {
-    console.log("medex: parse failed for", brandUrl);
-    return null;
+    console.log("medex: parse failed for", chosen.url);
+    return { kind: "miss" };
   }
 
   // Cache it.
@@ -284,7 +329,7 @@ async function fetchMedexData(
     console.warn("medex: cache write failed", safeErrorMessage(e));
   }
 
-  return parsed;
+  return { kind: "hit", data: parsed };
 }
 
 function renderMedexBlock(d: MedexData): string {
@@ -303,6 +348,41 @@ Contraindications / Precautions: ${d.contraindications ?? "(not provided)"}
 Price: ${d.price ?? "(not listed — say আনুমানিক and skip a number)"}
 Same-generic alternative brands: ${d.alternatives.length ? d.alternatives.join(", ") : "(none listed)"}
 </medex_data>
+`.trim();
+}
+
+function renderMedexCandidatesBlock(userQuery: string, candidates: MedexCandidate[]): string {
+  const list = candidates.map((c) => `- ${c.name}`).join("\n");
+  return `
+<medex_candidates user_query="${userQuery.replace(/"/g, "'")}">
+AMBIGUOUS BRAND. The user typed "${userQuery}" but MedEx returned multiple brands and none is an exact match.
+You MUST ask the user to disambiguate BEFORE giving any medical info.
+Reply rule (match user's language):
+  EN: "Did you mean **<A>**, **<B>**, or **<C>**?"
+  BN: "আপনি কি **<A>**, **<B>**, না **<C>** বোঝাতে চাচ্ছেন?"
+Use the brand names from this list (top ${candidates.length}):
+${list}
+
+Do NOT output the 6-section report. Do NOT output the doctor footer or inventory CTA on this turn.
+</medex_candidates>
+`.trim();
+}
+
+function renderMedexMissBlock(userQuery: string): string {
+  return `
+<medex_miss user_query="${userQuery.replace(/"/g, "'")}">
+VERIFIED DATA NOT FOUND on MedEx for "${userQuery}".
+You MUST reply with EXACTLY this content (match user's language) and nothing about the medicine itself:
+  EN line 1: "Verified data not found for this name. Please check the spelling from the medicine packet."
+  BN line 1: "এই নামের জন্য কোনো নির্ভরযোগ্য তথ্য পাওয়া যায়নি। অনুগ্রহ করে ওষুধের প্যাকেট থেকে বানান যাচাই করুন।"
+Then on a new line print the inventory CTA:
+  EN: "Would you like to check if this is in our shop's inventory?"
+  BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?"
+Then on a new line print the doctor footer:
+  EN: "_Note: Always consult a registered physician before taking any medication._"
+  BN: "_নোট: যেকোনো ওষুধ সেবনের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_"
+Do NOT use internal knowledge to guess what the medicine might be.
+</medex_miss>
 `.trim();
 }
 
