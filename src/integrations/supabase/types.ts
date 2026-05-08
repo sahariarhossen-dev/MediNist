@@ -1255,6 +1255,7 @@ export type Database = {
         Returns: undefined
       }
       is_pharmacy_admin: { Args: never; Returns: boolean }
+      is_pharmacy_admin_or_manager: { Args: never; Returns: boolean }
       is_room_admin: {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
