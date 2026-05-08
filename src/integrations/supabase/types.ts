@@ -549,6 +549,24 @@ export type Database = {
         }
         Relationships: []
       }
+      medex_cache: {
+        Row: {
+          fetched_at: string
+          name_key: string
+          payload: Json
+        }
+        Insert: {
+          fetched_at?: string
+          name_key: string
+          payload: Json
+        }
+        Update: {
+          fetched_at?: string
+          name_key?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
       medicines: {
         Row: {
           company_name: string | null
