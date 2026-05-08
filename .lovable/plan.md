@@ -1,34 +1,47 @@
-# Switch stock input separator from `:` to `.`
+## Top Sales Performers — Daily Leaderboard
 
-Update the inline stock input on the Inventory page so users on mobile can type `B.S.P` (boxes.strips.pieces) using the numeric/decimal keypad instead of having to find the colon character.
+Add a new "Top Sales Performers" card on the dashboard (`src/pages/Index.tsx`), shown directly below the `SalesTrendChart`. Visible only to admins (owners) and managers — salesmen never see it and never fetch the data.
 
-All changes are confined to `src/pages/Inventory.tsx`. The calculation rules and `unitInputs` state shape stay exactly the same — only the separator character and keyboard hints change.
+### Component
 
-## Changes
+New file: `src/components/TopSalesPerformers.tsx`
 
-1. **`parseStockInput` (lines 226–240)**
-   - Detect dot instead of colon: `value.includes(".")` and `value.split(".")`.
-   - Same math: `totalPieces = b * strip_per_pack * pcs_per_strip + s * pcs_per_strip + p`.
-   - Single number (no dot) still falls back to "boxes" and multiplies by `strip_per_pack * pcs_per_strip`.
+- Props: `pharmacyId: string | undefined`
+- On mount / when `pharmacyId` changes, fetches today's sales:
+  - `sales` rows where `pharmacy_id = pharmacyId`, `status = 'completed'`, `created_at` between today's start/end (local day, matching existing dashboard pattern using `startOfDay`/`endOfDay` from `date-fns`).
+  - Selects `user_id, total`.
+  - Aggregates client-side: sum `total` grouped by `user_id`.
+  - Resolves names via the existing `get_pharmacy_member_names` RPC (already in the project) to map `user_id → full_name`. This avoids any new RLS surface and keeps the call cheap.
+  - Sorts descending by total, keeps top 5.
+- Subscribes to realtime `sales` inserts/updates filtered by `pharmacy_id` (mirrors the existing dashboard channel pattern), debounced refresh.
 
-2. **Input element (lines 514–527)**
-   - `inputMode="decimal"` (gives the numeric keypad with a dot on iOS/Android).
-   - `pattern="[0-9.]*"`.
-   - `placeholder="B.S.P e.g. 0.1.0"`.
-   - `title` updated to "Box.Strip.Piece (e.g. 0.1.0 = 1 strip). Single number = Boxes."
-   - `onChange` sanitizer:
-     - Strip everything except digits and dots: `replace(/[^0-9.]/g, "")`.
-     - Collapse runs of consecutive dots into a single dot: `replace(/\.{2,}/g, ".")`.
-     - Cap at two dots total (B.S.P has at most three segments). If a third dot is typed, drop it so existing segments aren't reshuffled.
+### UI
 
-3. **Label (line 510)**
-   - `const label = isTriple ? "B.S.P" : isSingleUnit(med) ? "Qty" : "Box";`
-   - Label flips to `B.S.P` as soon as the first dot is typed (already driven by `isTriple` from `parseStockInput`, which now keys off `.`).
+Card styled like existing dashboard cards (`bg-white rounded-xl shadow-sm` inside `Card`, padded, in `px-page`):
 
-## Out of scope
+- Header row: title "Top Sales Performers" + small subtitle "Today".
+- List rows:
+  - Left: rank badge.
+    - Rank 1 → `<Crown className="text-yellow-500" />`
+    - Rank 2 → `<Crown className="text-gray-400" />`
+    - Rank 3+ → muted circle with the rank number.
+  - Middle: full name, `truncate`, `flex-1 min-w-0`.
+  - Right: `৳{formatted}` using existing `formatBDT` style (`Intl.NumberFormat('en-IN')`), `tabular-nums`, `whitespace-nowrap`.
+- Loading: 3 skeleton rows (`Skeleton` from `@/components/ui/skeleton`).
+- Empty: centered muted text "No sales data yet for today".
 
-- No changes to the `medicines` table, RLS, or any other component.
-- No migration of historical data — the separator was only ever a UI input format, never persisted.
-- `TriUnitDisplay` (the read-only stock badge) is untouched.
+### Integration in `src/pages/Index.tsx`
 
-Confirm and I'll apply the edit.
+- Compute `const canSeeLeaderboard = isOwner || isManager;` (owner = `admin`, manager = `manager`).
+- After `<SalesTrendChart .../>`, render `{canSeeLeaderboard && <TopSalesPerformers pharmacyId={profile?.pharmacy_id} />}`.
+- Salesmen: component is not mounted → no fetch happens.
+
+### Security
+
+- RLS on `sales` already enforces: admins/managers see all pharmacy sales, salesmen see only their own. Since the component only renders for admin/manager, the query returns the full pharmacy dataset for them.
+- Defensive: the component itself also early-returns null if `pharmacyId` is falsy.
+
+### Out of scope
+
+- No DB migration (existing schema and RLS are sufficient).
+- No changes to the existing summary cards, chart, or business logic.

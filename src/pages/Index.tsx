@@ -15,6 +15,7 @@ import {
 import SalesTrendChart from "@/components/SalesTrendChart";
 import AppHeader from "@/components/AppHeader";
 import BroadcastBanner from "@/components/BroadcastBanner";
+import TopSalesPerformers from "@/components/TopSalesPerformers";
 import { isLowStock } from "@/lib/stockUtils";
 
 
@@ -318,6 +319,8 @@ const Index = () => {
         timeRange={timeRange}
         scope={isShopScope ? "shop" : "personal"}
       />
+
+      {isShopScope && <TopSalesPerformers pharmacyId={profile?.pharmacy_id} />}
     </div>
   );
 };
