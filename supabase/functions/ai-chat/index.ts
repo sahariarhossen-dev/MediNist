@@ -61,18 +61,60 @@ const STOPWORDS = new Set([
   "generic", "jeneric", "tablet", "syrup", "capsule",
 ]);
 
+// Tokens that signal NON-medicine intents (sales, dues, staff, expenses, inventory ops).
+// If the message contains any of these, do NOT treat it as a medicine query.
+const NON_MED_KEYWORDS = new Set([
+  "sale", "sales", "bikri", "revenue", "profit", "loss", "margin",
+  "due", "dues", "baki", "bokeya", "borrow",
+  "stock", "inventory", "low", "expire", "expiry", "expired", "meyad",
+  "customer", "customers", "kheta", "ghorek",
+  "staff", "salesman", "manager", "employee", "karmochari",
+  "expense", "expenses", "kharch", "khoroch", "spending", "supplier",
+  "cash", "online", "bkash", "nagad", "rocket",
+  "today", "ajker", "aj", "gotokal", "yesterday", "month", "mash", "sapt",
+  "rack", "shelf", "location",
+  "salary", "betan", "advance",
+  "hi", "hello", "salam", "assalamu", "alaikum", "thanks", "dhonnobad",
+]);
+
 function detectMedicineQuery(text: string): string | null {
   if (!text) return null;
   const hasIntent = MEDICINE_INTENT_PATTERNS.some((re) => re.test(text));
-  if (!hasIntent) return null;
-  // Strip punctuation, find tokens that aren't stopwords. Pick the longest as the candidate.
-  const tokens = text
+  // Tokenise.
+  const rawTokens = text
     .replace(/[?,.!।]/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 3 && !STOPWORDS.has(t.toLowerCase()) && !/^\d+$/.test(t));
+    .filter(Boolean);
+  if (rawTokens.length === 0) return null;
+
+  // If any non-medicine keyword is present, this is NOT a medicine query
+  // (covers "ajker sale koto?", "kon stock e kom?", etc.).
+  const lowerSet = new Set(rawTokens.map((t) => t.toLowerCase()));
+  for (const kw of NON_MED_KEYWORDS) {
+    if (lowerSet.has(kw)) return hasIntent ? pickCandidateToken(rawTokens) : null;
+  }
+
+  // Fast path: explicit medicine intent phrase present.
+  if (hasIntent) return pickCandidateToken(rawTokens);
+
+  // Fallback: short message (≤ 6 tokens) with at least one plausible brand token.
+  if (rawTokens.length <= 6) {
+    const candidate = pickCandidateToken(rawTokens);
+    if (candidate && candidate.length >= 4) return candidate;
+  }
+  return null;
+}
+
+function pickCandidateToken(rawTokens: string[]): string | null {
+  const tokens = rawTokens.filter(
+    (t) =>
+      t.length >= 3 &&
+      !STOPWORDS.has(t.toLowerCase()) &&
+      !NON_MED_KEYWORDS.has(t.toLowerCase()) &&
+      !/^\d+$/.test(t),
+  );
   if (tokens.length === 0) return null;
-  // Prefer a capitalised English token; otherwise the longest token.
   const cap = tokens.find((t) => /^[A-Z][a-zA-Z0-9-]+$/.test(t));
   return (cap ?? tokens.sort((a, b) => b.length - a.length)[0]).slice(0, 60);
 }
@@ -173,12 +215,43 @@ function parseBrandPage(md: string, sourceUrl: string): MedexData | null {
   };
 }
 
+interface MedexCandidate {
+  name: string;
+  url: string;
+}
+type MedexResult =
+  | { kind: "hit"; data: MedexData }
+  | { kind: "ambiguous"; candidates: MedexCandidate[] }
+  | { kind: "miss" };
+
+function normaliseBrand(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractBrandCandidates(searchMd: string): MedexCandidate[] {
+  const seen = new Set<string>();
+  const out: MedexCandidate[] = [];
+  // Match markdown links [Name](https://medex.com.bd/brands/...) OR [Name](/brands/...)
+  const re = /\[([^\]]{1,80})\]\((https?:\/\/medex\.com\.bd)?(\/brands\/[^)\s]+)\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(searchMd)) !== null) {
+    const url = (m[2] || "https://medex.com.bd") + m[3];
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const rawName = m[1].replace(/[*_`]/g, "").trim();
+    if (!rawName || rawName.length < 2) continue;
+    out.push({ name: rawName, url });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 async function fetchMedexData(
   name: string,
   admin: any,
-): Promise<MedexData | null> {
+): Promise<MedexResult> {
   const key = name.trim().toLowerCase();
-  if (!key) return null;
+  if (!key) return { kind: "miss" };
 
   // Cache hit?
   try {
@@ -191,7 +264,7 @@ async function fetchMedexData(
       const age = Date.now() - new Date(cached.fetched_at).getTime();
       if (age < MEDEX_CACHE_TTL_MS) {
         console.log("medex: cache hit", key);
-        return cached.payload as MedexData;
+        return { kind: "hit", data: cached.payload as MedexData };
       }
     }
   } catch (e) {
@@ -201,34 +274,48 @@ async function fetchMedexData(
   const apiKey = Deno.env.get("SPIDER_API_KEY");
   if (!apiKey) {
     console.warn("medex: SPIDER_API_KEY not configured, skipping live lookup");
-    return null;
+    return { kind: "miss" };
   }
 
   // Step 1: search MedEx.
   const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(name)}`;
   const searchMd = await spiderScrape(searchUrl, apiKey);
-  if (!searchMd) return null;
+  if (!searchMd) return { kind: "miss" };
 
-  // Find first brand link, e.g. /brands/12345/napa-500-mg-tablet
-  const linkMatch = searchMd.match(/https?:\/\/medex\.com\.bd\/brands\/[^\s)\]]+/i)
-    || searchMd.match(/\(\/brands\/([^)\s]+)\)/i);
-  let brandUrl: string | null = null;
-  if (linkMatch) {
-    brandUrl = linkMatch[0].startsWith("http") ? linkMatch[0] : `https://medex.com.bd/brands/${linkMatch[1]}`;
-  }
-  if (!brandUrl) {
+  const candidates = extractBrandCandidates(searchMd);
+  if (candidates.length === 0) {
     console.log("medex: no brand link found for", name);
-    return null;
+    return { kind: "miss" };
   }
 
-  // Step 2: scrape brand page.
-  const brandMd = await spiderScrape(brandUrl, apiKey);
-  if (!brandMd) return null;
+  // Match strategy: exact normalised match → unique substring match → ambiguous.
+  const target = normaliseBrand(name);
+  const baseMatches = candidates.filter((c) => {
+    const head = c.name.split(/\s|\(/)[0];
+    return normaliseBrand(head) === target;
+  });
+  let chosen: MedexCandidate | null = null;
+  if (baseMatches.length === 1) {
+    chosen = baseMatches[0];
+  } else if (baseMatches.length === 0) {
+    const subs = candidates.filter((c) => normaliseBrand(c.name).startsWith(target));
+    if (subs.length === 1) chosen = subs[0];
+  }
 
-  const parsed = parseBrandPage(brandMd, brandUrl);
+  if (!chosen) {
+    const top = candidates.slice(0, 5);
+    console.log("medex: ambiguous candidates", top.map((c) => c.name).join(" | "));
+    return { kind: "ambiguous", candidates: top };
+  }
+
+  // Step 2: scrape chosen brand page.
+  const brandMd = await spiderScrape(chosen.url, apiKey);
+  if (!brandMd) return { kind: "miss" };
+
+  const parsed = parseBrandPage(brandMd, chosen.url);
   if (!parsed) {
-    console.log("medex: parse failed for", brandUrl);
-    return null;
+    console.log("medex: parse failed for", chosen.url);
+    return { kind: "miss" };
   }
 
   // Cache it.
@@ -242,7 +329,7 @@ async function fetchMedexData(
     console.warn("medex: cache write failed", safeErrorMessage(e));
   }
 
-  return parsed;
+  return { kind: "hit", data: parsed };
 }
 
 function renderMedexBlock(d: MedexData): string {
@@ -261,6 +348,41 @@ Contraindications / Precautions: ${d.contraindications ?? "(not provided)"}
 Price: ${d.price ?? "(not listed — say আনুমানিক and skip a number)"}
 Same-generic alternative brands: ${d.alternatives.length ? d.alternatives.join(", ") : "(none listed)"}
 </medex_data>
+`.trim();
+}
+
+function renderMedexCandidatesBlock(userQuery: string, candidates: MedexCandidate[]): string {
+  const list = candidates.map((c) => `- ${c.name}`).join("\n");
+  return `
+<medex_candidates user_query="${userQuery.replace(/"/g, "'")}">
+AMBIGUOUS BRAND. The user typed "${userQuery}" but MedEx returned multiple brands and none is an exact match.
+You MUST ask the user to disambiguate BEFORE giving any medical info.
+Reply rule (match user's language):
+  EN: "Did you mean **<A>**, **<B>**, or **<C>**?"
+  BN: "আপনি কি **<A>**, **<B>**, না **<C>** বোঝাতে চাচ্ছেন?"
+Use the brand names from this list (top ${candidates.length}):
+${list}
+
+Do NOT output the 6-section report. Do NOT output the doctor footer or inventory CTA on this turn.
+</medex_candidates>
+`.trim();
+}
+
+function renderMedexMissBlock(userQuery: string): string {
+  return `
+<medex_miss user_query="${userQuery.replace(/"/g, "'")}">
+VERIFIED DATA NOT FOUND on MedEx for "${userQuery}".
+You MUST reply with EXACTLY this content (match user's language) and nothing about the medicine itself:
+  EN line 1: "Verified data not found for this name. Please check the spelling from the medicine packet."
+  BN line 1: "এই নামের জন্য কোনো নির্ভরযোগ্য তথ্য পাওয়া যায়নি। অনুগ্রহ করে ওষুধের প্যাকেট থেকে বানান যাচাই করুন।"
+Then on a new line print the inventory CTA:
+  EN: "Would you like to check if this is in our shop's inventory?"
+  BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?"
+Then on a new line print the doctor footer:
+  EN: "_Note: Always consult a registered physician before taking any medication._"
+  BN: "_নোট: যেকোনো ওষুধ সেবনের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_"
+Do NOT use internal knowledge to guess what the medicine might be.
+</medex_miss>
 `.trim();
 }
 
@@ -353,36 +475,33 @@ Shop: ${shopName}
     (b) Date absent but within the loaded window (sales: last 120 days, expenses: last 90 days) → reply: "ঐ তারিখে কোনো সেল/খরচ রেকর্ড করা হয়নি"।
     (c) Date OLDER than the loaded window → reply: "৯০–১২০ দিনের বাইরের ডাটা এই মুহূর্তে available নেই, owner চাইলে আমরা window বাড়াতে পারি।"
 20. SALESMAN ALTERNATIVES: If, on a consented inventory check (rule 22), a requested medicine has stock 0 or very low, suggest up to 2 SAME-GENERIC alternatives from the inventory.
-21. MEDICAL KNOWLEDGE FORMAT — KNOWLEDGE FIRST, INVENTORY LATER:
-    INTENT: Triggered by any "what is X / X er kaj ki / kno khai / kibhabe khabo / dose koto / X about" question.
-    HARD RULE: The first reply MUST be the pharmacological report only. DO NOT mention shop stock, price-from-inventory, or "out of stock" in this first reply — inventory is gated behind the user's consent on the NEXT turn (rule 22).
-    GENERIC VERIFICATION (zero-hallucination — CRITICAL):
-      - Internally verify the brand→generic mapping before answering. Verified Bangladeshi brands:
-        Napa = Paracetamol; Ace = Paracetamol; Fast = Paracetamol; Reset = Paracetamol;
-        Seclo / Losectil = Omeprazole; Maxpro / Esoral = Esomeprazole;
-        Monas / Montair = Montelukast;
-        Acemox = Acetazolamide (glaucoma / altitude sickness — NOT Amoxicillin);
-        Amilin = Amitriptyline (antidepressant / neuropathic pain — NOT Amoxicillin);
-        Amoxin / Moxacil = Amoxicillin; Cef-3 = Ceftriaxone; Azin = Azithromycin.
-      - If you are NOT 100% certain of the brand's generic, you MUST output EXACTLY (match user's language) and SKIP sections 2–6:
-        EN: "I could not find verified data for this specific medicine. Please check the spelling or refer to the physical packaging."
-        BN: "এই ওষুধটির জন্য কোনো নির্ভরযোগ্য তথ্য পাওয়া যাচ্ছে না। অনুগ্রহ করে বানান যাচাই করুন বা ওষুধের প্যাকেট দেখুন।"
-        Then still print the doctor footer and the inventory CTA below.
-      - NEVER guess. When a <medex_data> block is present in this prompt, treat it as the SOURCE OF TRUTH and build sections 1–6 from those fields ONLY (do NOT use internal knowledge for generic/indication/dose). When no <medex_data> block is present, you may use your internal pharmacological knowledge with the verified brand mappings above; if still not 100% certain, output the "could not find verified data" disclaimer.
-      - You may say "MedEx থেকে যাচাই করা তথ্য" only when a <medex_data> block is actually present.
-    FIXED 6-SECTION STRUCTURE (this exact order; translate labels to user's language; mobile-friendly: bold headers, bullets under Dosage and Warnings, short 1–2 line paragraphs):
-    **1. Medicine & Generic Name:** <Brand> — Generic: <Generic>
-    **2. Indications (কেন খাওয়া হয়):** <primary uses, 1–2 lines>
-    **3. Dosage & Administration (মাত্রা):** <standard adult guideline as bullets> — _ব্যবহারের আগে ডাক্তারের পরামর্শ নিন।_  (disclaimer is MANDATORY)
-    **4. Efficacy Timing (কখন খেলে ভালো কাজ করে):** <before/after meals, morning/night, empty stomach, with water, etc.>
-    **5. Pricing & Popular Alternatives:** <typical BD retail estimate marked "আনুমানিক"> — Alternatives (same generic): <2–3 popular brand names from your knowledge, NOT from inventory>
-    **6. Warnings & Contraindications:** <who must avoid + key side effects, as bullets>
-    Then on a new line print the inventory CTA (match user's language):
-      EN: "Would you like me to check if this medicine is available in our shop's inventory?"
-      BN: "এই ওষুধটি আপনার দোকানের stock-এ আছে কিনা চেক করব?"
-    Then on a new line print the MANDATORY footer:
-      EN: "_Note: Always consult a registered physician before taking any medication._"
-      BN: "_নোট: যেকোনো ওষুধ সেবনের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_"
+21. MEDICAL KNOWLEDGE — MEDEX IS THE ONLY SOURCE OF TRUTH:
+    HARD RULE: For ANY medicine question, this prompt will contain exactly ONE of:
+      <medex_data>  → verified brand info from MedEx (use it)
+      <medex_candidates>  → ambiguous brand (ask the user which one)
+      <medex_miss>  → MedEx returned no data (say "verified data not found")
+    You are STRICTLY FORBIDDEN from using internal pharmacological knowledge for generic, indications, dosage, side effects, contraindications, price, or alternatives. There is NO internal-knowledge fallback. If none of the three blocks is present, do NOT volunteer any medicine info.
+    The first reply MUST NOT mention shop stock, prices-from-inventory, or "out of stock" — inventory is gated behind user consent on the NEXT turn (rule 22).
+
+    (A) When <medex_data> is present → produce this 6-section report from those fields ONLY (translate labels to user's language; mobile-friendly bold headers + bullets):
+      **1. Medicine & Generic Name:** <Brand> — Generic: <Generic verbatim>
+      **2. Indications (কেন খাওয়া হয়):** <Indications field verbatim, trimmed to 2–3 lines>
+      **3. Dosage & Administration (মাত্রা):** <Dosage field as bullets> — _ব্যবহারের আগে ডাক্তারের পরামর্শ নিন।_  (MANDATORY)
+      **4. Efficacy Timing (কখন খেলে ভালো কাজ করে):** Derive from the Dosage field only (e.g., "with food", "empty stomach", "at bedtime"). If the Dosage field doesn't say, write "MedEx ডেটায় নির্দিষ্টভাবে উল্লেখ নেই — ডাক্তারের পরামর্শ নিন।"
+      **5. Pricing & Alternatives:** Price = the Price field VERBATIM (do not invent a number; if "(not listed…)", write "MedEx-এ দাম তালিকাভুক্ত নয় — আনুমানিক"). Alternatives (same generic): list the brands from "Same-generic alternative brands" verbatim (top 3). If the field is "(none listed)", write "(কোনো সমজেনেরিক বিকল্প তালিকাভুক্ত নেই)".
+      **6. Warnings & Contraindications:** <Side Effects + Contraindications fields combined as bullets>
+      Then on a new line print the inventory CTA (match user's language):
+        EN: "Would you like to check if this is in our shop's inventory?"
+        BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?"
+      Then on a new line print the MANDATORY footer:
+        EN: "_Note: Always consult a registered physician before taking any medication._"
+        BN: "_নোট: যেকোনো ওষুধ সেবনের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_"
+      You MAY prefix the report with "MedEx থেকে যাচাই করা তথ্য:" / "Verified from MedEx:".
+
+    (B) When <medex_candidates> is present → reply ONLY with the disambiguation question described in that block. NO 6-section, NO inventory CTA, NO footer on this turn.
+
+    (C) When <medex_miss> is present → reply EXACTLY as instructed in that block (verified-data-not-found line + inventory CTA + doctor footer). NO 6-section.
+
     For medical replies, the inventory CTA REPLACES the rule-14 follow-up (do not double-ask).
 22. INVENTORY CHECK — CONSENT-GATED (all roles):
     Inventory status is shown ONLY after the user consents on the turn following a rule-21 medical reply (e.g. "ha", "ji", "yes", "check koro", "dekhao", "please check", "ha please"). If they decline or change topic, do NOT mention inventory.
@@ -921,12 +1040,16 @@ Deno.serve(async (req) => {
           Deno.env.get("SUPABASE_URL")!,
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
-        const medex = await fetchMedexData(candidate, adminClient);
-        if (medex) {
-          medexBlock = "\n\n" + renderMedexBlock(medex);
-          console.log("ai-chat: medex data injected for", medex.brand);
+        const result = await fetchMedexData(candidate, adminClient);
+        if (result.kind === "hit") {
+          medexBlock = "\n\n" + renderMedexBlock(result.data);
+          console.log("ai-chat: medex HIT for", result.data.brand);
+        } else if (result.kind === "ambiguous") {
+          medexBlock = "\n\n" + renderMedexCandidatesBlock(candidate, result.candidates);
+          console.log("ai-chat: medex AMBIGUOUS for", candidate);
         } else {
-          console.log("ai-chat: medex lookup returned nothing for", candidate);
+          medexBlock = "\n\n" + renderMedexMissBlock(candidate);
+          console.log("ai-chat: medex MISS for", candidate);
         }
       }
     } catch (e) {
