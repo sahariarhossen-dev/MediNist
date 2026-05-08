@@ -7,11 +7,12 @@ import { toast } from "@/hooks/use-toast";
 interface Props {
   onSend: (content: string, attachment?: { url: string; type: string }) => Promise<void>;
   onTyping: () => void;
+  roomId: string;
 }
 
 const EMOJIS = ["😀","😂","🥰","👍","🙏","🎉","🔥","✅","❌","💊","💉","🩺"];
 
-const ChatInput = ({ onSend, onTyping }: Props) => {
+const ChatInput = ({ onSend, onTyping, roomId }: Props) => {
   const { user } = useAuth();
   const [text, setText] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -31,7 +32,7 @@ const ChatInput = ({ onSend, onTyping }: Props) => {
     if (!file || !user) return;
     setUploading(true);
     try {
-      const path = `${user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const path = `${user.id}/${roomId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error } = await supabase.storage.from("chat-attachments").upload(path, file);
       if (error) throw error;
       const { data } = await supabase.storage.from("chat-attachments").createSignedUrl(path, 60 * 60 * 24 * 365);
