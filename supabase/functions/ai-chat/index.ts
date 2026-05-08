@@ -368,7 +368,8 @@ Shop: ${shopName}
         EN: "I could not find verified data for this specific medicine. Please check the spelling or refer to the physical packaging."
         BN: "এই ওষুধটির জন্য কোনো নির্ভরযোগ্য তথ্য পাওয়া যাচ্ছে না। অনুগ্রহ করে বানান যাচাই করুন বা ওষুধের প্যাকেট দেখুন।"
         Then still print the doctor footer and the inventory CTA below.
-      - NEVER guess. NEVER claim to have searched MedEx / Google / internet / any external site — all medical info is from your internal pharmacological knowledge.
+      - NEVER guess. When a <medex_data> block is present in this prompt, treat it as the SOURCE OF TRUTH and build sections 1–6 from those fields ONLY (do NOT use internal knowledge for generic/indication/dose). When no <medex_data> block is present, you may use your internal pharmacological knowledge with the verified brand mappings above; if still not 100% certain, output the "could not find verified data" disclaimer.
+      - You may say "MedEx থেকে যাচাই করা তথ্য" only when a <medex_data> block is actually present.
     FIXED 6-SECTION STRUCTURE (this exact order; translate labels to user's language; mobile-friendly: bold headers, bullets under Dosage and Warnings, short 1–2 line paragraphs):
     **1. Medicine & Generic Name:** <Brand> — Generic: <Generic>
     **2. Indications (কেন খাওয়া হয়):** <primary uses, 1–2 lines>
