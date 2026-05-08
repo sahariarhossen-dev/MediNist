@@ -370,10 +370,14 @@ async function fetchMedexData(
 
 function renderMedexBlock(d: MedexData): string {
   return `
-<medex_data trust="verified" source="${d.source_url}">
-VERIFIED MEDEX DATA — use this as the SOURCE OF TRUTH for the medical reply.
-You MUST build the 6-section report from these fields ONLY. Do NOT use internal
-knowledge for generic / indication / dosage when this block is present.
+<pharma_data trust="verified">
+VERIFIED PHARMA DATA from MediNist's internal pharmaceutical database — use this
+as the SOURCE OF TRUTH for the medical reply. You MUST build the 6-section
+report from these fields ONLY. Do NOT use any other knowledge for generic /
+indication / dosage when this block is present.
+NEVER mention "MedEx", "Spider", "scraped", "web search", "external source",
+"verified from", "based on … search", or any URL in your reply. Present this
+information as MediNist AI's own database knowledge.
 
 Brand: ${d.brand}
 Generic: ${d.generic ?? "(not provided)"}
@@ -383,16 +387,17 @@ Side Effects: ${d.side_effects ?? "(not provided)"}
 Contraindications / Precautions: ${d.contraindications ?? "(not provided)"}
 Price: ${d.price ?? "(not listed — say আনুমানিক and skip a number)"}
 Same-generic alternative brands: ${d.alternatives.length ? d.alternatives.join(", ") : "(none listed)"}
-</medex_data>
+</pharma_data>
 `.trim();
 }
 
 function renderMedexCandidatesBlock(userQuery: string, candidates: MedexCandidate[]): string {
   const list = candidates.map((c) => `- ${c.name}`).join("\n");
   return `
-<medex_candidates user_query="${userQuery.replace(/"/g, "'")}">
-AMBIGUOUS BRAND. The user typed "${userQuery}" but MedEx returned multiple brands and none is an exact match.
+<pharma_candidates user_query="${userQuery.replace(/"/g, "'")}">
+AMBIGUOUS BRAND. The user typed "${userQuery}" but multiple matching brands were found in the database and none is an exact match.
 You MUST ask the user to disambiguate BEFORE giving any medical info.
+NEVER mention "MedEx", "Spider", "scraped", or any external source in your reply.
 Reply rule (match user's language):
   EN: "Did you mean **<A>**, **<B>**, or **<C>**?"
   BN: "আপনি কি **<A>**, **<B>**, না **<C>** বোঝাতে চাচ্ছেন?"
@@ -400,17 +405,17 @@ Use the brand names from this list (top ${candidates.length}):
 ${list}
 
 Do NOT output the 6-section report. Do NOT output the doctor footer or inventory CTA on this turn.
-</medex_candidates>
+</pharma_candidates>
 `.trim();
 }
 
 function renderMedexMissBlock(userQuery: string): string {
   return `
-<medex_miss user_query="${userQuery.replace(/"/g, "'")}">
-VERIFIED DATA NOT FOUND on MedEx for "${userQuery}".
+<pharma_miss user_query="${userQuery.replace(/"/g, "'")}">
+No verified entry found in the database for "${userQuery}".
 You MUST reply with EXACTLY this content (match user's language) and nothing about the medicine itself:
-  EN line 1: "Verified data not found for this name. Please check the spelling from the medicine packet."
-  BN line 1: "এই নামের জন্য কোনো নির্ভরযোগ্য তথ্য পাওয়া যায়নি। অনুগ্রহ করে ওষুধের প্যাকেট থেকে বানান যাচাই করুন।"
+  EN line 1: "I'm sorry, I couldn't find the medical details for this specific name. Please verify the spelling from the medicine packet."
+  BN line 1: "দুঃখিত, এই নামের ওষুধের তথ্য খুঁজে পাইনি। অনুগ্রহ করে ওষুধের প্যাকেট থেকে বানান যাচাই করুন।"
 Then on a new line print the inventory CTA:
   EN: "Would you like to check if this is in our shop's inventory?"
   BN: "এই ওষুধটি আমাদের দোকানের ইনভেন্টরিতে আছে কিনা চেক করব?"
@@ -418,7 +423,8 @@ Then on a new line print the doctor footer:
   EN: "_Note: Always consult a registered physician before taking any medication._"
   BN: "_নোট: যেকোনো ওষুধ সেবনের আগে অবশ্যই রেজিস্টার্ড ডাক্তারের পরামর্শ নিন।_"
 Do NOT use internal knowledge to guess what the medicine might be.
-</medex_miss>
+NEVER mention "MedEx", "Spider", "scraped", "web search", or any external source.
+</pharma_miss>
 `.trim();
 }
 
