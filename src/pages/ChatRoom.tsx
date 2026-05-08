@@ -114,7 +114,7 @@ const ChatRoom = () => {
         })}
       </div>
 
-      <ChatInput onSend={sendMessage} onTyping={broadcastTyping} />
+      <ChatInput onSend={sendMessage} onTyping={broadcastTyping} roomId={roomId || ""} />
 
       <ProfileSheet
         open={profileOpen}
