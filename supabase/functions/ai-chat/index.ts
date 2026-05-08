@@ -516,6 +516,7 @@ Shop: ${shopName}
       <medex_candidates>  → ambiguous brand (ask the user which one)
       <medex_miss>  → MedEx returned no data (say "verified data not found")
     You are STRICTLY FORBIDDEN from using internal pharmacological knowledge for generic, indications, dosage, side effects, contraindications, price, or alternatives. There is NO internal-knowledge fallback. If none of the three blocks is present, do NOT volunteer any medicine info.
+    HARD FALLBACK: If the user clearly named a medicine but NONE of the three blocks is present in this prompt, reply EXACTLY: "Verified data পাওয়া যায়নি — kindly check spelling from the medicine packet." (translate to user's language) and STOP. Never guess generic / indications / dosage / price / alternatives from your own memory under any circumstance.
     The first reply MUST NOT mention shop stock, prices-from-inventory, or "out of stock" — inventory is gated behind user consent on the NEXT turn (rule 22).
 
     (A) When <medex_data> is present → produce this 6-section report from those fields ONLY (translate labels to user's language; mobile-friendly bold headers + bullets):
