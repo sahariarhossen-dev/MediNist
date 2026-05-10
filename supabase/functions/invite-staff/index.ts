@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const APP_URL = Deno.env.get("APP_URL") ?? "https://medi-nist.lovable.app";
+const APP_URL = Deno.env.get("APP_URL") ?? "https://medinist.com";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
