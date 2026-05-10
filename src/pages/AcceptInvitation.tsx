@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface InvitationInfo {
@@ -40,25 +40,20 @@ const AcceptInvitation = () => {
       return;
     }
     (async () => {
-      const { data, error: fnErr } = await supabase.functions.invoke("accept-invitation", {
-        method: "GET" as any,
-        body: undefined,
-        // pass token via query string
-      });
-      // supabase-js doesn't support GET with query params cleanly; fall back to fetch
-      let info: any = data;
-      let errorMsg: string | null = fnErr?.message ?? data?.error ?? null;
-      if (!info || errorMsg) {
-        try {
-          const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
-          const res = await fetch(url, {
-            headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "" },
-          });
-          info = await res.json();
-          errorMsg = res.ok ? null : info?.error ?? "Failed to load invitation";
-        } catch (e: any) {
-          errorMsg = e.message;
-        }
+      let info: any = null;
+      let errorMsg: string | null = null;
+      try {
+        const url = `${SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
+        const res = await fetch(url, {
+          headers: {
+            apikey: SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        });
+        info = await res.json();
+        errorMsg = res.ok ? null : info?.error ?? "Failed to load invitation";
+      } catch (e: any) {
+        errorMsg = e?.message ?? "Failed to load invitation";
       }
       if (errorMsg || !info || info.error) {
         setError(errorMsg || info?.error || "Invitation not found");
