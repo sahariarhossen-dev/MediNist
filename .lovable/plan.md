@@ -1,35 +1,47 @@
-## Scope
+# Fix 404 on `/accept-invitation` (and all deep links) on Vercel
 
-The codebase already uses dynamic URLs in most places (`window.location.origin` for Supabase auth redirects, relative React Router links, `supabase` client pointing at the Supabase project URL — not the app domain). So this is mostly a metadata + edge function default update, plus configuration that must happen outside code.
+## Diagnosis
 
-## Code changes
+The route is **not missing**. Both pieces already exist:
 
-1. **`index.html`** — add canonical + og:url, ensure title/description reflect MediNist:
-   - Add `<link rel="canonical" href="https://medinist.com/" />`
-   - Add `<meta property="og:url" content="https://medinist.com/" />`
-   - Add `<meta property="og:site_name" content="MediNist" />`
-   - Keep existing title `MediNist` and description.
-   - Leave the existing `og:image` (Lovable storage CDN URL) as-is — it's a CDN asset, not a site URL.
+- `src/App.tsx` registers `<Route path="/accept-invitation" element={<AcceptInvitation />} />`
+- `src/pages/AcceptInvitation.tsx` is fully implemented: it reads `?token=...` from the URL, calls the `accept-invitation` edge function to validate the invite, and shows a "Create Account & Join" form (full name + password) that finalizes the staff account and signs them in.
 
-2. **`public/manifest.json`** — add `"id": "/"` and `"start_url": "/"` is already correct. Add `"scope": "/"` (already present). No domain hardcoded here, so no change needed beyond confirming `name`/`short_name` = "MediNist" (already correct).
+The 404 happens because **Vercel is serving the site as static files**, not as a SPA. When a user clicks the invite link and lands directly on `https://medinist.com/accept-invitation`, Vercel looks for a physical file at that path, doesn't find one, and returns its default 404 — React Router never gets a chance to run.
 
-3. **`supabase/functions/invite-staff/index.ts`** — change the default `APP_URL` fallback from `https://medi-nist.lovable.app` to `https://medinist.com`. Also recommend setting the `APP_URL` secret in Supabase to `https://medinist.com` so invite emails always link there.
+(Lovable's own hosting handles this automatically, which is why it works on the `.lovable.app` preview but not on the Vercel-hosted custom domain.)
 
-4. **No changes needed** in:
-   - `src/integrations/supabase/client.ts` — points at the Supabase project URL, not the app domain. Correct as-is.
-   - `src/pages/ForgotPassword.tsx` and any other auth flows — already use `window.location.origin`, so they automatically use whichever domain the user is on.
-   - React Router links — all relative.
+## Fix
 
-## Configuration to do outside code (cannot be done from this repo)
+Add a single `vercel.json` file at the project root that tells Vercel to fall back to `index.html` for any request that isn't a real static asset. Once GitHub syncs, Vercel will auto-redeploy and `/accept-invitation`, `/reset-password`, `/invoice/:id`, `/staff/:id`, etc. will all work on direct load and refresh.
 
-These are required for the new domain to fully work in production. They will be listed in the final message for the user to action:
+### File to create: `vercel.json`
 
-- **Supabase Auth → URL Configuration**: set Site URL to `https://medinist.com` and add `https://medinist.com/**` (and the reset-password path) to the Redirect URLs allowlist. Otherwise password reset / magic links will fail.
-- **Supabase → Edge Function secrets**: set `APP_URL = https://medinist.com` for the `invite-staff` function.
-- **Supabase Auth email templates**: if any reference the old domain, update them.
+```json
+{
+  "rewrites": [
+    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+  ]
+}
+```
 
-## Out of scope
+The regex `/((?!.*\\.).*)` matches any path that does **not** contain a dot, so real assets like `/assets/index-abc.js`, `/favicon.ico`, `/manifest.json`, `/placeholder.svg` are still served as files — only app routes fall back to `index.html`.
 
-- No business logic changes.
-- No UI/style changes.
-- No new SEO components — current setup uses static tags in `index.html`, which is sufficient for this single-app shell.
+## What this fixes (all in one shot)
+
+- `/accept-invitation?token=...` — staff invitation links
+- `/reset-password` — password reset emails
+- `/invoice/:saleId`, `/staff/:userId`, `/messages/:roomId`, `/more/customers/:id`, `/more/notes/:id` — every dynamic and deep route
+- Page refresh on any non-root route
+
+## No other changes needed
+
+- The page logic is already correct and does not need edits.
+- Supabase redirect URLs are already configured for `https://medinist.com/**` (done earlier).
+- No edge function changes.
+- No GitHub action needed from me — the Lovable ↔ GitHub sync pushes the new file automatically, and Vercel auto-deploys from GitHub.
+
+## Technical notes
+
+- `vercel.json` `rewrites` (not `redirects`) preserve the URL in the browser, which is required so React Router can read `/accept-invitation` and the `?token=...` query string.
+- The negative-lookahead pattern is the Vercel-recommended SPA fallback and will not interfere with API routes (there are none on Vercel — all backend calls go to Supabase).
