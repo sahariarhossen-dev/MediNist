@@ -51,18 +51,39 @@ const SectionEyebrow = ({ children }: { children: React.ReactNode }) => (
 /* ---------- header ---------- */
 
 const navLinks = [
+  { label: "Home", href: "#top" },
   { label: "Features", href: "#features" },
   { label: "Pricing", href: "#pricing" },
   { label: "Blog", href: "#blog" },
   { label: "Contact", href: "#contact" },
 ];
 
+const scrollToHash = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  if (!href.startsWith("#")) return;
+  e.preventDefault();
+  const id = href.slice(1);
+  if (!id || id === "top") {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
 const LandingHeader = () => {
   const [open, setOpen] = useState(false);
   return (
     <header className="fixed top-0 inset-x-0 z-50 border-b border-slate-100 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-        <Link to="/" className="flex items-center" aria-label="MediNist home">
+        <Link
+          to="/"
+          onClick={(e) => {
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="flex items-center"
+          aria-label="MediNist home"
+        >
           <span className="text-2xl font-extrabold tracking-tight text-brand">
             MediNist
           </span>
@@ -73,6 +94,7 @@ const LandingHeader = () => {
             <a
               key={l.href}
               href={l.href}
+              onClick={(e) => scrollToHash(e, l.href)}
               className="text-sm font-medium text-slate-600 transition hover:text-brand"
             >
               {l.label}
@@ -112,7 +134,10 @@ const LandingHeader = () => {
               <a
                 key={l.href}
                 href={l.href}
-                onClick={() => setOpen(false)}
+                onClick={(e) => {
+                  setOpen(false);
+                  scrollToHash(e, l.href);
+                }}
                 className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 {l.label}
@@ -275,6 +300,7 @@ const Hero = () => (
           </Link>
           <a
             href="#demo"
+            onClick={(e) => scrollToHash(e, "#demo")}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:border-brand hover:text-brand sm:w-auto"
           >
             <PlayCircle size={18} /> Watch Demo
@@ -520,6 +546,7 @@ const Blog = () => (
       </div>
       <a
         href="#blog"
+        onClick={(e) => scrollToHash(e, "#blog")}
         className="hidden items-center gap-1 text-sm font-semibold text-brand hover:underline sm:inline-flex"
       >
         All articles <ArrowRight size={14} />
@@ -656,9 +683,9 @@ const Footer = () => (
             Product
           </p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
-            <li><a href="#features" className="hover:text-brand">Features</a></li>
-            <li><a href="#pricing" className="hover:text-brand">Pricing</a></li>
-            <li><a href="#demo" className="hover:text-brand">Demo</a></li>
+            <li><a href="#features" onClick={(e) => scrollToHash(e, "#features")} className="hover:text-brand">Features</a></li>
+            <li><a href="#pricing" onClick={(e) => scrollToHash(e, "#pricing")} className="hover:text-brand">Pricing</a></li>
+            <li><a href="#demo" onClick={(e) => scrollToHash(e, "#demo")} className="hover:text-brand">Demo</a></li>
           </ul>
         </div>
         <div>
@@ -666,8 +693,8 @@ const Footer = () => (
             Company
           </p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
-            <li><a href="#blog" className="hover:text-brand">Blog</a></li>
-            <li><a href="#contact" className="hover:text-brand">Contact</a></li>
+            <li><a href="#blog" onClick={(e) => scrollToHash(e, "#blog")} className="hover:text-brand">Blog</a></li>
+            <li><a href="#contact" onClick={(e) => scrollToHash(e, "#contact")} className="hover:text-brand">Contact</a></li>
           </ul>
         </div>
         <div>
@@ -675,8 +702,8 @@ const Footer = () => (
             Legal
           </p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
-            <li><a href="#" className="hover:text-brand">Privacy</a></li>
-            <li><a href="#" className="hover:text-brand">Terms</a></li>
+            <li><a href="#" onClick={(e) => e.preventDefault()} className="hover:text-brand">Privacy</a></li>
+            <li><a href="#" onClick={(e) => e.preventDefault()} className="hover:text-brand">Terms</a></li>
           </ul>
         </div>
       </div>
