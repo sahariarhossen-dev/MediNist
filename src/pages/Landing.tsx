@@ -120,7 +120,7 @@ const LandingHeader = () => {
         <div className="flex items-center gap-2 md:hidden">
           <Link
             to="/login"
-            className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:border-brand/40 hover:text-brand"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:border-brand/40 hover:text-brand ml-0 mr-[15px]"
           >
             Login
           </Link>
