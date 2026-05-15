@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const ROOT_PATHS = ["/", "/sales", "/ai", "/more"];
+const ROOT_PATHS = ["/dashboard", "/sales", "/ai", "/more"];
 
 /**
  * Smart back-button handler for root tabs.
@@ -30,7 +30,7 @@ export const useRootBackHandler = () => {
     const onPopState = () => {
       // AI page: jump straight to Dashboard, ignore intermediate history.
       if (pathname === "/ai") {
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
         return;
       }
 

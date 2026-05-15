@@ -81,7 +81,7 @@ const AcceptInvitation = () => {
           refresh_token: data.session.refresh_token,
         });
         toast.success(`Welcome to ${data.pharmacy?.name ?? "your pharmacy"}!`);
-        navigate("/");
+        navigate("/dashboard");
       }
     } catch (e: any) {
       toast.error(e.message || "Something went wrong");

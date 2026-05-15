@@ -25,7 +25,7 @@ const Login = () => {
       setError("Invalid login credentials");
       setLoading(false);
     } else {
-      navigate("/");
+      navigate("/dashboard");
     }
   };
 

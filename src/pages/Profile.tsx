@@ -302,7 +302,7 @@ const Profile = () => {
     <div className="min-h-screen bg-background max-w-md mx-auto pb-10">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <button onClick={() => navigate("/", { replace: true })} className="p-2 rounded-full hover:bg-muted transition">
+        <button onClick={() => navigate("/dashboard", { replace: true })} className="p-2 rounded-full hover:bg-muted transition">
           <ArrowLeft size={20} className="text-foreground" />
         </button>
         <h1 className="text-lg font-bold text-foreground">My Profile</h1>

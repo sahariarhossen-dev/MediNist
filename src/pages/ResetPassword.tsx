@@ -47,7 +47,7 @@ const ResetPassword = () => {
     } else {
       toast.success("Password updated successfully!");
       // Force reload to clear recovery state
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     }
     setUpdating(false);
   };
