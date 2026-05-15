@@ -277,7 +277,7 @@ const DashboardMockup = () => (
 /* ---------- hero ---------- */
 
 const Hero = () => (
-  <Section className="pt-28 pb-16 sm:pt-32 sm:pb-24">
+  <Section className="pb-16 sm:pt-32 sm:pb-24 pt-[64px]">
     <div className="grid items-center gap-12 lg:grid-cols-2">
       <div className="text-center lg:text-left">
         <SectionEyebrow>
