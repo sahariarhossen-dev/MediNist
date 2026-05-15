@@ -341,7 +341,7 @@ const Stats = () => (
       {[
         { v: "500+", l: "Pharmacies onboard" },
         { v: "৳40M+", l: "Sales tracked" },
-        { v: "60K+", l: "Drugs in catalog" },
+        { v: "99%", l: "of BD medicines covered" },
         { v: "99.9%", l: "Uptime" },
       ].map((s) => (
         <div key={s.l} className="text-center">
@@ -358,7 +358,7 @@ const Stats = () => (
 const features = [
   {
     icon: PackageSearch,
-    title: "Master Medicine Database",
+    title: "AI-Powered Master Catalog",
     desc: "Access 99% of all medicines available in Bangladesh. Auto-fill product details instantly — set up your inventory in seconds, no manual entry needed.",
   },
   {
