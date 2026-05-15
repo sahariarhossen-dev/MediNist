@@ -143,7 +143,7 @@ export function useNotifications() {
         title: "Shop Broadcast",
         message: b.message,
         createdAt: b.created_at,
-        link: "/",
+        link: "/dashboard",
       });
     });
 

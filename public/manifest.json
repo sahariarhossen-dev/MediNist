@@ -2,7 +2,7 @@
   "name": "MediNist",
   "short_name": "MediNist",
   "description": "MediNist — premium pharmacy management app",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",

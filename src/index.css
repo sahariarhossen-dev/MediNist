@@ -29,6 +29,14 @@ All colors MUST be HSL.
     --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
+    /* MediNist brand tokens */
+    --brand: 222 89% 53%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 222 89% 96%;
+    --accent-warning: 32 95% 56%;
+    --accent-warning-soft: 32 95% 95%;
+    --surface-muted: 210 40% 98%;
+
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 
@@ -111,6 +119,8 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
     overflow-x: hidden;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   html {

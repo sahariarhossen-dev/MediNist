@@ -37,6 +37,7 @@ import ChatRoom from "./pages/ChatRoom.tsx";
 import Subscription from "./pages/Subscription.tsx";
 import SubscriptionCheckout from "./pages/SubscriptionCheckout.tsx";
 import AppLayout from "./components/AppLayout.tsx";
+import Landing from "./pages/Landing.tsx";
 
 const queryClient = new QueryClient();
 
@@ -51,7 +52,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -62,6 +63,13 @@ const BlockSalesman = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const LandingRoute = () => {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <Landing />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -70,7 +78,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
+            <Route path="/" element={<LandingRoute />} />
+            <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
             <Route path="/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />

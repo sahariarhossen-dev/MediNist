@@ -83,7 +83,7 @@ const ShortItems = () => {
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-3 px-page pt-5 pb-4">
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard")}
           className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition"
         >
           <ArrowLeft size={22} className="text-gray-700" />

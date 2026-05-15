@@ -22,7 +22,7 @@ const Messages = () => {
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="bg-white border-b border-gray-200 px-3 py-3 flex items-center gap-2 sticky top-0 z-10">
         <button
-          onClick={() => navigate("/", { replace: true })}
+          onClick={() => navigate("/dashboard", { replace: true })}
           className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
           aria-label="Back"
         >

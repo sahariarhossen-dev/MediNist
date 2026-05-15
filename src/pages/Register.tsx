@@ -129,7 +129,7 @@ const Register = () => {
           refresh_token: data.session.refresh_token,
         });
         toast.success("Account created successfully!");
-        navigate("/");
+        navigate("/dashboard");
       }
     } catch (err: any) {
       toast.error(err.message || "Something went wrong");

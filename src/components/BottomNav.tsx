@@ -6,7 +6,7 @@ import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, path: "/" },
+  { label: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
   { label: "Sales", icon: ShoppingCart, path: "/sales" },
   { label: "AI", icon: Sparkles, path: "/ai" },
   { label: "More", icon: MoreHorizontal, path: "/more" },
