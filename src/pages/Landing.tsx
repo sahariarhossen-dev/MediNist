@@ -73,8 +73,8 @@ const scrollToHash = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
 const LandingHeader = () => {
   const [open, setOpen] = useState(false);
   return (
-    <header className="fixed top-0 inset-x-0 z-50 border-b border-slate-100 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+    <header className="fixed top-0 inset-x-0 z-50 border-b border-slate-100/80 bg-white/70 backdrop-blur-md backdrop-saturate-150 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between pl-6 pr-4 sm:px-8">
         <Link
           to="/"
           onClick={(e) => {
@@ -117,14 +117,22 @@ const LandingHeader = () => {
           </Link>
         </div>
 
-        <button
-          type="button"
-          aria-label="Toggle menu"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-700 md:hidden"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          <Link
+            to="/login"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 px-3 text-sm font-medium text-slate-700 transition hover:border-brand/40 hover:text-brand"
+          >
+            Login
+          </Link>
+          <button
+            type="button"
+            aria-label="Toggle menu"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-brand/40 hover:text-brand"
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        </div>
       </div>
 
       {open && (
@@ -144,12 +152,6 @@ const LandingHeader = () => {
               </a>
             ))}
             <div className="mt-2 flex gap-2">
-              <Link
-                to="/login"
-                className="flex-1 inline-flex h-11 items-center justify-center rounded-full border border-slate-200 text-sm font-semibold text-slate-700"
-              >
-                Sign in
-              </Link>
               <Link
                 to="/register"
                 className="flex-1 inline-flex h-11 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white"
