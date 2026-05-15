@@ -17,6 +17,7 @@ import {
   PlayCircle,
   Star,
   ChevronDown,
+  Database,
 } from "lucide-react";
 import {
   Accordion,
