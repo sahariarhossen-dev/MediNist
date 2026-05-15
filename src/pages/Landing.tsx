@@ -288,12 +288,19 @@ const Hero = () => (
           <span className="text-brand">Pharmacy Management</span>
         </h1>
         <p className="mt-5 text-base text-slate-600 sm:text-lg max-w-xl mx-auto lg:mx-0">
-          MediNist combines smart inventory powered by{" "}
-          <span className="font-semibold text-slate-800">MediScrape</span>, real-time
-          sales insights, and an AI drug-lookup assistant — all in one beautifully
-          simple app.
+          MediNist gives you instant access to a master database of{" "}
+          <span className="font-semibold text-slate-800">
+            99% of all medicines available in Bangladesh
+          </span>{" "}
+          — combined with real-time sales insights and an AI drug-lookup assistant,
+          all in one beautifully simple app.
         </p>
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
+        <div className="mt-7 flex justify-center lg:justify-start">
+          <span className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3.5 py-1.5 text-xs font-semibold text-brand ring-1 ring-brand/20 sm:text-sm">
+            <Database size={14} /> 99% Medicine Data of Bangladesh — No manual entry
+          </span>
+        </div>
+        <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
           <Link
             to="/register"
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand px-7 text-sm font-semibold text-white shadow-[0_10px_24px_-8px_rgba(36,99,235,0.55)] transition hover:brightness-110 sm:w-auto"
@@ -350,8 +357,8 @@ const Stats = () => (
 const features = [
   {
     icon: PackageSearch,
-    title: "Smart Inventory + MediScrape",
-    desc: "Auto-fill product details from our 60,000+ drug catalog. Track stock, expiries, and short items in real time.",
+    title: "Master Medicine Database",
+    desc: "Access 99% of all medicines available in Bangladesh. Auto-fill product details instantly — set up your inventory in seconds, no manual entry needed.",
   },
   {
     icon: BarChart3,
@@ -421,7 +428,7 @@ const tiers = [
     features: [
       "Unlimited products",
       "Up to 5 staff",
-      "MediScrape catalog",
+      "Full medicine database access",
       "Sales insights & trends",
       "Email support",
     ],
@@ -509,9 +516,9 @@ const Pricing = () => (
 const posts = [
   {
     tag: "Inventory",
-    title: "Why MediScrape Beats Manual Product Entry — Every Time",
+    title: "Why Our Master Medicine Database Beats Manual Product Entry — Every Time",
     excerpt:
-      "Adding products one-by-one is the silent killer of pharmacy productivity. Here's how MediScrape saves 4+ hours per week.",
+      "Adding products one-by-one is the silent killer of pharmacy productivity. Here's how instant access to 99% of Bangladesh's medicines saves 4+ hours per week.",
     read: "5 min read",
   },
   {
@@ -588,8 +595,8 @@ const faqs = [
     a: "Yes. The Free plan supports up to 100 products and one staff account, forever. Upgrade only when you outgrow it.",
   },
   {
-    q: "How does MediScrape work?",
-    a: "Search any drug name and MediNist auto-fills generic, strength, manufacturer, and price from our 60,000+ catalog — so you can stop typing the same fields all day.",
+    q: "How does the medicine database work?",
+    a: "Search any drug name and MediNist auto-fills generic, strength, manufacturer, and price from our database covering 99% of medicines in Bangladesh — so you can stop typing the same fields all day.",
   },
   {
     q: "Can my staff use it on their phones?",
@@ -726,7 +733,7 @@ const Landing = () => {
         <title>MediNist — Modern AI Pharmacy Management for Bangladesh</title>
         <meta
           name="description"
-          content="MediNist is the modern AI-powered pharmacy management app: smart inventory with MediScrape, real-time sales insights, and an AI drug-lookup assistant."
+          content="MediNist is the modern AI-powered pharmacy management app with instant access to 99% of Bangladesh's medicine database, real-time sales insights, and an AI drug-lookup assistant."
         />
         <link rel="canonical" href="https://medinist.com/" />
         <meta property="og:title" content="MediNist — Modern AI Pharmacy Management" />
