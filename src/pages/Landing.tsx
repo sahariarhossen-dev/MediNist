@@ -411,82 +411,80 @@ const Features = () => (
 
 /* ---------- pricing ---------- */
 
-const tiers = [
-  {
-    name: "Free",
-    price: "৳0",
-    period: "/ forever",
-    desc: "Try MediNist with all the essentials.",
-    features: ["Up to 100 products", "1 staff account", "Basic sales tracking", "Community support"],
-    cta: "Start Free",
-    highlight: false,
-  },
-  {
-    name: "Basic",
-    price: "৳499",
-    period: "/ month",
-    desc: "For growing single-branch pharmacies.",
-    features: [
-      "Unlimited products",
-      "Up to 5 staff",
-      "Full medicine database access",
-      "Sales insights & trends",
-      "Email support",
-    ],
-    cta: "Choose Basic",
-    highlight: true,
-  },
-  {
-    name: "Premium",
-    price: "৳1,299",
-    period: "/ month",
-    desc: "For multi-staff, high-volume pharmacies.",
-    features: [
-      "Everything in Basic",
-      "Unlimited staff",
-      "AI Drug Assistant",
-      "Priority support",
-      "Daily backups",
-    ],
-    cta: "Choose Premium",
-    highlight: false,
-  },
+const trialFeatures = [
+  "Full feature access",
+  "99% BD medicine database",
+  "Inventory & Sales tracking",
+  "AI Assistant",
 ];
 
-const Pricing = () => (
-  <Section id="pricing" className="py-20">
-    <div className="text-center">
-      <SectionEyebrow>Pricing</SectionEyebrow>
-      <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-        Simple, transparent pricing
-      </h2>
-      <p className="mx-auto mt-4 max-w-2xl text-slate-600">
-        Start free. Upgrade when you're ready. Cancel anytime.
-      </p>
-    </div>
+const regularFeatures = [
+  "Unlimited products",
+  "Full medicine database access",
+  "Advanced staff management",
+  "Priority AI support",
+  "Business insights",
+];
 
-    <div className="mt-12 grid gap-6 lg:grid-cols-3">
-      {tiers.map((t) => (
-        <div
-          key={t.name}
-          className={cn(
-            "relative flex flex-col rounded-3xl bg-white p-7 shadow-[0_4px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100 transition hover:-translate-y-1",
-            t.highlight && "ring-2 ring-brand shadow-[0_20px_50px_-15px_rgba(36,99,235,0.35)] lg:scale-[1.03]",
-          )}
-        >
-          {t.highlight && (
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-              Most Popular
-            </span>
-          )}
-          <h3 className="text-lg font-bold text-slate-900">{t.name}</h3>
-          <p className="mt-1 text-sm text-slate-500">{t.desc}</p>
+const Pricing = () => {
+  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
+  const isYearly = cycle === "yearly";
+
+  return (
+    <Section id="pricing" className="py-20">
+      <div className="text-center">
+        <SectionEyebrow>Pricing</SectionEyebrow>
+        <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+          Simple, transparent pricing
+        </h2>
+        <p className="mx-auto mt-4 max-w-2xl text-slate-600">
+          Start free. Upgrade when you're ready. Cancel anytime.
+        </p>
+
+        {/* Toggle */}
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <div className="inline-flex items-center rounded-full bg-slate-100 p-1 ring-1 ring-slate-200">
+            <button
+              type="button"
+              onClick={() => setCycle("monthly")}
+              className={cn(
+                "px-5 py-2 text-sm font-semibold rounded-full transition",
+                !isYearly ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setCycle("yearly")}
+              className={cn(
+                "px-5 py-2 text-sm font-semibold rounded-full transition",
+                isYearly ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              Yearly
+            </button>
+          </div>
+          <span className="hidden sm:inline-flex items-center rounded-full bg-brand-soft px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-brand">
+            Save 17% · 2 Months Free
+          </span>
+        </div>
+        <span className="mt-3 inline-flex sm:hidden items-center rounded-full bg-brand-soft px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-brand">
+          Save 17% · 2 Months Free
+        </span>
+      </div>
+
+      <div className="mx-auto mt-12 grid max-w-4xl gap-6 lg:grid-cols-2">
+        {/* Free Trial */}
+        <div className="relative flex flex-col rounded-3xl bg-white p-7 shadow-[0_4px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100 transition hover:-translate-y-1">
+          <h3 className="text-lg font-bold text-slate-900">Free Trial</h3>
+          <p className="mt-1 text-sm text-slate-500">নতুন রেজিস্টার করলেই প্রথম মাস একদম ফ্রি!</p>
           <div className="mt-5 flex items-baseline gap-1">
-            <span className="text-4xl font-extrabold text-slate-900">{t.price}</span>
-            <span className="text-sm font-medium text-slate-500">{t.period}</span>
+            <span className="text-4xl font-extrabold text-slate-900">৳0</span>
+            <span className="text-sm font-medium text-slate-500">/ first month</span>
           </div>
           <ul className="mt-6 flex-1 space-y-3">
-            {t.features.map((f) => (
+            {trialFeatures.map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm text-slate-700">
                 <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-soft">
                   <Check size={12} className="text-brand" />
@@ -497,20 +495,54 @@ const Pricing = () => (
           </ul>
           <Link
             to="/register"
-            className={cn(
-              "mt-7 inline-flex h-11 items-center justify-center rounded-full text-sm font-semibold transition",
-              t.highlight
-                ? "bg-brand text-white hover:brightness-110 shadow-[0_10px_24px_-8px_rgba(36,99,235,0.55)]"
-                : "border border-slate-200 text-slate-800 hover:border-brand hover:text-brand",
-            )}
+            className="mt-7 inline-flex h-11 items-center justify-center rounded-full border border-slate-200 text-sm font-semibold text-slate-800 transition hover:border-brand hover:text-brand"
           >
-            {t.cta}
+            Start 1-Month Free Trial
           </Link>
         </div>
-      ))}
-    </div>
-  </Section>
-);
+
+        {/* Regular Subscription */}
+        <div className="relative flex flex-col rounded-3xl bg-white p-7 shadow-[0_20px_50px_-15px_rgba(36,99,235,0.35)] ring-2 ring-brand transition hover:-translate-y-1">
+          <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+            Recommended
+          </span>
+          <h3 className="text-lg font-bold text-slate-900">Regular Subscription</h3>
+          <p className="mt-1 text-sm text-slate-500">আপনার ফার্মেসীর জন্য পরিপূর্ণ সলিউশন।</p>
+          <div className="mt-5 flex items-baseline gap-2 transition-all">
+            {isYearly ? (
+              <>
+                <span className="text-4xl font-extrabold text-slate-900">৳20,000</span>
+                <span className="text-sm font-medium text-slate-500">/ year</span>
+                <span className="ml-1 text-sm font-medium text-slate-400 line-through">৳24,000</span>
+              </>
+            ) : (
+              <>
+                <span className="text-4xl font-extrabold text-slate-900">৳2,000</span>
+                <span className="text-sm font-medium text-slate-500">/ month</span>
+              </>
+            )}
+          </div>
+          <ul className="mt-6 flex-1 space-y-3">
+            {regularFeatures.map((f) => (
+              <li key={f} className="flex items-start gap-2 text-sm text-slate-700">
+                <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-soft">
+                  <Check size={12} className="text-brand" />
+                </span>
+                {f}
+              </li>
+            ))}
+          </ul>
+          <Link
+            to="/register"
+            className="mt-7 inline-flex h-11 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white shadow-[0_10px_24px_-8px_rgba(36,99,235,0.55)] transition hover:brightness-110"
+          >
+            Get Started with Pro
+          </Link>
+        </div>
+      </div>
+    </Section>
+  );
+};
 
 /* ---------- blog ---------- */
 
