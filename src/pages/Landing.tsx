@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Database,
   Loader2,
+  Mail,
 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
