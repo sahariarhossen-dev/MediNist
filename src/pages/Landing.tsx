@@ -624,8 +624,8 @@ const Blog = () => (
 
 const faqs = [
   {
-    q: "Is there really a free plan?",
-    a: "Yes. The Free plan supports up to 100 products and one staff account, forever. Upgrade only when you outgrow it.",
+    q: "How does the 1-Month Free Trial work?",
+    a: "When you register, you get 100% full access to every single premium feature of MediNist for 30 days. There are absolutely no limits on the number of medicines, sales tracking, or staff accounts during this trial period. Experience the full power of the app with zero restrictions before you decide to subscribe!",
   },
   {
     q: "How does the medicine database work?",
