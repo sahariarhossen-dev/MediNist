@@ -734,7 +734,7 @@ const emailSchema = z.object({
   email: z.string().trim().max(255).email("Please enter a valid email"),
 });
 
-const SUPPORT_EMAIL = "support@medinist.com";
+const SUPPORT_EMAIL = "mdsahariarhossencom@gmail.com";
 
 type ContactErrors = Partial<Record<"fullName" | "pharmacyName" | "mobile" | "email" | "message", string>>;
 
@@ -840,7 +840,7 @@ const ContactSection = () => {
       } else {
         const d = parsed.data as z.infer<typeof emailSchema>;
         const subject = `MediNist Automation Consultation - ${d.pharmacyName}`;
-        const body = `Dear MediNist Support & Enterprise Team,\n\nI am writing to request a consultation for automating my pharmacy counter using the MediNist platform. Here are my structural details:\n\n- Client Name: ${d.fullName}\n- Pharmacy/Shop Name: ${d.pharmacyName}\n- Contact Email: ${d.email}\n\nMy Requirements/Queries:\n${d.message}\n\nPlease guide me through the onboarding and migration process.\n\nBest regards,\n${d.fullName}`;
+        const body = `Dear MediNist Support Team,\n\nI am writing to request a consultation for automating my pharmacy counter using the MediNist platform. Here are my structural details:\n\n- Client Name: ${d.fullName}\n- Pharmacy/Shop Name: ${d.pharmacyName}\n- Contact Email: ${d.email}\n\nMy Requirements/Queries:\n${d.message}\n\nPlease guide me through the onboarding and migration process.\n\nBest regards,\n${d.fullName}`;
         const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = url;
         toast.success("Opening your email client…");
