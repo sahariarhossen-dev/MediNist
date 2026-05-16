@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Database,
   Loader2,
+  Mail,
 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -714,24 +715,28 @@ const CTASection = () => (
 
 /* ---------- contact ---------- */
 
-const contactSchema = z.object({
+const baseFields = {
   fullName: z.string().trim().min(2, "Please enter your name").max(100),
   pharmacyName: z.string().trim().min(2, "Please enter pharmacy name").max(120),
+  message: z.string().trim().min(5, "Please write a message").max(1000),
+};
+
+const whatsappSchema = z.object({
+  ...baseFields,
   mobile: z
     .string()
     .trim()
     .regex(/^(\+?88)?01[3-9]\d{8}$/, "Please enter a valid mobile number"),
-  email: z
-    .string()
-    .trim()
-    .max(255)
-    .email("Please enter a valid email")
-    .optional()
-    .or(z.literal("")),
-  message: z.string().trim().min(5, "Please write a message").max(1000),
 });
 
-type ContactErrors = Partial<Record<keyof z.infer<typeof contactSchema>, string>>;
+const emailSchema = z.object({
+  ...baseFields,
+  email: z.string().trim().max(255).email("Please enter a valid email"),
+});
+
+const SUPPORT_EMAIL = "support@medinist.com";
+
+type ContactErrors = Partial<Record<"fullName" | "pharmacyName" | "mobile" | "email" | "message", string>>;
 
 const premiumInputClass = (error?: string) =>
   cn(
@@ -788,6 +793,7 @@ const WhatsAppGlyph = ({ className }: { className?: string }) => (
 );
 
 const ContactSection = () => {
+  const [tab, setTab] = useState<"whatsapp" | "email">("whatsapp");
   const [form, setForm] = useState({
     fullName: "",
     pharmacyName: "",
@@ -803,9 +809,16 @@ const ContactSection = () => {
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
   };
 
+  const switchTab = (next: "whatsapp" | "email") => {
+    if (next === tab) return;
+    setTab(next);
+    setErrors({});
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = contactSchema.safeParse(form);
+    const schema = tab === "whatsapp" ? whatsappSchema : emailSchema;
+    const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const errs: ContactErrors = {};
       parsed.error.issues.forEach((i) => {
@@ -817,12 +830,21 @@ const ContactSection = () => {
       return;
     }
     setSubmitting(true);
-    const d = parsed.data;
-    const text = `Name: ${d.fullName}\nPharmacy: ${d.pharmacyName}\nMobile: ${d.mobile}${d.email ? `\nEmail: ${d.email}` : ""}\n\nMessage:\n${d.message}`;
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
     setTimeout(() => {
-      window.open(url, "_blank", "noopener,noreferrer");
-      toast.success("Opening WhatsApp with your message…");
+      if (tab === "whatsapp") {
+        const d = parsed.data as z.infer<typeof whatsappSchema>;
+        const text = `🚀 *New Pharmacy Automation Inquiry* 🚀\n------------------------------------\n👤 *Name:* ${d.fullName}\n🏪 *Pharmacy:* ${d.pharmacyName}\n📱 *Mobile:* ${d.mobile}\n💬 *Message:* ${d.message}\n------------------------------------\n_Sent via MediNist Smart Setup Agent_`;
+        const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+        toast.success("Opening WhatsApp with your message…");
+      } else {
+        const d = parsed.data as z.infer<typeof emailSchema>;
+        const subject = `MediNist Automation Consultation - ${d.pharmacyName}`;
+        const body = `Dear MediNist Support & Enterprise Team,\n\nI am writing to request a consultation for automating my pharmacy counter using the MediNist platform. Here are my structural details:\n\n- Client Name: ${d.fullName}\n- Pharmacy/Shop Name: ${d.pharmacyName}\n- Contact Email: ${d.email}\n\nMy Requirements/Queries:\n${d.message}\n\nPlease guide me through the onboarding and migration process.\n\nBest regards,\n${d.fullName}`;
+        const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = url;
+        toast.success("Opening your email client…");
+      }
       setSubmitting(false);
     }, 400);
   };
@@ -844,7 +866,35 @@ const ContactSection = () => {
         noValidate
         className="mx-auto max-w-2xl rounded-3xl bg-white p-8 ring-1 ring-slate-100 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)] backdrop-blur sm:p-12"
       >
-        <div className="space-y-5">
+        <div className="mb-8 flex justify-center">
+          <div className="inline-flex rounded-full bg-slate-100 p-1 ring-1 ring-slate-200/70">
+            {([
+              { id: "whatsapp", label: "WhatsApp", icon: <WhatsAppGlyph className="h-4 w-4" /> },
+              { id: "email", label: "Email", icon: <Mail className="h-4 w-4" /> },
+            ] as const).map((t) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => switchTab(t.id)}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-200",
+                    active
+                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                      : "text-slate-500 hover:text-slate-700",
+                  )}
+                  aria-pressed={active}
+                >
+                  {t.icon}
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div key={tab} className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
           <div className="grid gap-5 sm:grid-cols-2">
             <PremiumField
               id="c-name"
@@ -863,7 +913,7 @@ const ContactSection = () => {
               autoComplete="organization"
             />
           </div>
-          <div className="grid gap-5 sm:grid-cols-2">
+          {tab === "whatsapp" ? (
             <PremiumField
               id="c-mobile"
               placeholder="Mobile Number"
@@ -874,9 +924,10 @@ const ContactSection = () => {
               error={errors.mobile}
               autoComplete="tel"
             />
+          ) : (
             <PremiumField
               id="c-email"
-              placeholder="Email Address (optional)"
+              placeholder="Email Address"
               type="email"
               inputMode="email"
               value={form.email}
@@ -884,7 +935,7 @@ const ContactSection = () => {
               error={errors.email}
               autoComplete="email"
             />
-          </div>
+          )}
 
           <div>
             <textarea
@@ -901,31 +952,42 @@ const ContactSection = () => {
             )}
           </div>
 
-          <div className="flex flex-col gap-4 pt-2 sm:flex-row">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_hsl(var(--brand)/0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 hover:shadow-[0_14px_36px_-10px_hsl(var(--brand)/0.7)] active:translate-y-0 disabled:opacity-70 sm:flex-1"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" /> Sending…
-                </>
-              ) : (
-                <>
-                  Send Message <ArrowRight size={18} />
-                </>
-              )}
-            </button>
-            <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_rgba(37,211,102,0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1ebe5c] hover:shadow-[0_14px_36px_-10px_rgba(37,211,102,0.7)] sm:flex-1"
-            >
-              <WhatsAppGlyph className="h-5 w-5" />
-              WhatsApp Chat
-            </a>
+          <div className="pt-2">
+            {tab === "whatsapp" ? (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-8 py-4 text-base font-bold text-white shadow-[0_12px_32px_-10px_rgba(37,211,102,0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1ebe5c] hover:shadow-[0_16px_40px_-10px_rgba(37,211,102,0.75)] active:translate-y-0 disabled:opacity-70"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Connecting…
+                  </>
+                ) : (
+                  <>
+                    <WhatsAppGlyph className="h-5 w-5" />
+                    Connect via WhatsApp
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-8 py-4 text-base font-bold text-white shadow-[0_12px_32px_-10px_hsl(var(--brand)/0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 hover:shadow-[0_16px_40px_-10px_hsl(var(--brand)/0.75)] active:translate-y-0 disabled:opacity-70"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Sending…
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-5 w-5" />
+                    Send Official Email
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </form>
