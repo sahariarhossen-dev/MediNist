@@ -1,20 +1,23 @@
-## Contact Section v4 — Align email target + copy
+## Swap conditional fields between WhatsApp/Email tabs
 
-The WhatsApp/Email tab switcher is already built in `src/pages/Landing.tsx` (`ContactSection`, lines ~795–950). Layout, tab toggle, validation, WhatsApp formatted message, premium card shadow, padded inputs, and tall CTA buttons all match the spec. Two small corrections are needed to match this task.
+Single-file edit in `src/pages/Landing.tsx` (`ContactSection`, ~lines 724–845).
 
 ### Changes
 
-1. **Recipient email** — Update `SUPPORT_EMAIL` constant (line 737) from `"support@medinist.com"` to `"mdsahariarhossencom@gmail.com"`. Used by the `mailto:` link only — no other side effects.
+1. **Schemas** — swap which schema gets which extra field:
+   - `whatsappSchema`: `...baseFields` + `email` (required, valid email).
+   - `emailSchema`: `...baseFields` + `mobile` (BD regex `/^(\+?88)?01[3-9]\d{8}$/`).
 
-2. **Email body greeting** — Change opening line (line 843) from `"Dear MediNist Support & Enterprise Team,"` to `"Dear MediNist Support Team,"` to match the requested copy exactly. Rest of the body (client name, pharmacy, email, requirements, onboarding sentence, sign-off) already matches.
+2. **Conditional field render** (lines 916–938) — swap tabs:
+   - WhatsApp tab → render the **Email Address** input (`c-email`, type=email).
+   - Email tab → render the **Mobile Number** input (`c-mobile`, type=tel).
 
-### Already in place — no change needed
+3. **WhatsApp formatted text** (line 836) — replace `📱 *Mobile:* ${d.mobile}` with `📧 *Email:* ${d.email}`. Keep the rest of the block (header, dividers, name, pharmacy, message, footer line) identical.
 
-- Header: "Have Questions? Let's Talk" + subtitle.
-- Pill-style WhatsApp/Email toggle, default WhatsApp, animated tab swap.
-- WhatsApp fields (Full Name, Pharmacy Name, Mobile, Message) → green "Connect via WhatsApp" CTA → opens `wa.me/${WHATSAPP_NUMBER}` with the exact 🚀 formatted block.
-- Email fields (Full Name, Pharmacy Name, Email, Message) → blue "Send Official Email" CTA with Mail icon.
-- Subject `MediNist Automation Consultation - {pharmacyName}`.
-- Premium card shadow `shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)]`, `h-14` inputs, `py-4` buttons, error-state focus rings.
+4. **Email body** (line 843) — replace `- Contact Email: ${d.email}` with `- Contact Mobile: ${d.mobile}`. Subject, greeting, requirements section, and sign-off unchanged.
 
-No new imports, schemas, components, or routes. Single-file, two-line edit.
+### Untouched
+
+- Card UI, rounded corners, focus ring styles, tab switcher animation (`animate-in fade-in slide-in-from-bottom-1`), shared name/pharmacy/message fields, support email constant, error-clear-on-tab-switch, CTA buttons.
+
+No new imports, components, or routes. ~6 lines changed.
