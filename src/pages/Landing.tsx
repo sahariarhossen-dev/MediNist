@@ -18,7 +18,11 @@ import {
   Star,
   ChevronDown,
   Database,
+  MessageCircle,
+  Loader2,
 } from "lucide-react";
+import { z } from "zod";
+import { toast } from "sonner";
 import {
   Accordion,
   AccordionContent,
@@ -675,8 +679,10 @@ const FAQ = () => (
 
 /* ---------- final CTA ---------- */
 
+const WHATSAPP_NUMBER = "8801315338216";
+
 const CTASection = () => (
-  <Section id="contact" className="py-20">
+  <Section id="get-started" className="py-20">
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-[hsl(222_89%_42%)] px-8 py-14 text-center shadow-[0_30px_60px_-20px_rgba(36,99,235,0.45)] sm:px-12">
       <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
       <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
@@ -706,6 +712,234 @@ const CTASection = () => (
     </div>
   </Section>
 );
+
+/* ---------- contact ---------- */
+
+const contactSchema = z.object({
+  fullName: z.string().trim().min(2, "নাম দিন").max(100),
+  pharmacyName: z.string().trim().min(2, "ফার্মেসীর নাম দিন").max(120),
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^(\+?88)?01[3-9]\d{8}$/, "সঠিক মোবাইল নম্বর দিন"),
+  email: z
+    .string()
+    .trim()
+    .max(255)
+    .email("সঠিক ইমেইল দিন")
+    .optional()
+    .or(z.literal("")),
+  message: z.string().trim().min(5, "বার্তা লিখুন").max(1000),
+});
+
+type ContactErrors = Partial<Record<keyof z.infer<typeof contactSchema>, string>>;
+
+const FloatingField = ({
+  id,
+  label,
+  type = "text",
+  value,
+  onChange,
+  error,
+  required,
+  inputMode,
+  autoComplete,
+}: {
+  id: string;
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  required?: boolean;
+  inputMode?: "text" | "tel" | "email";
+  autoComplete?: string;
+}) => (
+  <div className="relative">
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder=" "
+      inputMode={inputMode}
+      autoComplete={autoComplete}
+      aria-invalid={!!error}
+      aria-describedby={error ? `${id}-err` : undefined}
+      className={cn(
+        "peer h-14 w-full rounded-xl border bg-white px-4 pt-4 text-sm text-slate-900 outline-none transition placeholder-transparent focus:border-brand focus:ring-2 focus:ring-brand/20",
+        error ? "border-red-400" : "border-slate-200",
+      )}
+    />
+    <label
+      htmlFor={id}
+      className="pointer-events-none absolute left-4 top-1 text-[11px] font-medium text-slate-500 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-placeholder-shown:text-slate-400 peer-focus:top-1 peer-focus:text-[11px] peer-focus:text-brand"
+    >
+      {label}
+      {required && <span className="text-red-500"> *</span>}
+    </label>
+    {error && (
+      <p id={`${id}-err`} className="mt-1 text-xs text-red-500">
+        {error}
+      </p>
+    )}
+  </div>
+);
+
+const ContactSection = () => {
+  const [form, setForm] = useState({
+    fullName: "",
+    pharmacyName: "",
+    mobile: "",
+    email: "",
+    message: "",
+  });
+  const [errors, setErrors] = useState<ContactErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const update = (k: keyof typeof form) => (v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = contactSchema.safeParse(form);
+    if (!parsed.success) {
+      const errs: ContactErrors = {};
+      parsed.error.issues.forEach((i) => {
+        const key = i.path[0] as keyof ContactErrors;
+        if (!errs[key]) errs[key] = i.message;
+      });
+      setErrors(errs);
+      toast.error("অনুগ্রহ করে ফর্মটি ঠিক করুন");
+      return;
+    }
+    setSubmitting(true);
+    const d = parsed.data;
+    const text = `নাম: ${d.fullName}\nফার্মেসী: ${d.pharmacyName}\nমোবাইল: ${d.mobile}${d.email ? `\nইমেইল: ${d.email}` : ""}\n\nবার্তা:\n${d.message}`;
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+    setTimeout(() => {
+      window.open(url, "_blank", "noopener,noreferrer");
+      toast.success("আপনার বার্তা WhatsApp-এ পাঠানো হচ্ছে…");
+      setSubmitting(false);
+    }, 400);
+  };
+
+  return (
+    <Section id="contact" className="bg-slate-50 py-20">
+      <div className="mx-auto max-w-2xl text-center">
+        <SectionEyebrow>যোগাযোগ</SectionEyebrow>
+        <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+          যোগাযোগ করুন <span className="text-brand">/ Get in Touch</span>
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-slate-600">
+          আমাদের টিম আপনার ফার্মেসী অটোমেশন করতে সাহায্য করার জন্য প্রস্তুত।
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="mx-auto mt-10 max-w-2xl rounded-2xl bg-white p-6 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.18)] ring-1 ring-slate-100 sm:p-8"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FloatingField
+            id="c-name"
+            label="Full Name"
+            value={form.fullName}
+            onChange={update("fullName")}
+            error={errors.fullName}
+            required
+            autoComplete="name"
+          />
+          <FloatingField
+            id="c-pharmacy"
+            label="Pharmacy / Shop Name"
+            value={form.pharmacyName}
+            onChange={update("pharmacyName")}
+            error={errors.pharmacyName}
+            required
+            autoComplete="organization"
+          />
+          <FloatingField
+            id="c-mobile"
+            label="Mobile Number"
+            type="tel"
+            inputMode="tel"
+            value={form.mobile}
+            onChange={update("mobile")}
+            error={errors.mobile}
+            required
+            autoComplete="tel"
+          />
+          <FloatingField
+            id="c-email"
+            label="Email Address (optional)"
+            type="email"
+            inputMode="email"
+            value={form.email}
+            onChange={update("email")}
+            error={errors.email}
+            autoComplete="email"
+          />
+        </div>
+
+        <div className="relative mt-4">
+          <textarea
+            id="c-msg"
+            value={form.message}
+            onChange={(e) => update("message")(e.target.value)}
+            placeholder=" "
+            rows={4}
+            aria-invalid={!!errors.message}
+            className={cn(
+              "peer w-full resize-none rounded-xl border bg-white px-4 pt-5 pb-3 text-sm text-slate-900 outline-none transition placeholder-transparent focus:border-brand focus:ring-2 focus:ring-brand/20",
+              errors.message ? "border-red-400" : "border-slate-200",
+            )}
+          />
+          <label
+            htmlFor="c-msg"
+            className="pointer-events-none absolute left-4 top-1 text-[11px] font-medium text-slate-500 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-placeholder-shown:text-slate-400 peer-focus:top-1 peer-focus:text-[11px] peer-focus:text-brand"
+          >
+            Message / Requirements <span className="text-red-500">*</span>
+          </label>
+          {errors.message && (
+            <p className="mt-1 text-xs text-red-500">{errors.message}</p>
+          )}
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand/90 disabled:opacity-70"
+          >
+            {submitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Sending…
+              </>
+            ) : (
+              <>
+                Send Message <ArrowRight size={16} />
+              </>
+            )}
+          </button>
+          <a
+            href={`https://wa.me/${WHATSAPP_NUMBER}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 text-sm font-semibold text-white shadow-lg shadow-[#25D366]/25 transition hover:bg-[#1ebe57]"
+          >
+            <MessageCircle size={18} />
+            <span className="hidden sm:inline">সরাসরি হোয়াটসঅ্যাপে কথা বলুন</span>
+            <span className="sm:hidden">WhatsApp Chat</span>
+          </a>
+        </div>
+      </form>
+    </Section>
+  );
+};
 
 /* ---------- footer ---------- */
 
@@ -800,6 +1034,7 @@ const Landing = () => {
           <Blog />
           <FAQ />
           <CTASection />
+          <ContactSection />
         </main>
         <Footer />
       </div>
