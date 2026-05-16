@@ -18,7 +18,6 @@ import {
   Star,
   ChevronDown,
   Database,
-  MessageCircle,
   Loader2,
 } from "lucide-react";
 import { z } from "zod";
@@ -716,74 +715,76 @@ const CTASection = () => (
 /* ---------- contact ---------- */
 
 const contactSchema = z.object({
-  fullName: z.string().trim().min(2, "নাম দিন").max(100),
-  pharmacyName: z.string().trim().min(2, "ফার্মেসীর নাম দিন").max(120),
+  fullName: z.string().trim().min(2, "Please enter your name").max(100),
+  pharmacyName: z.string().trim().min(2, "Please enter pharmacy name").max(120),
   mobile: z
     .string()
     .trim()
-    .regex(/^(\+?88)?01[3-9]\d{8}$/, "সঠিক মোবাইল নম্বর দিন"),
+    .regex(/^(\+?88)?01[3-9]\d{8}$/, "Please enter a valid mobile number"),
   email: z
     .string()
     .trim()
     .max(255)
-    .email("সঠিক ইমেইল দিন")
+    .email("Please enter a valid email")
     .optional()
     .or(z.literal("")),
-  message: z.string().trim().min(5, "বার্তা লিখুন").max(1000),
+  message: z.string().trim().min(5, "Please write a message").max(1000),
 });
 
 type ContactErrors = Partial<Record<keyof z.infer<typeof contactSchema>, string>>;
 
-const FloatingField = ({
+const premiumInputClass = (error?: string) =>
+  cn(
+    "w-full rounded-xl border bg-white px-5 py-4 text-[15px] text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-200",
+    error
+      ? "border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-200/50"
+      : "border-slate-200 focus:border-brand focus:ring-4 focus:ring-brand/15",
+  );
+
+const PremiumField = ({
   id,
-  label,
+  placeholder,
   type = "text",
   value,
   onChange,
   error,
-  required,
   inputMode,
   autoComplete,
 }: {
   id: string;
-  label: string;
+  placeholder: string;
   type?: string;
   value: string;
   onChange: (v: string) => void;
   error?: string;
-  required?: boolean;
   inputMode?: "text" | "tel" | "email";
   autoComplete?: string;
 }) => (
-  <div className="relative">
+  <div>
     <input
       id={id}
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder=" "
+      placeholder={placeholder}
       inputMode={inputMode}
       autoComplete={autoComplete}
       aria-invalid={!!error}
       aria-describedby={error ? `${id}-err` : undefined}
-      className={cn(
-        "peer h-14 w-full rounded-xl border bg-white px-4 pt-4 text-sm text-slate-900 outline-none transition placeholder-transparent focus:border-brand focus:ring-2 focus:ring-brand/20",
-        error ? "border-red-400" : "border-slate-200",
-      )}
+      className={cn("h-14", premiumInputClass(error))}
     />
-    <label
-      htmlFor={id}
-      className="pointer-events-none absolute left-4 top-1 text-[11px] font-medium text-slate-500 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-placeholder-shown:text-slate-400 peer-focus:top-1 peer-focus:text-[11px] peer-focus:text-brand"
-    >
-      {label}
-      {required && <span className="text-red-500"> *</span>}
-    </label>
     {error && (
-      <p id={`${id}-err`} className="mt-1 text-xs text-red-500">
+      <p id={`${id}-err`} className="mt-1.5 text-xs font-medium text-red-500">
         {error}
       </p>
     )}
   </div>
+);
+
+const WhatsAppGlyph = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 0 0 1.687 5.526l-.999 3.648 3.801-.873zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.149-.669-1.611-.916-2.207-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+  </svg>
 );
 
 const ContactSection = () => {
@@ -812,129 +813,120 @@ const ContactSection = () => {
         if (!errs[key]) errs[key] = i.message;
       });
       setErrors(errs);
-      toast.error("অনুগ্রহ করে ফর্মটি ঠিক করুন");
+      toast.error("Please fix the highlighted fields");
       return;
     }
     setSubmitting(true);
     const d = parsed.data;
-    const text = `নাম: ${d.fullName}\nফার্মেসী: ${d.pharmacyName}\nমোবাইল: ${d.mobile}${d.email ? `\nইমেইল: ${d.email}` : ""}\n\nবার্তা:\n${d.message}`;
+    const text = `Name: ${d.fullName}\nPharmacy: ${d.pharmacyName}\nMobile: ${d.mobile}${d.email ? `\nEmail: ${d.email}` : ""}\n\nMessage:\n${d.message}`;
     const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
     setTimeout(() => {
       window.open(url, "_blank", "noopener,noreferrer");
-      toast.success("আপনার বার্তা WhatsApp-এ পাঠানো হচ্ছে…");
+      toast.success("Opening WhatsApp with your message…");
       setSubmitting(false);
     }, 400);
   };
 
   return (
-    <Section id="contact" className="bg-slate-50 py-20">
-      <div className="mx-auto max-w-2xl text-center">
-        <SectionEyebrow>যোগাযোগ</SectionEyebrow>
+    <Section id="contact" className="bg-slate-50 py-24 sm:py-28">
+      <div className="mx-auto mb-12 max-w-2xl text-center">
+        <SectionEyebrow>Contact</SectionEyebrow>
         <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-          যোগাযোগ করুন <span className="text-brand">/ Get in Touch</span>
+          Have Questions? <span className="text-brand">Let's Talk</span>
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-slate-600">
-          আমাদের টিম আপনার ফার্মেসী অটোমেশন করতে সাহায্য করার জন্য প্রস্তুত।
+        <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-500">
+          Our team is ready to help you automate your pharmacy. Fill out the form or chat with us instantly.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
         noValidate
-        className="mx-auto mt-10 max-w-2xl rounded-2xl bg-white p-6 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.18)] ring-1 ring-slate-100 sm:p-8"
+        className="mx-auto max-w-2xl rounded-3xl bg-white p-8 ring-1 ring-slate-100 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)] backdrop-blur sm:p-12"
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FloatingField
-            id="c-name"
-            label="Full Name"
-            value={form.fullName}
-            onChange={update("fullName")}
-            error={errors.fullName}
-            required
-            autoComplete="name"
-          />
-          <FloatingField
-            id="c-pharmacy"
-            label="Pharmacy / Shop Name"
-            value={form.pharmacyName}
-            onChange={update("pharmacyName")}
-            error={errors.pharmacyName}
-            required
-            autoComplete="organization"
-          />
-          <FloatingField
-            id="c-mobile"
-            label="Mobile Number"
-            type="tel"
-            inputMode="tel"
-            value={form.mobile}
-            onChange={update("mobile")}
-            error={errors.mobile}
-            required
-            autoComplete="tel"
-          />
-          <FloatingField
-            id="c-email"
-            label="Email Address (optional)"
-            type="email"
-            inputMode="email"
-            value={form.email}
-            onChange={update("email")}
-            error={errors.email}
-            autoComplete="email"
-          />
-        </div>
+        <div className="space-y-5">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <PremiumField
+              id="c-name"
+              placeholder="Full Name"
+              value={form.fullName}
+              onChange={update("fullName")}
+              error={errors.fullName}
+              autoComplete="name"
+            />
+            <PremiumField
+              id="c-pharmacy"
+              placeholder="Pharmacy Name"
+              value={form.pharmacyName}
+              onChange={update("pharmacyName")}
+              error={errors.pharmacyName}
+              autoComplete="organization"
+            />
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <PremiumField
+              id="c-mobile"
+              placeholder="Mobile Number"
+              type="tel"
+              inputMode="tel"
+              value={form.mobile}
+              onChange={update("mobile")}
+              error={errors.mobile}
+              autoComplete="tel"
+            />
+            <PremiumField
+              id="c-email"
+              placeholder="Email Address (optional)"
+              type="email"
+              inputMode="email"
+              value={form.email}
+              onChange={update("email")}
+              error={errors.email}
+              autoComplete="email"
+            />
+          </div>
 
-        <div className="relative mt-4">
-          <textarea
-            id="c-msg"
-            value={form.message}
-            onChange={(e) => update("message")(e.target.value)}
-            placeholder=" "
-            rows={4}
-            aria-invalid={!!errors.message}
-            className={cn(
-              "peer w-full resize-none rounded-xl border bg-white px-4 pt-5 pb-3 text-sm text-slate-900 outline-none transition placeholder-transparent focus:border-brand focus:ring-2 focus:ring-brand/20",
-              errors.message ? "border-red-400" : "border-slate-200",
+          <div>
+            <textarea
+              id="c-msg"
+              value={form.message}
+              onChange={(e) => update("message")(e.target.value)}
+              placeholder="Message / Requirements"
+              rows={5}
+              aria-invalid={!!errors.message}
+              className={cn("min-h-[140px] resize-none", premiumInputClass(errors.message))}
+            />
+            {errors.message && (
+              <p className="mt-1.5 text-xs font-medium text-red-500">{errors.message}</p>
             )}
-          />
-          <label
-            htmlFor="c-msg"
-            className="pointer-events-none absolute left-4 top-1 text-[11px] font-medium text-slate-500 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-placeholder-shown:text-slate-400 peer-focus:top-1 peer-focus:text-[11px] peer-focus:text-brand"
-          >
-            Message / Requirements <span className="text-red-500">*</span>
-          </label>
-          {errors.message && (
-            <p className="mt-1 text-xs text-red-500">{errors.message}</p>
-          )}
-        </div>
+          </div>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-semibold text-white shadow-lg shadow-brand/25 transition hover:bg-brand/90 disabled:opacity-70"
-          >
-            {submitting ? (
-              <>
-                <Loader2 size={16} className="animate-spin" /> Sending…
-              </>
-            ) : (
-              <>
-                Send Message <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-          <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 text-sm font-semibold text-white shadow-lg shadow-[#25D366]/25 transition hover:bg-[#1ebe57]"
-          >
-            <MessageCircle size={18} />
-            <span className="hidden sm:inline">সরাসরি হোয়াটসঅ্যাপে কথা বলুন</span>
-            <span className="sm:hidden">WhatsApp Chat</span>
-          </a>
+          <div className="flex flex-col gap-4 pt-2 sm:flex-row">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_hsl(var(--brand)/0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand/90 hover:shadow-[0_14px_36px_-10px_hsl(var(--brand)/0.7)] active:translate-y-0 disabled:opacity-70 sm:flex-1"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" /> Sending…
+                </>
+              ) : (
+                <>
+                  Send Message <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+            <a
+              href={`https://wa.me/${WHATSAPP_NUMBER}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_rgba(37,211,102,0.6)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1ebe5c] hover:shadow-[0_14px_36px_-10px_rgba(37,211,102,0.7)] sm:flex-1"
+            >
+              <WhatsAppGlyph className="h-5 w-5" />
+              WhatsApp Chat
+            </a>
+          </div>
         </div>
       </form>
     </Section>

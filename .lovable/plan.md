@@ -1,60 +1,44 @@
-## Add Contact Section + Fix Contact Nav Links
+## Refactor Contact Section — Premium, Spacious, English-only
 
-Single file change: `src/pages/Landing.tsx`.
+Single-file edit: `src/pages/Landing.tsx` (lines ~718–942). No other files touched.
 
-### 1. Navigation fix
+### 1. Convert to English (remove all Bengali)
 
-The Header and Footer already use `href="#contact"` with `scrollToHash`, but `#contact` is currently the id of the big blue gradient `CTASection`. We'll move that id off the CTA and assign it to the new Contact section so both nav links scroll to the actual form.
+- `contactSchema` error messages → English: "Please enter your name", "Please enter pharmacy name", "Please enter a valid mobile number", "Please enter a valid email", "Please write a message".
+- `SectionEyebrow` text → `"Contact"`.
+- Heading → `Have Questions? <span className="text-brand">Let's Talk</span>` (bold, slate-900).
+- Subtitle → `"Our team is ready to help you automate your pharmacy. Fill out the form or chat with us instantly."` (text-slate-500, leading-relaxed).
+- WhatsApp prefilled `text` → English: `Name: …\nPharmacy: …\nMobile: …\nEmail: …\n\nMessage:\n…`.
+- `toast.error` → `"Please fix the highlighted fields"`; `toast.success` → `"Opening WhatsApp with your message…"`.
+- WhatsApp button label → `"WhatsApp Chat"` on all screens (drop Bengali span).
 
-- Remove `id="contact"` from `CTASection` (rename it to e.g. `id="get-started"` or no id).
-- The new `ContactSection` will own `id="contact"`.
+### 2. Premium input overhaul
 
-### 2. New `ContactSection` component (inserted just above `<Footer />`)
+Switch from floating labels to clean modern placeholders (per spec: "Keep the placeholders clean and modern").
 
-- Background: `bg-slate-50` band (soft light grey).
-- Centered heading: **"যোগাযোগ করুন / Get in Touch"** + subtext **"আমাদের টিম আপনার ফার্মেসী অটোমেশন করতে সাহায্য করার জন্য প্রস্তুত।"**
-- Form card: `max-w-2xl mx-auto`, `rounded-2xl`, `bg-white`, soft premium shadow matching the dashboard insights cards (e.g. `shadow-[0_20px_50px_-20px_rgba(15,23,42,0.15)]`), generous padding.
+- Replace `FloatingField` usage with a simpler `PremiumField` (inline in same file) that renders an `<input>` with placeholder + optional inline error below.
+- Input classes: `h-14 w-full rounded-xl border border-slate-200 bg-white px-5 py-4 text-[15px] text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-200 focus:border-brand focus:ring-4 focus:ring-brand/15 focus:shadow-[0_0_0_4px_hsl(var(--brand)/0.12)]` — subtle grey border, glowing blue ring on focus.
+- Error state: `border-red-300 focus:border-red-400 focus:ring-red-200/50`.
+- Textarea mirrors the same styling, `min-h-[140px] resize-none px-5 py-4`.
+- Placeholders: `"Full Name"`, `"Pharmacy Name"`, `"Mobile Number"`, `"Email Address (optional)"`, `"Message / Requirements"`.
 
-### 3. Form fields (floating-label style)
+### 3. Premium buttons
 
-Local component with floating labels (input with peer-placeholder-shown classes, no extra deps). Fields:
+Both buttons in a `flex flex-col sm:flex-row gap-4 pt-2`.
 
-| Field | Type | Required |
-|---|---|---|
-| Full Name | text | yes |
-| Pharmacy / Shop Name | text | yes |
-| Mobile Number | tel, `inputMode="tel"`, BD pattern hint | yes |
-| Email Address | email | no |
-| Message / Requirements | textarea (4 rows) | yes |
+- **Send Message:** `inline-flex w-full sm:flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_hsl(var(--brand)/0.6)] transition-all duration-200 hover:bg-brand/90 hover:shadow-[0_14px_36px_-10px_hsl(var(--brand)/0.7)] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70`. Loader uses `Loader2` + "Sending…".
+- **WhatsApp Chat:** `inline-flex w-full sm:flex-1 items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-8 py-4 text-base font-bold text-white shadow-[0_10px_30px_-10px_rgba(37,211,102,0.6)] transition-all duration-200 hover:bg-[#1ebe5c] hover:shadow-[0_14px_36px_-10px_rgba(37,211,102,0.7)] hover:-translate-y-0.5`. Icon = inline WhatsApp SVG (proper brand glyph, 20px) instead of `MessageCircle` for an authentic look. Label simply `"WhatsApp Chat"`, perfectly centered.
 
-Validation with `zod` (already in deps) — trim, max lengths, BD mobile regex `^(\+?88)?01[3-9]\d{8}$`. Errors shown inline under each field.
+### 4. Layout & spacing
 
-### 4. CTAs
+- Section: `bg-slate-50 py-24 sm:py-28` (more breathing room).
+- Heading block `mb-12` from form; subtitle `max-w-xl mx-auto mt-4`.
+- Form card: `mx-auto max-w-2xl rounded-3xl bg-white p-8 sm:p-12 ring-1 ring-slate-100 shadow-[0_30px_80px_-30px_rgba(15,23,42,0.25)] backdrop-blur` — generous padding, deeper premium shadow.
+- Fields wrapper uses `space-y-5`; the name/pharmacy and mobile/email pairs sit in `grid gap-5 sm:grid-cols-2` rows inside that stack so vertical rhythm is consistent on mobile too.
+- Gap between last field and button row: `mt-2` (relies on `space-y-5` parent) plus `pt-2` on the button row.
 
-- **Submit button:** Primary blue (`bg-brand text-white`), full width on mobile, loading state via `useState` (`Sending…` + disabled), then `toast.success` ("আপনার বার্তা WhatsApp-এ পাঠানো হচ্ছে…") and opens WhatsApp.
-- Submission behavior (per user choice): build a prefilled WhatsApp message from form values and `window.open('https://wa.me/8801315338216?text=' + encodeURIComponent(msg), '_blank')`. No backend.
-- **WhatsApp button:** Sibling button, green (`bg-[#25D366] hover:bg-[#1ebe57] text-white`), `MessageCircle` or inline WhatsApp SVG icon, label **"সরাসরি হোয়াটসঅ্যাপে কথা বলুন (Direct WhatsApp Chat)"**, opens `https://wa.me/8801315338216` directly (no form data).
-- Buttons in a `flex flex-col sm:flex-row gap-3 pt-2`.
+### 5. Cleanup
 
-### 5. Responsive & a11y
-
-- All inputs `h-12`, `rounded-xl`, `px-4`, large tap targets.
-- Single column on mobile; on `sm:` Full Name + Pharmacy Name go side-by-side, Mobile + Email side-by-side; Message full width.
-- `aria-invalid` on errors, `aria-describedby` for error text, labels properly associated.
-
-### Page wiring
-
-```
-<main>
-  …
-  <CTASection />     {/* id removed */}
-  <ContactSection /> {/* new, id="contact" */}
-</main>
-<Footer />
-```
-
-### Technical notes
-
-- Reuse existing `Section`, `scrollToHash`, `toast` from `sonner`, `zod`.
-- WhatsApp number: `+8801315338216` → wa.me link uses `8801315338216`.
-- No new files, no backend, no schema changes.
+- Remove the now-unused `FloatingField` component if no other section uses it (it is local to this file).
+- Keep `MessageCircle` import only if still referenced elsewhere; otherwise drop from the `lucide-react` import to avoid unused-import warnings. Add no new icons — WhatsApp glyph is an inline SVG.
+- No backend, no schema, no new files, no nav changes.
