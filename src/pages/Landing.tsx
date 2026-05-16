@@ -18,7 +18,6 @@ import {
   Star,
   ChevronDown,
   Database,
-  MessageCircle,
   Loader2,
 } from "lucide-react";
 import { z } from "zod";
