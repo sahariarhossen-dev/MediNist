@@ -18,7 +18,11 @@ import {
   Star,
   ChevronDown,
   Database,
+  MessageCircle,
+  Loader2,
 } from "lucide-react";
+import { z } from "zod";
+import { toast } from "sonner";
 import {
   Accordion,
   AccordionContent,
@@ -675,8 +679,10 @@ const FAQ = () => (
 
 /* ---------- final CTA ---------- */
 
+const WHATSAPP_NUMBER = "8801315338216";
+
 const CTASection = () => (
-  <Section id="contact" className="py-20">
+  <Section id="get-started" className="py-20">
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-[hsl(222_89%_42%)] px-8 py-14 text-center shadow-[0_30px_60px_-20px_rgba(36,99,235,0.45)] sm:px-12">
       <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
       <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
