@@ -715,24 +715,28 @@ const CTASection = () => (
 
 /* ---------- contact ---------- */
 
-const contactSchema = z.object({
+const baseFields = {
   fullName: z.string().trim().min(2, "Please enter your name").max(100),
   pharmacyName: z.string().trim().min(2, "Please enter pharmacy name").max(120),
+  message: z.string().trim().min(5, "Please write a message").max(1000),
+};
+
+const whatsappSchema = z.object({
+  ...baseFields,
   mobile: z
     .string()
     .trim()
     .regex(/^(\+?88)?01[3-9]\d{8}$/, "Please enter a valid mobile number"),
-  email: z
-    .string()
-    .trim()
-    .max(255)
-    .email("Please enter a valid email")
-    .optional()
-    .or(z.literal("")),
-  message: z.string().trim().min(5, "Please write a message").max(1000),
 });
 
-type ContactErrors = Partial<Record<keyof z.infer<typeof contactSchema>, string>>;
+const emailSchema = z.object({
+  ...baseFields,
+  email: z.string().trim().max(255).email("Please enter a valid email"),
+});
+
+const SUPPORT_EMAIL = "support@medinist.com";
+
+type ContactErrors = Partial<Record<"fullName" | "pharmacyName" | "mobile" | "email" | "message", string>>;
 
 const premiumInputClass = (error?: string) =>
   cn(
