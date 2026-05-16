@@ -1034,6 +1034,7 @@ const Landing = () => {
           <Blog />
           <FAQ />
           <CTASection />
+          <ContactSection />
         </main>
         <Footer />
       </div>
