@@ -723,15 +723,15 @@ const baseFields = {
 
 const whatsappSchema = z.object({
   ...baseFields,
-  mobile: z
-    .string()
-    .trim()
-    .regex(/^(\+?88)?01[3-9]\d{8}$/, "Please enter a valid mobile number"),
+  email: z.string().trim().max(255).email("Please enter a valid email"),
 });
 
 const emailSchema = z.object({
   ...baseFields,
-  email: z.string().trim().max(255).email("Please enter a valid email"),
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^(\+?88)?01[3-9]\d{8}$/, "Please enter a valid mobile number"),
 });
 
 const SUPPORT_EMAIL = "mdsahariarhossencom@gmail.com";
@@ -833,14 +833,14 @@ const ContactSection = () => {
     setTimeout(() => {
       if (tab === "whatsapp") {
         const d = parsed.data as z.infer<typeof whatsappSchema>;
-        const text = `🚀 *New Pharmacy Automation Inquiry* 🚀\n------------------------------------\n👤 *Name:* ${d.fullName}\n🏪 *Pharmacy:* ${d.pharmacyName}\n📱 *Mobile:* ${d.mobile}\n💬 *Message:* ${d.message}\n------------------------------------\n_Sent via MediNist Smart Setup Agent_`;
+        const text = `🚀 *New Pharmacy Automation Inquiry* 🚀\n------------------------------------\n👤 *Name:* ${d.fullName}\n🏪 *Pharmacy:* ${d.pharmacyName}\n📧 *Email:* ${d.email}\n💬 *Message:* ${d.message}\n------------------------------------\n_Sent via MediNist Smart Setup Agent_`;
         const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
         window.open(url, "_blank", "noopener,noreferrer");
         toast.success("Opening WhatsApp with your message…");
       } else {
         const d = parsed.data as z.infer<typeof emailSchema>;
         const subject = `MediNist Automation Consultation - ${d.pharmacyName}`;
-        const body = `Dear MediNist Support Team,\n\nI am writing to request a consultation for automating my pharmacy counter using the MediNist platform. Here are my structural details:\n\n- Client Name: ${d.fullName}\n- Pharmacy/Shop Name: ${d.pharmacyName}\n- Contact Email: ${d.email}\n\nMy Requirements/Queries:\n${d.message}\n\nPlease guide me through the onboarding and migration process.\n\nBest regards,\n${d.fullName}`;
+        const body = `Dear MediNist Support Team,\n\nI am writing to request a consultation for automating my pharmacy counter using the MediNist platform. Here are my structural details:\n\n- Client Name: ${d.fullName}\n- Pharmacy/Shop Name: ${d.pharmacyName}\n- Contact Mobile: ${d.mobile}\n\nMy Requirements/Queries:\n${d.message}\n\nPlease guide me through the onboarding and migration process.\n\nBest regards,\n${d.fullName}`;
         const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = url;
         toast.success("Opening your email client…");
@@ -915,17 +915,6 @@ const ContactSection = () => {
           </div>
           {tab === "whatsapp" ? (
             <PremiumField
-              id="c-mobile"
-              placeholder="Mobile Number"
-              type="tel"
-              inputMode="tel"
-              value={form.mobile}
-              onChange={update("mobile")}
-              error={errors.mobile}
-              autoComplete="tel"
-            />
-          ) : (
-            <PremiumField
               id="c-email"
               placeholder="Email Address"
               type="email"
@@ -934,6 +923,17 @@ const ContactSection = () => {
               onChange={update("email")}
               error={errors.email}
               autoComplete="email"
+            />
+          ) : (
+            <PremiumField
+              id="c-mobile"
+              placeholder="Mobile Number"
+              type="tel"
+              inputMode="tel"
+              value={form.mobile}
+              onChange={update("mobile")}
+              error={errors.mobile}
+              autoComplete="tel"
             />
           )}
 
