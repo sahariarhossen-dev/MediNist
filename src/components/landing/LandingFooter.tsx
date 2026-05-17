@@ -1,18 +1,33 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
-const scrollToHash = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-  if (!href.startsWith("#")) return;
-  e.preventDefault();
-  const id = href.slice(1);
-  if (!id || id === "top") {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return;
-  }
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+const useHashNav = () => {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  return (e: React.MouseEvent<HTMLAnchorElement>, hash: string) => {
+    if (pathname === "/") {
+      e.preventDefault();
+      const id = hash.slice(1);
+      if (!id || id === "top") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      e.preventDefault();
+      navigate("/" + hash);
+    }
+  };
 };
 
-const LandingFooter = () => (
+const LandingFooter = () => {
+  const onHash = useHashNav();
+  return (
+    <FooterInner onHash={onHash} />
+  );
+};
+
+const FooterInner = ({ onHash }: { onHash: (e: React.MouseEvent<HTMLAnchorElement>, h: string) => void }) => (
   <footer className="border-t border-slate-100 bg-white">
     <section className="w-full px-5 sm:px-8 py-12">
       <div className="mx-auto w-full max-w-6xl">
@@ -25,28 +40,22 @@ const LandingFooter = () => (
             </p>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Product
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Product</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li><Link to="/#features" onClick={(e) => scrollToHash(e as unknown as React.MouseEvent<HTMLAnchorElement>, "#features")} className="hover:text-brand">Features</Link></li>
-              <li><Link to="/#pricing" onClick={(e) => scrollToHash(e as unknown as React.MouseEvent<HTMLAnchorElement>, "#pricing")} className="hover:text-brand">Pricing</Link></li>
-              <li><Link to="/#demo" onClick={(e) => scrollToHash(e as unknown as React.MouseEvent<HTMLAnchorElement>, "#demo")} className="hover:text-brand">Demo</Link></li>
+              <li><a href="/#features" onClick={(e) => onHash(e, "#features")} className="hover:text-brand">Features</a></li>
+              <li><a href="/#pricing" onClick={(e) => onHash(e, "#pricing")} className="hover:text-brand">Pricing</a></li>
+              <li><a href="/#demo" onClick={(e) => onHash(e, "#demo")} className="hover:text-brand">Demo</a></li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Company
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Company</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li><Link to="/#blog" onClick={(e) => scrollToHash(e as unknown as React.MouseEvent<HTMLAnchorElement>, "#blog")} className="hover:text-brand">Blog</Link></li>
-              <li><Link to="/#contact" onClick={(e) => scrollToHash(e as unknown as React.MouseEvent<HTMLAnchorElement>, "#contact")} className="hover:text-brand">Contact</Link></li>
+              <li><a href="/#blog" onClick={(e) => onHash(e, "#blog")} className="hover:text-brand">Blog</a></li>
+              <li><a href="/#contact" onClick={(e) => onHash(e, "#contact")} className="hover:text-brand">Contact</a></li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Legal
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Legal</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
               <li><a href="#" onClick={(e) => e.preventDefault()} className="hover:text-brand">Terms</a></li>
