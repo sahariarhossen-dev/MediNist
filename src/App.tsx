@@ -38,6 +38,7 @@ import Subscription from "./pages/Subscription.tsx";
 import SubscriptionCheckout from "./pages/SubscriptionCheckout.tsx";
 import AppLayout from "./components/AppLayout.tsx";
 import Landing from "./pages/Landing.tsx";
+import Privacy from "./pages/Privacy.tsx";
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<LandingRoute />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
             <Route path="/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />

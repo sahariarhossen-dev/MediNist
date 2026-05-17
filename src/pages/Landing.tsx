@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   Menu,
@@ -30,6 +30,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import LandingFooter from "@/components/landing/LandingFooter";
 
 /* ---------- shared bits ---------- */
 
@@ -1048,6 +1049,12 @@ const Footer = () => (
 /* ---------- page ---------- */
 
 const Landing = () => {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }, [hash]);
   return (
     <>
       <Helmet>
@@ -1090,7 +1097,7 @@ const Landing = () => {
           <CTASection />
           <ContactSection />
         </main>
-        <Footer />
+        <LandingFooter />
       </div>
     </>
   );
