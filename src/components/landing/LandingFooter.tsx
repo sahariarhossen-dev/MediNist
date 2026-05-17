@@ -58,7 +58,7 @@ const FooterInner = ({ onHash }: { onHash: (e: React.MouseEvent<HTMLAnchorElemen
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Legal</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li><Link to="/privacy" className="hover:text-brand">Privacy</Link></li>
-              <li><a href="#" onClick={(e) => e.preventDefault()} className="hover:text-brand">Terms</a></li>
+              <li><Link to="/terms" className="hover:text-brand">Terms</Link></li>
             </ul>
           </div>
         </div>
