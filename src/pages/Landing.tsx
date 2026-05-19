@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import LandingFooter from "@/components/landing/LandingFooter";
+import { getLatestPosts } from "@/data/blogPosts";
+import { formatPostDate } from "@/lib/formatDate";
 
 /* ---------- shared bits ---------- */
 
@@ -60,7 +62,7 @@ const navLinks = [
   { label: "Home", href: "#top" },
   { label: "Features", href: "#features" },
   { label: "Pricing", href: "#pricing" },
-  { label: "Blog", href: "#blog" },
+  { label: "Blog", href: "/blog" },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -97,14 +99,24 @@ const LandingHeader = () => {
 
         <nav className="hidden items-center gap-8 md:flex">
           {navLinks.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={(e) => scrollToHash(e, l.href)}
-              className="text-sm font-medium text-slate-600 transition hover:text-brand"
-            >
-              {l.label}
-            </a>
+            l.href.startsWith("#") ? (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={(e) => scrollToHash(e, l.href)}
+                className="text-sm font-medium text-slate-600 transition hover:text-brand"
+              >
+                {l.label}
+              </a>
+            ) : (
+              <Link
+                key={l.href}
+                to={l.href}
+                className="text-sm font-medium text-slate-600 transition hover:text-brand"
+              >
+                {l.label}
+              </Link>
+            )
           ))}
         </nav>
 
@@ -145,17 +157,28 @@ const LandingHeader = () => {
         <div className="md:hidden border-t border-slate-100 bg-white">
           <div className="mx-auto max-w-6xl px-5 py-4 flex flex-col gap-1">
             {navLinks.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                onClick={(e) => {
-                  setOpen(false);
-                  scrollToHash(e, l.href);
-                }}
-                className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {l.label}
-              </a>
+              l.href.startsWith("#") ? (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  onClick={(e) => {
+                    setOpen(false);
+                    scrollToHash(e, l.href);
+                  }}
+                  className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {l.label}
+                </a>
+              ) : (
+                <Link
+                  key={l.href}
+                  to={l.href}
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {l.label}
+                </Link>
+              )
             ))}
             <div className="mt-2 flex gap-2">
               <Link
@@ -551,79 +574,85 @@ const Pricing = () => {
 
 /* ---------- blog ---------- */
 
-const posts = [
-  {
-    tag: "Inventory",
-    title: "Why Our Master Medicine Database Beats Manual Product Entry — Every Time",
-    excerpt:
-      "Adding products one-by-one is the silent killer of pharmacy productivity. Here's how instant access to 99% of Bangladesh's medicines saves 4+ hours per week.",
-    read: "5 min read",
-  },
-  {
-    tag: "Insights",
-    title: "Reading Your Hourly Sales Trend Like a Pro",
-    excerpt:
-      "Your sales graph is more than a curve. Learn how to spot peak windows, understaffed slots, and missed revenue.",
-    read: "6 min read",
-  },
-  {
-    tag: "AI",
-    title: "How Pharmacists Use AI for Faster Drug Lookups",
-    excerpt:
-      "From dosage edge cases to interaction warnings — see how the MediNist AI assistant changes the counter conversation.",
-    read: "4 min read",
-  },
-  {
-    tag: "Why MediNist",
-    title: "Goodbye Desktop Software: 5 Things Modern Pharmacies Demand",
-    excerpt:
-      "Old desktop systems lock your data and your time. Here's what a modern, mobile-first pharmacy stack looks like.",
-    read: "7 min read",
-  },
-];
-
-const Blog = () => (
-  <Section id="blog" className="py-20">
-    <div className="flex items-end justify-between gap-4">
-      <div>
-        <SectionEyebrow>From the blog</SectionEyebrow>
-        <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-          Run a smarter pharmacy
-        </h2>
-      </div>
-      <a
-        href="#blog"
-        onClick={(e) => scrollToHash(e, "#blog")}
-        className="hidden items-center gap-1 text-sm font-semibold text-brand hover:underline sm:inline-flex"
-      >
-        All articles <ArrowRight size={14} />
-      </a>
-    </div>
-
-    <div className="mt-10 grid gap-5 sm:grid-cols-2">
-      {posts.map((p) => (
-        <article
-          key={p.title}
-          className="group rounded-2xl bg-white p-6 shadow-[0_4px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100 transition hover:-translate-y-1 hover:shadow-[0_12px_32px_rgba(36,99,235,0.12)]"
+const Blog = () => {
+  const posts = getLatestPosts(3);
+  return (
+    <Section id="blog" className="py-20">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <SectionEyebrow>From the blog</SectionEyebrow>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+            Run a smarter pharmacy
+          </h2>
+        </div>
+        <Link
+          to="/blog"
+          className="hidden items-center gap-1 text-sm font-semibold text-brand hover:underline sm:inline-flex"
         >
-          <span className="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand">
-            {p.tag}
-          </span>
-          <h3 className="mt-3 text-lg font-bold leading-snug text-slate-900 group-hover:text-brand">
-            {p.title}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">{p.excerpt}</p>
-          <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-            <span>{p.read}</span>
-            <span className="inline-flex items-center gap-1 font-semibold text-brand">
-              Read more <ArrowRight size={12} />
-            </span>
-          </div>
-        </article>
-      ))}
-    </div>
-  </Section>
-);
+          View all posts <ArrowRight size={14} />
+        </Link>
+      </div>
+
+      <div className="mt-10 grid gap-6 grid-cols-1 md:grid-cols-3">
+        {posts.map((p) => (
+          <article
+            key={p.id}
+            className="group overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_rgba(15,23,42,0.05)] ring-1 ring-slate-100 transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(36,99,235,0.12)]"
+          >
+            <Link to={`/blog/${p.slug}`} className="block">
+              <div className="aspect-[16/9] overflow-hidden bg-slate-100">
+                <img
+                  src={p.imageUrl}
+                  alt={p.imageAlt}
+                  loading="lazy"
+                  width={1280}
+                  height={720}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div className="p-6">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      p.language === "bn"
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                        : "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100",
+                    )}
+                  >
+                    {p.language === "bn" ? "Bangla" : "English"}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand">
+                    {p.tag}
+                  </span>
+                </div>
+                <h3 className="mt-3 text-lg font-bold leading-snug text-slate-900 group-hover:text-brand">
+                  {p.title}
+                </h3>
+                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600">{p.summary}</p>
+                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                  <span>{formatPostDate(p.publishDate)} • {p.readTime}</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-brand">
+                    Read more <ArrowRight size={12} />
+                  </span>
+                </div>
+              </div>
+            </Link>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-8 sm:hidden">
+        <Link
+          to="/blog"
+          className="flex h-12 w-full items-center justify-center rounded-full bg-brand text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+        >
+          View all posts
+        </Link>
+      </div>
+    </Section>
+  );
+};
 
 /* ---------- FAQ ---------- */
 
