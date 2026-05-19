@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import LandingFooter from "@/components/landing/LandingFooter";
+import { getLatestPosts } from "@/data/blogPosts";
+import { formatPostDate } from "@/lib/formatDate";
 
 /* ---------- shared bits ---------- */
 
@@ -60,7 +62,7 @@ const navLinks = [
   { label: "Home", href: "#top" },
   { label: "Features", href: "#features" },
   { label: "Pricing", href: "#pricing" },
-  { label: "Blog", href: "#blog" },
+  { label: "Blog", href: "/blog" },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -97,14 +99,24 @@ const LandingHeader = () => {
 
         <nav className="hidden items-center gap-8 md:flex">
           {navLinks.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={(e) => scrollToHash(e, l.href)}
-              className="text-sm font-medium text-slate-600 transition hover:text-brand"
-            >
-              {l.label}
-            </a>
+            l.href.startsWith("#") ? (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={(e) => scrollToHash(e, l.href)}
+                className="text-sm font-medium text-slate-600 transition hover:text-brand"
+              >
+                {l.label}
+              </a>
+            ) : (
+              <Link
+                key={l.href}
+                to={l.href}
+                className="text-sm font-medium text-slate-600 transition hover:text-brand"
+              >
+                {l.label}
+              </Link>
+            )
           ))}
         </nav>
 
@@ -145,17 +157,28 @@ const LandingHeader = () => {
         <div className="md:hidden border-t border-slate-100 bg-white">
           <div className="mx-auto max-w-6xl px-5 py-4 flex flex-col gap-1">
             {navLinks.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                onClick={(e) => {
-                  setOpen(false);
-                  scrollToHash(e, l.href);
-                }}
-                className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {l.label}
-              </a>
+              l.href.startsWith("#") ? (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  onClick={(e) => {
+                    setOpen(false);
+                    scrollToHash(e, l.href);
+                  }}
+                  className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {l.label}
+                </a>
+              ) : (
+                <Link
+                  key={l.href}
+                  to={l.href}
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {l.label}
+                </Link>
+              )
             ))}
             <div className="mt-2 flex gap-2">
               <Link
