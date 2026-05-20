@@ -5,6 +5,7 @@ import coverMobile from "@/assets/blog/cover-mobile.jpg";
 import coverPharmacyBn from "@/assets/blog/cover-pharmacy-bn.jpg";
 import coverTrustBn from "@/assets/blog/cover-trust-bn.jpg";
 import coverWhatIsMedinistBn from "@/assets/blog/cover-what-is-medinist-bn.jpg";
+import coverDatabaseBn from "@/assets/blog/cover-database-bn.jpg";
 
 export type BlogPost = {
   id: string;
