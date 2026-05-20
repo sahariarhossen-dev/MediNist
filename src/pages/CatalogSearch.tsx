@@ -7,7 +7,6 @@ import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType } from "@/lib/productType";
-import { parseCatalogPack } from "@/lib/stockUtils";
 
 interface MasterMedicine {
   id: string;
@@ -20,6 +19,23 @@ interface MasterMedicine {
   pack_size: string | null;
   box_size: string | null;
 }
+
+const parsePackSize = (val: string | null): number | null => {
+  if (!val || val === "N/A") return null;
+  const match = val.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const computeStripPerPack = (
+  packSize: string | null,
+  boxSize: string | null
+): number | null => {
+  const pcs = parsePackSize(packSize);
+  const box = parsePackSize(boxSize);
+  if (!pcs || !box || pcs === 0) return null;
+  const result = Math.floor(box / pcs);
+  return result > 0 ? result : null;
+};
 
 const CatalogSearch = () => {
   const navigate = useNavigate();
@@ -96,8 +112,8 @@ const CatalogSearch = () => {
       return;
     }
 
-    const { pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack } =
-      parseCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
+    const pcsPerStrip = parsePackSize(med.pack_size);
+    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
     const qty = parseInt(quantity, 10) || 0;
 
     const { error } = await supabase.from("medicines").insert({
