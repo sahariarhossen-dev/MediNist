@@ -1,31 +1,31 @@
-## Publish new Bangla blog post
+## Publish Bangla blog post #2 — "৬০,০০০+ ওষুধের রেডি ডাটাবেজ"
 
-Add post "MediNist কী? কেন এটি সাধারণ হিসাবের অ্যাপ নয়..." to the blog system using the existing content-manager workflow.
+Append a new post to the existing blog system using the established Content Manager workflow. No schema or routing changes.
 
 ### Steps
 
-1. **Generate cover image** — `src/assets/blog/cover-what-is-medinist-bn.jpg` via imagegen (16:9, premium quality for UI text legibility).
-   - Prompt: pharmacist in white coat holding a premium tablet showing MediNist dashboard (clean charts, pill-shaped inventory buttons), blurred modern pharmacy rack background, blue + white MediNist palette, professional SaaS aesthetic.
+1. **Generate cover image** — `src/assets/blog/cover-database-bn.jpg` via imagegen (1280×720, premium quality for text legibility).
+   - Prompt: 16:9 premium illustration, a glowing cloud streaming dozens of Bangladeshi medicine brand names (Napa, Seclo, Ace, Sergel, Monas) as floating pill-shaped chips into a clean smartphone showing the MediNist app, badge "60,000+ Ready Drugs", modern blue-green palette, soft gradients, professional SaaS aesthetic.
 
 2. **Append BlogPost object** to `src/data/blogPosts.ts`:
-   - `id`: `"7"`
-   - `slug`: `"what-is-medinist-pharmacy-management-bn"`
+   - `id`: `"8"`
+   - `slug`: `"60000-drug-database-bn"`
    - `title`: provided Bangla title
    - `summary`: provided Bangla summary
    - `language`: `"bn"`
-   - `publishDate`: `"2026-05-19"` (today)
-   - `readTime`: `"৭ মিনিট পড়া"` (calculated from ~7 sections of Bangla prose)
+   - `publishDate`: `"2026-05-20"` (today)
+   - `readTime`: `"৬ মিনিট পড়া"`
    - `author`: `{ name: "MediNist টিম", role: "Product" }`
-   - `imageUrl`: imported cover
-   - `imageAlt`: Bangla alt describing pharmacist with MediNist tablet dashboard
-   - `tag`: `"MediNist পরিচিতি"`
-   - `content`: provided HTML, cleaned (strip outer `[ ]` brackets, preserve `<h2>/<p>/<ul>/<li>/<strong>/<em>` exactly as supplied)
+   - `imageUrl`: imported new cover
+   - `imageAlt`: Bangla alt — "MediNist অ্যাপে ৬০,০০০+ ওষুধের রেডি ডাটাবেজ স্ট্রিম হচ্ছে"
+   - `tag`: `"ডাটাবেজ ও সেটআপ"`
+   - `content`: provided HTML, cleaned (normalize a few stray non-Bangla glyphs like "বৈพลิবকা" → "বিপ্লবী", "অল্টারনে티브" → "অল্টারনেটিভ"; preserve all `<h2>/<p>/<ul>/<li>/<strong>` exactly otherwise).
 
-3. **Verify** — confirm post renders at `/blog/what-is-medinist-pharmacy-management-bn`, appears in `/blog` hub, and (as newest) on landing page latest-posts strip. No schema or routing changes needed.
+3. **Verify** — confirm post renders at `/blog/60000-drug-database-bn`, appears as newest in `/blog` hub and on the landing page's latest-posts strip.
 
 ### Files
 
-- **Create**: `src/assets/blog/cover-what-is-medinist-bn.jpg`
+- **Create**: `src/assets/blog/cover-database-bn.jpg`
 - **Edit**: `src/data/blogPosts.ts` (add import + append one object)
 
-No other files change. No new deps.
+No other files change. No new dependencies.
