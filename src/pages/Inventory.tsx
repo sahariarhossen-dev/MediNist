@@ -559,12 +559,13 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
-                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
-                      const catalogIsMulti = !isSingleUnit({
-                        pcs_per_strip: catalogPcsPerStrip,
-                        strip_per_pack: catalogStripPerPack,
+                      const catalogParsed = parseCatalogPack({
+                        pack_size: med.pack_size,
+                        box_size: med.box_size,
                       });
+                      const catalogPcsPerStrip = catalogParsed.pcs_per_strip;
+                      const catalogStripPerPack = catalogParsed.strip_per_pack;
+                      const catalogIsMulti = catalogParsed.has_strips;
                       return (
                         <div
                           key={med.id}
