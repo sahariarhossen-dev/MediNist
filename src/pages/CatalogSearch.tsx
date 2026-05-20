@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { ArrowLeft, Search, X, Plus, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { normalizeForSearch } from "@/lib/searchUtils";
+import { toFunctionalType } from "@/lib/productType";
 
 interface MasterMedicine {
   id: string;
@@ -19,13 +20,32 @@ interface MasterMedicine {
   box_size: string | null;
 }
 
+const parsePackSize = (val: string | null): number | null => {
+  if (!val || val === "N/A") return null;
+  const match = val.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const computeStripPerPack = (
+  packSize: string | null,
+  boxSize: string | null
+): number | null => {
+  const pcs = parsePackSize(packSize);
+  const box = parsePackSize(boxSize);
+  if (!pcs || !box || pcs === 0) return null;
+  const result = Math.floor(box / pcs);
+  return result > 0 ? result : null;
+};
+
 const CatalogSearch = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [addingId, setAddingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState("");
+  const [adding, setAdding] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -61,13 +81,21 @@ const CatalogSearch = () => {
     );
   }, [catalog, searchQuery]);
 
+  const handleExpand = useCallback(
+    (id: string) => {
+      setExpandedId((prev) => (prev === id ? null : id));
+      setQuantity("");
+    },
+    []
+  );
+
   const handleAddToInventory = async (med: MasterMedicine) => {
     if (!profile?.pharmacy_id) {
       toast.error("No pharmacy linked to your profile");
       return;
     }
 
-    setAddingId(med.id);
+    setAdding(true);
 
     // Duplicate check
     const { data: existing } = await supabase
@@ -80,29 +108,37 @@ const CatalogSearch = () => {
 
     if (existing) {
       toast.info("Already in your inventory");
-      setAddingId(null);
+      setAdding(false);
       return;
     }
 
-    // Direct JSON mirror — no parsing, no type guessing, no form.
+    const pcsPerStrip = parsePackSize(med.pack_size);
+    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+    const qty = parseInt(quantity, 10) || 0;
+
     const { error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
       name: med.brand_name,
       company_name: med.company || null,
-      generic_name: med.generic_name || null,
-      strength: med.strength || null,
-      format: med.format || null,
-      pack_size: med.pack_size || null,
-      box_size: med.box_size || null,
+      product_type: (() => {
+        const std = toFunctionalType(med.format);
+        return std === "Other" && med.format ? med.format : std;
+      })(),
+      unit_format: med.format || null,
       price: med.unit_price || null,
-    } as never);
+      stock_quantity: qty,
+      pcs_per_strip: pcsPerStrip,
+      strip_per_pack: stripPerPack,
+    });
 
     if (error) {
       toast.error("Failed to add product");
     } else {
       toast.success(`${med.brand_name} added to inventory`);
+      setExpandedId(null);
+      setQuantity("");
     }
-    setAddingId(null);
+    setAdding(false);
   };
 
   return (
@@ -171,11 +207,14 @@ const CatalogSearch = () => {
               {filtered.length} result{filtered.length !== 1 ? "s" : ""}
             </p>
             {filtered.map((med) => {
-              const isAdding = addingId === med.id;
+              const isExpanded = expandedId === med.id;
               return (
                 <div
                   key={med.id}
-                  className="bg-muted rounded-2xl overflow-hidden transition-all duration-150"
+                  onClick={() => handleExpand(med.id)}
+                  className={`bg-muted rounded-2xl overflow-hidden transition-all duration-150 cursor-pointer active:scale-[0.99] ${
+                    isExpanded ? "ring-1 ring-primary/30" : ""
+                  }`}
                 >
                   {/* Card row */}
                   <div className="flex items-start gap-3 p-3">
@@ -204,29 +243,58 @@ const CatalogSearch = () => {
                         )}
                       </div>
                     </div>
-                    <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                    <div className="flex-shrink-0 text-right">
                       <p className="font-bold text-foreground text-sm">
                         ৳{med.unit_price ?? 0}
                       </p>
                       {med.pack_size && med.pack_size !== "N/A" && (
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
                           Pack: {med.pack_size}
                         </p>
                       )}
-                      <button
-                        onClick={() => handleAddToInventory(med)}
-                        disabled={isAdding}
-                        aria-label="Add to inventory"
-                        className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50 active:scale-95"
-                      >
-                        {isAdding ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Plus size={16} />
-                        )}
-                      </button>
                     </div>
                   </div>
+
+                  {/* Expanded: quantity input */}
+                  {isExpanded && (
+                    <div
+                      className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-2 bg-background rounded-xl p-2.5">
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          Qty (pcs):
+                        </span>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                          className="flex-1 h-9 text-center rounded-lg border-border text-sm font-semibold"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleAddToInventory(med)}
+                          disabled={adding}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-50 flex-shrink-0"
+                        >
+                          {adding ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Plus size={14} />
+                          )}
+                          Add
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => navigate("/add-product")}
+                        className="mt-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+                      >
+                        Can't find it? Add manually →
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
