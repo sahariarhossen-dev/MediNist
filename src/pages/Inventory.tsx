@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, isStrictSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
@@ -55,15 +55,15 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
   return result > 0 ? result : null;
 };
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
-  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType, unitFormat }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null; unitFormat?: string | null }) => {
+  if (isStrictSingleUnit({ product_type: productType, unit_format: unitFormat })) {
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
       </span>
     );
   }
-  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
+  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack || 1, pcsPerStrip || 1);
   return (
     <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
       {boxes}
