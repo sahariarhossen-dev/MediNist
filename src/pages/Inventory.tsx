@@ -543,7 +543,7 @@ const Inventory = () => {
                             );
                           })() : (
                           <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
                           </div>
                         )}
                       </div>
@@ -552,10 +552,10 @@ const Inventory = () => {
                           <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
                             <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
                             <span className="text-gray-400">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
                             </span>
                             <span className="text-emerald-600 font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
                             </span>
                           </div>
                         </div>
