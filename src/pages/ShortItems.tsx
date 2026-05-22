@@ -3,7 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isStrictSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import {
@@ -18,6 +18,7 @@ interface LowStockItem {
   id: string;
   name: string;
   product_type: string | null;
+  unit_format: string | null;
   company_name: string | null;
   stock_quantity: number;
   strip_per_pack: number | null;
@@ -38,7 +39,7 @@ const ShortItems = () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip, product_size")
+        .select("id, name, product_type, unit_format, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip, product_size")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -47,6 +48,7 @@ const ShortItems = () => {
           id: m.id,
           name: m.name,
           product_type: m.product_type,
+          unit_format: m.unit_format,
           company_name: m.company_name,
           stock_quantity: m.stock_quantity ?? 0,
           strip_per_pack: m.strip_per_pack,
@@ -158,7 +160,9 @@ const ShortItems = () => {
                       </td>
                       <td className={`px-1.5 py-3 font-mono text-left whitespace-nowrap tabular-nums ${stockColor(item.stock_quantity)}`}>
                         <span className="whitespace-nowrap tabular-nums">
-                          {isSingleUnit(item) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
+                          {isStrictSingleUnit(item)
+                            ? `${item.stock_quantity} Pcs`
+                            : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack || 1, item.pcs_per_strip || 1)}
                         </span>
                       </td>
                       <td className="px-2 py-3 text-right text-gray-700 whitespace-nowrap tabular-nums">

@@ -1,31 +1,63 @@
-## Publish Bangla blog post #2 — "৬০,০০০+ ওষুধের রেডি ডাটাবেজ"
+# Fix multi-unit display for Suppositories (and similar) in Inventory
 
-Append a new post to the existing blog system using the established Content Manager workflow. No schema or routing changes.
+## Root cause
 
-### Steps
+`TriUnitDisplay` in `src/pages/Inventory.tsx` decides single vs. matrix purely via `isSingleUnit({ pcs_per_strip, strip_per_pack })` from `src/lib/stockUtils.ts`. That helper returns `single` whenever both numbers are `null`, `0`, or `1`. For Suppositories the master JSON often lacks usable pack/box numbers, so the card falls back to "1" instead of "1 • 0 • 0", even though structurally the product is sold in strips/boxes.
 
-1. **Generate cover image** — `src/assets/blog/cover-database-bn.jpg` via imagegen (1280×720, premium quality for text legibility).
-   - Prompt: 16:9 premium illustration, a glowing cloud streaming dozens of Bangladeshi medicine brand names (Napa, Seclo, Ace, Sergel, Monas) as floating pill-shaped chips into a clean smartphone showing the MediNist app, badge "60,000+ Ready Drugs", modern blue-green palette, soft gradients, professional SaaS aesthetic.
+## Strategy
 
-2. **Append BlogPost object** to `src/data/blogPosts.ts`:
-   - `id`: `"8"`
-   - `slug`: `"60000-drug-database-bn"`
-   - `title`: provided Bangla title
-   - `summary`: provided Bangla summary
-   - `language`: `"bn"`
-   - `publishDate`: `"2026-05-20"` (today)
-   - `readTime`: `"৬ মিনিট পড়া"`
-   - `author`: `{ name: "MediNist টিম", role: "Product" }`
-   - `imageUrl`: imported new cover
-   - `imageAlt`: Bangla alt — "MediNist অ্যাপে ৬০,০০০+ ওষুধের রেডি ডাটাবেজ স্ট্রিম হচ্ছে"
-   - `tag`: `"ডাটাবেজ ও সেটআপ"`
-   - `content`: provided HTML, cleaned (normalize a few stray non-Bangla glyphs like "বৈพลิবকা" → "বিপ্লবী", "অল্টারনে티브" → "অল্টারনেটিভ"; preserve all `<h2>/<p>/<ul>/<li>/<strong>` exactly otherwise).
+Move the single-vs-multi decision to a **format-keyword test** that runs first, then keep the existing pack-number math as the matrix value source. Pack numbers default to 1 when missing, so a quantity of `1` cleanly renders as `1 • 0 • 0`.
 
-3. **Verify** — confirm post renders at `/blog/60000-drug-database-bn`, appears as newest in `/blog` hub and on the landing page's latest-posts strip.
+### New helper in `src/lib/stockUtils.ts`
 
-### Files
+```ts
+// Strict single-unit forms — anything matching is rendered as a bare digit.
+const STRICT_SINGLE_UNIT_RE =
+  /\b(injection|inject|iv|im|vial|ampoule|ampule|syrup|suspension|oral\s*liquid|solution|drop|drops|spray|inhaler|inhalation|mdi|dpi|aerosol|respule|nebul\w*|cream|ointment|gel|lotion|sachet|powder)\b/i;
 
-- **Create**: `src/assets/blog/cover-database-bn.jpg`
-- **Edit**: `src/data/blogPosts.ts` (add import + append one object)
+export const isStrictSingleUnit = (med: {
+  unit_format?: string | null;
+  product_type?: string | null;
+  format?: string | null;
+}): boolean => {
+  const s = `${med?.unit_format ?? ""} ${med?.product_type ?? ""} ${med?.format ?? ""}`;
+  return STRICT_SINGLE_UNIT_RE.test(s);
+};
+```
 
-No other files change. No new dependencies.
+Add a thin wrapper used by the UI:
+
+```ts
+export const shouldDisplayAsMatrix = (med): boolean => !isStrictSingleUnit(med);
+```
+
+The existing `isSingleUnit(packInfo)` stays as-is for callers that genuinely need pack-math single detection (e.g. `handleAddFromCatalog`'s `boxesToPieces` decision).
+
+### Update `TriUnitDisplay` (Inventory.tsx)
+
+- Accept the medicine record (or at least `unit_format` + `product_type`) in addition to the existing pack fields.
+- Decision tree:
+  1. `isStrictSingleUnit(med)` → render bare `totalPcs`.
+  2. Otherwise → render `boxes • strips • pcs` from `totalPiecesToTriUnitObj(totalPcs, stripPerPack || 1, pcsPerStrip || 1)`. The `|| 1` fallback guarantees `1 → 1 • 0 • 0`, `12 → 12 • 0 • 0` for products with no pack data.
+
+### Update `src/pages/ShortItems.tsx`
+
+Same swap: use `isStrictSingleUnit(item)` instead of `isSingleUnit(item)` when choosing between `${qty} Pcs` and `totalPiecesToTriUnit(...)`. Pass `unit_format` through the `select(...)` query so the helper has the keyword source.
+
+## Files touched
+
+- `src/lib/stockUtils.ts` — add `STRICT_SINGLE_UNIT_RE`, `isStrictSingleUnit`, `shouldDisplayAsMatrix`. Leave `isSingleUnit` for pack-math callers.
+- `src/pages/Inventory.tsx` — `TriUnitDisplay` signature + call sites use new helper; matrix fallback uses `|| 1`.
+- `src/pages/ShortItems.tsx` — query adds `unit_format`; render uses new helper.
+
+## Out of scope
+
+- No change to how stock is **added** (`handleAddFromCatalog`, manual Add Product). Behavior for new entries is unchanged; this is purely a display refactor as the task specifies.
+- No DB migration; logic is derived from existing columns.
+
+## Verification
+
+1. A Suppository row in inventory with `stock_quantity = 1`, no pack numbers → renders `1 • 0 • 0`.
+2. A Tablet row with `pcs_per_strip = 10, strip_per_pack = 10, stock_quantity = 100` → still renders `1 • 0 • 0`.
+3. A Syrup row with `stock_quantity = 5` → still renders `5` (strict single, keyword match).
+4. Mobile viewport (390px) — `TriUnitDisplay` keeps `whitespace-nowrap text-[11px]`; no layout regression.
