@@ -92,6 +92,28 @@ export const isSingleUnit = (med: PackInfo | null | undefined): boolean => {
 };
 
 /**
+ * Strict single-unit forms — products always sold as one bottle/tube/vial/etc.
+ * For these we render a bare quantity ("5") instead of the Box • Strip • Pcs
+ * matrix, regardless of whether pack numbers exist.
+ *
+ * Anything NOT matching this list (Tablet, Capsule, Suppository, Pessary,
+ * Lozenge, etc.) is treated as multi-unit and rendered as a matrix, even
+ * when pack numbers are missing — in that case the math degenerates to
+ * "N • 0 • 0", which is the correct visual for "N boxes, no loose stock".
+ */
+const STRICT_SINGLE_UNIT_RE =
+  /\b(injection|inject|iv|im|vial|ampoule|ampule|syrup|suspension|oral\s*liquid|solution|drops?|spray|inhaler|inhalation|mdi|dpi|aerosol|respule|nebul\w*|cream|ointment|gel|lotion|sachet|powder)\b/i;
+
+export const isStrictSingleUnit = (med: {
+  unit_format?: string | null;
+  product_type?: string | null;
+  format?: string | null;
+} | null | undefined): boolean => {
+  const s = `${med?.unit_format ?? ""} ${med?.product_type ?? ""} ${med?.format ?? ""}`;
+  return STRICT_SINGLE_UNIT_RE.test(s);
+};
+
+/**
  * Convert a number of boxes into total pieces.
  */
 export const boxesToPieces = (
