@@ -569,11 +569,15 @@ export type Database = {
       }
       medicines: {
         Row: {
+          box_size: string | null
           company_name: string | null
           created_at: string | null
           expiry_date: string | null
+          format: string | null
+          generic_name: string | null
           id: string
           name: string
+          pack_size: string | null
           pcs_per_strip: number | null
           pharmacy_id: string
           price: number | null
@@ -581,15 +585,20 @@ export type Database = {
           product_type: string | null
           stock_alert: number | null
           stock_quantity: number | null
+          strength: string | null
           strip_per_pack: number | null
           unit_format: string | null
         }
         Insert: {
+          box_size?: string | null
           company_name?: string | null
           created_at?: string | null
           expiry_date?: string | null
+          format?: string | null
+          generic_name?: string | null
           id?: string
           name: string
+          pack_size?: string | null
           pcs_per_strip?: number | null
           pharmacy_id: string
           price?: number | null
@@ -597,15 +606,20 @@ export type Database = {
           product_type?: string | null
           stock_alert?: number | null
           stock_quantity?: number | null
+          strength?: string | null
           strip_per_pack?: number | null
           unit_format?: string | null
         }
         Update: {
+          box_size?: string | null
           company_name?: string | null
           created_at?: string | null
           expiry_date?: string | null
+          format?: string | null
+          generic_name?: string | null
           id?: string
           name?: string
+          pack_size?: string | null
           pcs_per_strip?: number | null
           pharmacy_id?: string
           price?: number | null
@@ -613,6 +627,7 @@ export type Database = {
           product_type?: string | null
           stock_alert?: number | null
           stock_quantity?: number | null
+          strength?: string | null
           strip_per_pack?: number | null
           unit_format?: string | null
         }
@@ -1268,11 +1283,15 @@ export type Database = {
       search_medicines: {
         Args: { _pharmacy_id: string; _query: string }
         Returns: {
+          box_size: string | null
           company_name: string | null
           created_at: string | null
           expiry_date: string | null
+          format: string | null
+          generic_name: string | null
           id: string
           name: string
+          pack_size: string | null
           pcs_per_strip: number | null
           pharmacy_id: string
           price: number | null
@@ -1280,6 +1299,7 @@ export type Database = {
           product_type: string | null
           stock_alert: number | null
           stock_quantity: number | null
+          strength: string | null
           strip_per_pack: number | null
           unit_format: string | null
         }[]
