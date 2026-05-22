@@ -3,7 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { totalPiecesToTriUnit, totalPiecesToTriUnitObj, isStrictSingleUnit, isLowStock } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isStrictSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import {
