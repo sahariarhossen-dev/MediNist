@@ -113,7 +113,10 @@ Deno.serve(async (req) => {
     }
 
     // 3. Update profile (created by trigger) with pharmacy_id, name, phone, role
-    const { error: profileError } = await supabaseAdmin
+    // The first user to register a pharmacy is its admin. We verify the role
+    // landed correctly and roll back the whole signup if it didn't, so an
+    // owner never gets stuck as 'salesman'.
+    const { data: updatedProfile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
         pharmacy_id: pharmacy.id,
@@ -121,14 +124,28 @@ Deno.serve(async (req) => {
         phone: trimmedPhone,
         role: "admin",
       })
-      .eq("id", authData.user.id);
+      .eq("id", authData.user.id)
+      .select("id, role, pharmacy_id")
+      .maybeSingle();
 
-    if (profileError) {
-      console.error("Profile update error:", profileError);
+    if (profileError || !updatedProfile || updatedProfile.role !== "admin" || updatedProfile.pharmacy_id !== pharmacy.id) {
+      console.error("Profile admin promotion failed:", profileError, updatedProfile);
+      // Roll back: remove the auth user and the pharmacy so registration can be retried cleanly.
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
+      await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
+      return new Response(
+        JSON.stringify({ error: "Failed to set up admin account. Please try again." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // 4. Sign in the user to get a session
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+    // 4. Sign in the user with a normal (anon) client so we return a regular user session,
+    //    not one tied to the service-role context.
+    const supabaseAnon = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!
+    );
+    const { data: signInData, error: signInError } = await supabaseAnon.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
