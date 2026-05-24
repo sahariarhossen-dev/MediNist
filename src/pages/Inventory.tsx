@@ -244,11 +244,12 @@ const Inventory = () => {
       if (selectedCompanies.size > 0) {
         q = q.in("company", Array.from(selectedCompanies));
       }
-      if (debouncedSearch) {
-        const term = debouncedSearch.replace(/[%,]/g, " ");
-        q = q.or(
-          `brand_name.ilike.%${term}%,generic_name.ilike.%${term}%,company.ilike.%${term}%`
-        );
+      const tsq = toTsQuery(debouncedSearch);
+      if (tsq) {
+        // GIN-indexed full-text search on the generated `search_vector`
+        // column. `simple` config + prefix tokens (`amox:*`) gives us
+        // instant autocomplete across brand/generic/company.
+        q = q.textSearch("search_vector", tsq, { config: "simple" });
       }
 
       const { data, error } = await q;
