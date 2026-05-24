@@ -170,24 +170,36 @@ const Inventory = () => {
     [medicines, searchQuery, selectedCompanies]
   );
 
-  // Filter catalog results (exclude items already in local inventory)
+  // Dual-section view is active whenever the user is filtering by company
+  // or actively searching. Otherwise we show only the default inventory list.
+  const isDualMode = selectedCompanies.size > 0 || !!searchQuery.trim();
+
+  // Filter catalog results (exclude items already in local inventory).
+  // Powered by either the company filter, the search query, or both.
   const filteredCatalog = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = normalizeForSearch(searchQuery);
-    if (!q) return [];
-    const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
+    if (!isDualMode) return [];
+    const localKeys = new Set(
+      medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`)
+    );
     let result = catalog.filter(
-      (m) =>
-        (normalizeForSearch(m.brand_name).includes(q) ||
-          (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
-          (m.company && normalizeForSearch(m.company).includes(q))) &&
-        !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
+      (m) => !localKeys.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
     if (selectedCompanies.size > 0) {
       result = result.filter((m) => m.company && selectedCompanies.has(m.company));
     }
-    return result;
-  }, [catalog, medicines, searchQuery, selectedCompanies]);
+    if (searchQuery.trim()) {
+      const q = normalizeForSearch(searchQuery);
+      if (q) {
+        result = result.filter(
+          (m) =>
+            normalizeForSearch(m.brand_name).includes(q) ||
+            (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
+            (m.company && normalizeForSearch(m.company).includes(q))
+        );
+      }
+    }
+    return result.sort((a, b) => a.brand_name.localeCompare(b.brand_name));
+  }, [catalog, medicines, searchQuery, selectedCompanies, isDualMode]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
