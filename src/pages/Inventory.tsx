@@ -265,11 +265,15 @@ const Inventory = () => {
   // medicines already present in the local inventory.
   const filteredCatalog = useMemo(() => {
     if (!isDualMode) return [];
+    const norm = (s: string | null | undefined) => (s || "").trim().toLowerCase();
     const localKeys = new Set(
-      medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`)
+      medicines.map(
+        (m) => `${norm(m.name)}|${norm(m.company_name)}|${norm(m.product_size)}`
+      )
     );
     const result = catalog.filter(
-      (m) => !localKeys.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
+      (m) =>
+        !localKeys.has(`${norm(m.brand_name)}|${norm(m.company)}|${norm(m.strength)}`)
     );
     return result.sort((a, b) => a.brand_name.localeCompare(b.brand_name));
   }, [catalog, medicines, isDualMode]);
