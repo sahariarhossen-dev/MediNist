@@ -171,18 +171,21 @@ const Inventory = () => {
     let cancelled = false;
     setCompaniesLoading(true);
     (async () => {
-      const { data, error } = await supabase
-        .from("master_medicines")
-        .select("company")
-        .not("company", "is", null)
-        .order("company", { ascending: true })
-        .limit(1000);
+      // Fetch from the `unique_companies` view (distinct companies aggregated in Postgres).
+      // Cast supabase client because the generated types may not include the new view yet.
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => Promise<{ data: { company: string | null }[] | null; error: unknown }>;
+        };
+      })
+        .from("unique_companies")
+        .select("company");
       if (cancelled) return;
       if (error) {
         toast.error("Failed to load companies");
       } else {
         const unique = Array.from(
-          new Set((data || []).map((r: { company: string | null }) => (r.company || "").trim()).filter(Boolean))
+          new Set((data || []).map((r) => (r.company || "").trim()).filter(Boolean))
         ).sort((a, b) => a.localeCompare(b));
         setMasterCompanies(unique);
       }
