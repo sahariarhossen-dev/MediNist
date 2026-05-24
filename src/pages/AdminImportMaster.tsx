@@ -24,6 +24,8 @@ const AdminImportMaster = () => {
   const [currentBatch, setCurrentBatch] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [statusMsg, setStatusMsg] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
   const totalBatches = useMemo(
     () => (rows ? Math.ceil(rows.length / BATCH_SIZE) : 0),
@@ -51,21 +53,67 @@ const AdminImportMaster = () => {
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setErrorMsg("");
+    setStatusMsg(`Reading ${file.name} (${Math.round(file.size / 1024)} KB)…`);
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseErr) {
+        const msg = `JSON parse failed: ${String(parseErr)}`;
+        setErrorMsg(msg);
+        setStatusMsg("");
+        toast.error("Invalid JSON", { description: msg });
+        return;
+      }
       if (!Array.isArray(parsed)) {
-        toast.error("JSON must be an array of medicines");
+        const msg = "JSON root must be an array of medicines";
+        setErrorMsg(msg);
+        setStatusMsg("");
+        toast.error(msg);
         return;
       }
       setRows(parsed);
       setFileMeta({ name: file.name, sizeKb: Math.round(file.size / 1024) });
       setInserted(0);
       setCurrentBatch(0);
+      setStatusMsg(`Parsed ${parsed.length.toLocaleString()} rows.`);
       toast.success(`Parsed ${parsed.length.toLocaleString()} rows`);
     } catch (err) {
-      toast.error("Failed to parse JSON", { description: String(err) });
+      const msg = String(err);
+      setErrorMsg(msg);
+      setStatusMsg("");
+      toast.error("Failed to read file", { description: msg });
     }
+  };
+
+  // supabase.functions.invoke wraps non-2xx as FunctionsHttpError and hides the body.
+  // Pull out the real server error JSON so the UI can show the exact message.
+  const callFn = async (body: unknown): Promise<any> => {
+    const { data, error } = await supabase.functions.invoke("import-master-medicines", { body });
+    if (error) {
+      let detail = error.message;
+      try {
+        const ctx: any = (error as any).context;
+        if (ctx && typeof ctx.text === "function") {
+          const txt = await ctx.text();
+          if (txt) {
+            try {
+              const parsed = JSON.parse(txt);
+              detail = parsed.error || parsed.detail || txt;
+            } catch {
+              detail = txt;
+            }
+          }
+        }
+      } catch {
+        /* keep error.message */
+      }
+      throw new Error(detail);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
   };
 
   const runSync = async () => {
@@ -76,6 +124,7 @@ const AdminImportMaster = () => {
     if (!ok) return;
 
     setRunning(true);
+    setErrorMsg("");
     setInserted(0);
     setCurrentBatch(0);
     const start = Date.now();
@@ -83,20 +132,28 @@ const AdminImportMaster = () => {
     const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500);
 
     try {
+      setStatusMsg("Truncating master_medicines…");
+      await callFn({ action: "truncate" });
+
       const batches = Math.ceil(rows.length / BATCH_SIZE);
+      setStatusMsg(`Inserting ${rows.length.toLocaleString()} rows in ${batches} batches…`);
       for (let i = 0; i < batches; i++) {
         const chunk = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
-        const { data, error } = await supabase.functions.invoke("import-master-medicines", {
-          body: { rows: chunk, truncate: i === 0 },
-        });
-        if (error) throw new Error(`Batch ${i + 1}/${batches}: ${error.message}`);
-        if (data?.error) throw new Error(`Batch ${i + 1}/${batches}: ${data.error}`);
-        setInserted((prev) => prev + (data?.inserted ?? chunk.length));
-        setCurrentBatch(i + 1);
+        try {
+          const data = await callFn({ rows: chunk });
+          setInserted((prev) => prev + (data?.inserted ?? chunk.length));
+          setCurrentBatch(i + 1);
+        } catch (batchErr) {
+          throw new Error(`Batch ${i + 1}/${batches}: ${(batchErr as Error).message}`);
+        }
       }
+      setStatusMsg("Done.");
       toast.success("Master database successfully synchronized!");
     } catch (err) {
-      toast.error("Sync failed", { description: String(err) });
+      const msg = (err as Error).message || String(err);
+      setErrorMsg(msg);
+      setStatusMsg("");
+      toast.error("Sync failed", { description: msg });
     } finally {
       window.clearInterval(timer);
       setRunning(false);
@@ -165,6 +222,14 @@ const AdminImportMaster = () => {
                 Batch {currentBatch}/{totalBatches} · {mm}:{ss}
               </span>
             </div>
+            {statusMsg && <p className="text-xs text-muted-foreground">{statusMsg}</p>}
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-xl p-3 text-xs whitespace-pre-wrap break-words font-mono">
+            <div className="font-sans font-semibold mb-1">Error</div>
+            {errorMsg}
           </div>
         )}
       </div>

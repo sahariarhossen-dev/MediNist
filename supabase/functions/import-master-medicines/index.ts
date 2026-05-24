@@ -2,7 +2,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 // Allowlist of super-admin user IDs allowed to run the master import.
-// Add your auth.users UUID here.
 const SUPER_ADMIN_USER_IDS: string[] = [
   "41f9a774-97ea-41a6-8da7-6137b5c5c970",
 ];
@@ -36,18 +35,23 @@ const asPrice = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    console.log("[import-master-medicines] request received", req.method);
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Unauthorized: missing bearer token" }, 401);
     }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -57,43 +61,52 @@ Deno.serve(async (req) => {
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claims?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user?.id) {
+      console.log("[import-master-medicines] auth.getUser failed:", userErr?.message);
+      return json({ error: `Unauthorized: ${userErr?.message ?? "no user"}` }, 401);
     }
 
-    const userId = claims.claims.sub as string;
+    const userId = userData.user.id;
     if (!SUPER_ADMIN_USER_IDS.includes(userId)) {
-      return new Response(
-        JSON.stringify({
-          error: "Forbidden",
-          hint: "Add your auth user ID to SUPER_ADMIN_USER_IDS in supabase/functions/import-master-medicines/index.ts",
-          your_user_id: userId,
-        }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json({
+        error: "Forbidden",
+        hint: "Add your auth user ID to SUPER_ADMIN_USER_IDS",
+        your_user_id: userId,
+      }, 403);
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body || !Array.isArray(body.rows)) {
-      return new Response(JSON.stringify({ error: "Body must be { rows: [], truncate?: boolean }" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const rows: RawRow[] = body.rows;
-    if (rows.length === 0 || rows.length > 200) {
-      return new Response(JSON.stringify({ error: "rows length must be 1..200" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return json({ error: `Invalid JSON body: ${String(e)}` }, 400);
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // Dedicated truncate action — keeps slow DELETE in its own request so it doesn't
+    // share the timeout budget of the first insert batch.
+    if (body?.action === "truncate") {
+      console.log("[import-master-medicines] truncating master_medicines");
+      const { error: delErr } = await admin
+        .from("master_medicines")
+        .delete()
+        .not("id", "is", null);
+      if (delErr) {
+        console.log("[import-master-medicines] truncate failed:", delErr.message);
+        return json({ error: `Truncate failed: ${delErr.message}` }, 500);
+      }
+      return json({ truncated: true });
+    }
+
+    if (!body || !Array.isArray(body.rows)) {
+      return json({ error: "Body must be { rows: [...] } or { action: 'truncate' }" }, 400);
+    }
+    const rows: RawRow[] = body.rows;
+    if (rows.length === 0 || rows.length > 500) {
+      return json({ error: `rows length must be 1..500 (got ${rows.length})` }, 400);
+    }
 
     let truncated = false;
     if (body.truncate === true) {
@@ -102,10 +115,8 @@ Deno.serve(async (req) => {
         .delete()
         .not("id", "is", null);
       if (delErr) {
-        return new Response(JSON.stringify({ error: "Truncate failed", detail: delErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.log("[import-master-medicines] inline truncate failed:", delErr.message);
+        return json({ error: `Truncate failed: ${delErr.message}` }, 500);
       }
       truncated = true;
     }
@@ -128,27 +139,18 @@ Deno.serve(async (req) => {
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
     if (mapped.length === 0) {
-      return new Response(JSON.stringify({ inserted: 0, truncated, skipped: rows.length }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ inserted: 0, truncated, skipped: rows.length });
     }
 
     const { error: insErr } = await admin.from("master_medicines").insert(mapped);
     if (insErr) {
-      return new Response(JSON.stringify({ error: "Insert failed", detail: insErr.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.log("[import-master-medicines] insert failed:", insErr.message);
+      return json({ error: `Insert failed: ${insErr.message}`, sample: mapped[0] }, 500);
     }
 
-    return new Response(
-      JSON.stringify({ inserted: mapped.length, truncated, skipped: rows.length - mapped.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json({ inserted: mapped.length, truncated, skipped: rows.length - mapped.length });
   } catch (e) {
-    return new Response(JSON.stringify({ error: "Server error", detail: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.log("[import-master-medicines] server error:", String(e));
+    return json({ error: `Server error: ${String(e)}` }, 500);
   }
 });
