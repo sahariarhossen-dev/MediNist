@@ -94,6 +94,8 @@ const Inventory = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
   const [companySearch, setCompanySearch] = useState("");
+  const [masterCompanies, setMasterCompanies] = useState<string[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
@@ -163,13 +165,34 @@ const Inventory = () => {
     return () => clearTimeout(timer);
   }, [searchQuery, searchOpen]);
 
-  // Unique company names from both sources
-  const allCompanies = useMemo(() => {
-    const names = new Set<string>();
-    medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
-    catalogResults.forEach((m) => { if (m.company) names.add(m.company); });
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [medicines, catalogResults]);
+  // Fetch distinct companies from master_medicines when filter opens (once)
+  useEffect(() => {
+    if (!filterOpen || masterCompanies.length > 0 || companiesLoading) return;
+    let cancelled = false;
+    setCompaniesLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from("master_medicines")
+        .select("company")
+        .not("company", "is", null)
+        .order("company", { ascending: true })
+        .limit(1000);
+      if (cancelled) return;
+      if (error) {
+        toast.error("Failed to load companies");
+      } else {
+        const unique = Array.from(
+          new Set((data || []).map((r: { company: string | null }) => (r.company || "").trim()).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b));
+        setMasterCompanies(unique);
+      }
+      setCompaniesLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [filterOpen, masterCompanies.length, companiesLoading]);
+
+  // Unique company names sourced from master catalog
+  const allCompanies = useMemo(() => masterCompanies, [masterCompanies]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return allCompanies;
@@ -750,7 +773,11 @@ const Inventory = () => {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
-            {filteredCompanies.length === 0 ? (
+            {companiesLoading && filteredCompanies.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-primary" />
+              </div>
+            ) : filteredCompanies.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No companies found</p>
             ) : (
               filteredCompanies.map((company) => (
