@@ -1,54 +1,32 @@
-## Problem
+## Plan
 
-The Company Filter modal in `Inventory.tsx` currently derives its company list from only two sources:
-1. The pharmacy's local `medicines` inventory
-2. The current `catalogResults` (max 50 rows from a search query)
-
-This means the filter list is incomplete — users see only companies from their own inventory plus whatever happens to be in the current search results, not the full set of companies available in the global `master_medicines` catalog.
-
-## Discovery
-
-A quick `COUNT(DISTINCT company)` on `master_medicines` returns **81 distinct companies** — a tiny, easily client-side-manageable set.
-
-## Changes — `src/pages/Inventory.tsx`
-
-1. **Add `masterCompanies` state & fetch effect**
-   - New state: `masterCompanies: string[]` and `companiesLoading: boolean`.
-   - `useEffect` keyed on `[filterOpen]`:
-     - When `filterOpen` becomes `true` and `masterCompanies.length === 0`, fetch:
-       ```ts
-       supabase
-         .from("master_medicines")
-         .select("company")
-         .not("company", "is", null)
-         .order("company", { ascending: true })
-         .limit(1000)
-       ```
-     - Deduplicate client-side with a `Set`, sort, and store in `masterCompanies`.
-     - This is safe because there are only ~81 distinct companies (well under the 1000-row limit).
-
-2. **Replace `allCompanies` source**
-   - Change the `allCompanies` `useMemo` to source from `masterCompanies` instead of `medicines` + `catalogResults`:
-     ```ts
-     const allCompanies = useMemo(() => masterCompanies, [masterCompanies]);
+1. **Create the Supabase view**
+   - Add a SQL migration with:
+     ```sql
+     CREATE OR REPLACE VIEW public.unique_companies AS
+     SELECT DISTINCT company
+     FROM public.master_medicines
+     WHERE company IS NOT NULL AND company != ''
+     ORDER BY company ASC;
      ```
-   - Keep the existing `filteredCompanies` logic (case-insensitive filter on `companySearch`) exactly as-is.
+   - This keeps the distinct company aggregation in Postgres instead of the React modal query.
 
-3. **Add a loading state inside the modal**
-   - While `companiesLoading` is true, show a small spinner or skeleton in the list area so the modal doesn't appear empty on first open.
+2. **Update Inventory company loading**
+   - In `src/pages/Inventory.tsx`, change the company fetch effect to query:
+     ```ts
+     supabase.from('unique_companies').select('*')
+     ```
+   - Keep the existing one-time fetch behavior when the filter sheet opens.
+   - Keep the existing loading spinner, but ensure loading always stops on success or error so the modal cannot spin forever.
 
-4. **No other changes**
-   - The modal UI, checkbox list, "Select All / Clear All", search input, and Apply button remain untouched.
-   - The `selectedCompanies` logic, filtering of `filteredMedicines` and `filteredCatalog`, and all handlers stay identical.
+3. **Preserve local modal search**
+   - Keep `companySearch` and `filteredCompanies` as client-side filtering only.
+   - No database requests should run while typing in “Search companies...”.
 
-## Out of scope
-- No database migrations needed (81 distinct companies fits comfortably in a 1000-row query).
-- No new views, functions, or indexes.
-- No changes to `CatalogSearch.tsx`, `AddPrescriptionSheet`, or other components.
+4. **TypeScript compatibility**
+   - Since generated Supabase types may not include the new view immediately, use the project’s existing typed Supabase client with a narrow local cast only for this view query.
+   - Do not edit `src/integrations/supabase/types.ts` manually.
 
-## Verification
-1. Open Inventory → tap the filter icon → the modal opens and shows all ~81 company names within ~200ms.
-2. Type "ACI" in the search box → list instantly narrows to matching companies (case-insensitive).
-3. Select a company → tap Apply → local inventory and catalog results are filtered correctly.
-4. Close and reopen filter → companies load from state (no second network request).
-5. Mobile viewport: modal remains bottom-sheet style, scrollable, fully responsive.
+5. **Verify**
+   - Confirm `Inventory.tsx` no longer queries `master_medicines` for the modal company list.
+   - The modal remains scrollable/mobile-first and the internal search continues to filter instantly on the fetched list.
