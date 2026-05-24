@@ -1142,7 +1142,12 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      unique_companies: {
+        Row: {
+          company: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_staff_invitation: {
