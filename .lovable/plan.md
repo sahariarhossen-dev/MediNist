@@ -1,31 +1,67 @@
-## Publish Bangla blog post #2 — "৬০,০০০+ ওষুধের রেডি ডাটাবেজ"
+## Goal
 
-Append a new post to the existing blog system using the established Content Manager workflow. No schema or routing changes.
+Convert the Inventory screen so that the **Shop Inventory** (top) and **Master Catalog** (bottom) sections render together whenever the user filters by company, with a unified search bar that drives both sections and a fast-add flow that promotes a catalog item into the shop list in real time.
 
-### Steps
+## Current behavior (for reference)
 
-1. **Generate cover image** — `src/assets/blog/cover-database-bn.jpg` via imagegen (1280×720, premium quality for text legibility).
-   - Prompt: 16:9 premium illustration, a glowing cloud streaming dozens of Bangladeshi medicine brand names (Napa, Seclo, Ace, Sergel, Monas) as floating pill-shaped chips into a clean smartphone showing the MediNist app, badge "60,000+ Ready Drugs", modern blue-green palette, soft gradients, professional SaaS aesthetic.
+- Catalog rows only appear when there is a search query.
+- Catalog is excluded by `name + company` key — works, but tied to search.
+- Company filter affects only the inventory list when no search is active.
 
-2. **Append BlogPost object** to `src/data/blogPosts.ts`:
-   - `id`: `"8"`
-   - `slug`: `"60000-drug-database-bn"`
-   - `title`: provided Bangla title
-   - `summary`: provided Bangla summary
-   - `language`: `"bn"`
-   - `publishDate`: `"2026-05-20"` (today)
-   - `readTime`: `"৬ মিনিট পড়া"`
-   - `author`: `{ name: "MediNist টিম", role: "Product" }`
-   - `imageUrl`: imported new cover
-   - `imageAlt`: Bangla alt — "MediNist অ্যাপে ৬০,০০০+ ওষুধের রেডি ডাটাবেজ স্ট্রিম হচ্ছে"
-   - `tag`: `"ডাটাবেজ ও সেটআপ"`
-   - `content`: provided HTML, cleaned (normalize a few stray non-Bangla glyphs like "বৈพลิবকা" → "বিপ্লবী", "অল্টারনে티브" → "অল্টারনেটিভ"; preserve all `<h2>/<p>/<ul>/<li>/<strong>` exactly otherwise).
+## Changes to `src/pages/Inventory.tsx`
 
-3. **Verify** — confirm post renders at `/blog/60000-drug-database-bn`, appears as newest in `/blog` hub and on the landing page's latest-posts strip.
+### 1. Trigger dual-section view from filter OR search
 
-### Files
+A new derived flag drives the split layout:
 
-- **Create**: `src/assets/blog/cover-database-bn.jpg`
-- **Edit**: `src/data/blogPosts.ts` (add import + append one object)
+```
+const isDualMode = selectedCompanies.size > 0 || !!searchQuery.trim();
+```
 
-No other files change. No new dependencies.
+When `isDualMode` is true, render both:
+- **Shop Inventory** section (filtered local medicines for selected companies + search)
+- **Master Catalog** section (master items for selected companies, minus any already in shop inventory, plus search)
+
+When `isDualMode` is false, keep today's "In Your Inventory" only view.
+
+### 2. Rework `filteredCatalog`
+
+Today catalog is empty unless `searchQuery` exists. New rule:
+
+- If `selectedCompanies.size === 0` AND no search → return `[]` (no catalog spam on the default screen).
+- Otherwise:
+  - Start from `catalog`.
+  - If companies selected → keep only items whose `company` ∈ `selectedCompanies`.
+  - Build an exclusion set of `name|company` from the **full** `medicines` list scoped to the same company filter (not just the visible filtered ones) so a med in inventory never leaks into catalog even if search hides it from the top.
+  - If `searchQuery` present → match against brand/generic/company.
+  - Sort A–Z by `brand_name` (already the fetch order, re-sort defensively after filter).
+
+### 3. Section headers + counts
+
+Show section labels whenever `isDualMode`:
+- "In Your Inventory (n)" — even when n = 0, render an empty-state hint inside the section ("No items from this company in your shop yet").
+- "From Catalog (n)" — same idea; empty-state hint when n = 0.
+
+Keep current card markup, badges, icons, stock display, expand-to-add UX — only the gating logic changes.
+
+### 4. Fast-add real-time transition
+
+`handleAddFromCatalog` already inserts and prepends to `medicines` state. Confirm:
+- After insert the new row appears in Shop Inventory section instantly (already does via `setMedicines`).
+- The exclusion set re-derives from `medicines`, so the same row drops out of the catalog list on the next render — no reload needed. ✅ already works once §2 is in place.
+
+### 5. Efficiency note
+
+We already fetch master catalog once on mount (single query, sorted). No per-keystroke Supabase calls — filtering is all in-memory, which is the cheapest equivalent of `.not('name','in',…)` for this dataset and keeps the search snappy across both sections. No fetch logic changes needed.
+
+### 6. Cleanup
+
+- Remove the "search-only" guard around the catalog block.
+- Keep manual-add link visible at the bottom of catalog whenever the catalog section is shown.
+- Keep all existing styles, long-press edit/delete, filter sheet, tri-unit display — untouched.
+
+## Files
+
+- `src/pages/Inventory.tsx` — only this file changes.
+
+No DB, RLS, or types changes.
