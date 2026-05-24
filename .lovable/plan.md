@@ -1,53 +1,117 @@
-## Root cause
+## Goal
 
-`master_medicines` has **21,168 rows** across 81 companies. The current code does:
+Replace the current `ilike` / client-side filtering on `master_medicines` with Postgres Full-Text Search backed by a GIN index, so searching across 21k+ rows stays instant even with fast typing.
 
-```ts
-supabase.from("master_medicines").select("*").order("brand_name", { ascending: true })
+## 1. Database migration
+
+Add an immutable, generated `tsvector` column over `brand_name` + `generic_name` + `company`, plus a GIN index. Using `simple` config (not `english`) because brand names are not English words and we don't want stemming like "tablets" → "tablet" silently dropping matches.
+
+```sql
+-- Generated search vector (auto-maintained, no trigger needed)
+ALTER TABLE public.master_medicines
+ADD COLUMN search_vector tsvector
+GENERATED ALWAYS AS (
+  setweight(to_tsvector('simple', coalesce(brand_name, '')),   'A') ||
+  setweight(to_tsvector('simple', coalesce(generic_name, '')), 'B') ||
+  setweight(to_tsvector('simple', coalesce(company, '')),      'C')
+) STORED;
+
+-- GIN index — the workhorse
+CREATE INDEX idx_master_medicines_search_vector
+  ON public.master_medicines
+  USING GIN (search_vector);
+
+-- Helpful secondary index for company-filter dropdown queries
+CREATE INDEX IF NOT EXISTS idx_master_medicines_company
+  ON public.master_medicines (company);
 ```
 
-Supabase caps unranged selects at **1000 rows**, so only the first 1000 brand names (alphabetical "A…") ever reach the client. When you filter by "ACI Limited", the in-memory filter only sees the ~56 ACI items whose brand names start with "A" — every "B–Z" ACI brand was never fetched. The company filter list itself is also incomplete for the same reason.
+Weights (A/B/C) let us rank brand hits above generic hits above company hits when we use `ts_rank` ordering later.
 
-## Fix strategy
+## 2. Why FTS only handles part of the problem
 
-Stop loading the entire master catalog up front. Instead:
+FTS matches whole tokens, prefix tokens (`amoxi:*`), and is case-insensitive — but it does **not** handle:
 
-1. **On mount** — fetch only what's needed to render the default screen and populate the company filter:
-   - Local `medicines` (unchanged).
-   - The full **distinct company list** from `master_medicines`, paginated in batches of 1000 via `.range()` until exhausted, then deduped client-side. One-time cost, small payload (just one text column).
+- Sub-string matches inside a token (`"mox"` inside `"amoxicillin"`).
+- The "strip non-alphanumerics" normalization already used in `src/lib/searchUtils.ts` (`A-mactin` → `amactin`).
 
-2. **On demand (dual mode)** — when `selectedCompanies.size > 0` or there's a search query, fetch the catalog rows server-side:
-   ```ts
-   let q = supabase
-     .from("master_medicines")
-     .select("*")
-     .order("brand_name", { ascending: true })
-     .range(0, 4999);                                   // generous ceiling
-   if (selectedCompanies.size > 0) q = q.in("company", [...selectedCompanies]);
-   if (searchQuery.trim()) q = q.or(
-     `brand_name.ilike.%${term}%,generic_name.ilike.%${term}%,company.ilike.%${term}%`
-   );
-   ```
-   Largest single company (ACI ~840) fits in one page, so no infinite scroll is required for the company-filter case. Search-without-company is capped at 5000 results, which is more than enough for an autocomplete-style lookup.
+For the catalog autocomplete this is acceptable as long as we use **prefix search** (`term:*`). Users typing `"amox"` will match `"amoxicillin 500"`. We will sanitize the query and append `:*` to every token:
 
-3. **Debounce** the search-triggered fetch (~250 ms) so each keystroke doesn't hit Supabase.
+```ts
+const toTsQuery = (raw: string) =>
+  raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")     // strip punctuation, keep spaces
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => `${t}:*`)             // prefix match per token
+    .join(" & ");                     // AND across tokens
+```
 
-4. **Loading state** for the catalog section — small inline spinner under the "From Catalog" header so the user sees the section refresh, without disturbing the inventory above.
+## 3. Frontend changes (`src/pages/Inventory.tsx`)
 
-## Preserve
+Swap the on-demand catalog `.or("brand_name.ilike...")` block for `.textSearch()`:
 
-- Local-inventory exclusion (`name|company` key set) — unchanged, still applied client-side after the fetch returns.
-- All existing UI: section headers, badges, expand-to-add flow, manual-add link, long-press edit/delete, filter sheet.
-- `handleAddFromCatalog` still prepends to `medicines`, which still causes the row to drop out of `filteredCatalog` on the next render.
+```ts
+let q = supabase
+  .from("master_medicines")
+  .select("*")
+  .order("brand_name", { ascending: true })
+  .range(0, 4999);
 
-## Files
+if (selectedCompanies.size > 0) {
+  q = q.in("company", [...selectedCompanies]);
+}
 
-- `src/pages/Inventory.tsx` — only file touched.
-- No DB, RLS, types, or `CatalogSearch.tsx` changes.
+const tsq = toTsQuery(debouncedSearch);
+if (tsq) {
+  q = q.textSearch("search_vector", tsq, {
+    type: "websearch",  // actually we pass the raw tsquery — see below
+    config: "simple",
+  });
+}
+```
 
-## Technical notes
+The supabase-js `.textSearch(column, query, { type, config })` accepts:
+- `type: "plain"` → `plainto_tsquery` (no prefix support — wrong for us)
+- `type: "phrase"` → `phraseto_tsquery` (wrong)
+- `type: "websearch"` → `websearch_to_tsquery` (no `:*` prefix — wrong)
+- omit `type` → raw `to_tsquery` (supports `term:*` — **this is what we want**)
 
-- Replace the single `catalog` state with: `catalogCompanies: string[]` (mount-time) + `catalog: MasterMedicine[]` (on-demand, replaced per query).
-- `allCompanies` now merges `catalogCompanies` with companies present in local `medicines`.
-- New `useEffect` keyed on `[selectedCompanies, debouncedSearch, isDualMode]` performs the on-demand fetch. When `isDualMode` is false, clear `catalog` to `[]`.
-- Keep an `AbortController` (or stale-response guard via a request id) so a fast typer doesn't get an out-of-order result.
+So the actual call is:
+
+```ts
+q = q.textSearch("search_vector", tsq, { config: "simple" });
+```
+
+## 4. Keeping the UI snappy while typing
+
+The current code already has a 250 ms debounce + stale-response guard via a `Symbol` request id. Keep both. The change is just:
+
+- Switch the catalog fetch query body to `.textSearch()` as above.
+- Keep `range(0, 4999)` as a safety cap.
+- Keep loading spinner under the "From Catalog" header.
+
+GIN-indexed `@@` lookups on 21k rows return in single-digit milliseconds, so the perceived bottleneck becomes network round-trip, not the DB. Debouncing already hides that.
+
+## 5. `CatalogSearch.tsx`
+
+`src/pages/CatalogSearch.tsx` currently fetches the entire catalog on mount (also capped at 1000 rows silently) and filters client-side. After the FTS column lands, switch it to the same on-demand `.textSearch()` flow with debounce. Not strictly required for this task, but worth flagging — the same 1000-row truncation bug exists there.
+
+## Files touched
+
+- New migration: generated column + GIN index + company btree index.
+- `src/pages/Inventory.tsx` — swap `.or(...ilike...)` for `.textSearch(...)` + add `toTsQuery` helper (or place in `src/lib/searchUtils.ts`).
+- Optional follow-up: `src/pages/CatalogSearch.tsx` mirror the same pattern.
+
+## What stays the same
+
+- Local-inventory exclusion (`name|company` Set).
+- Debounce, stale-response guard, loading spinner, section headers, badges.
+- `handleAddFromCatalog` and the prepend-to-`medicines` behavior.
+- RLS, types regeneration is automatic after the migration.
+
+## Open question before I build
+
+The `to_tsvector('simple', ...)` config does no stemming, which is correct for brand names but means `"tablets"` won't match `"tablet"` in generic names. For a pharmacy catalog this is almost certainly the right call (medical terms shouldn't be stemmed). Confirm before I run the migration, or say "use english" if you'd rather have stemming on generic names.
