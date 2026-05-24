@@ -520,6 +520,7 @@ export type Database = {
           generic_name: string | null
           id: string
           pack_size: string | null
+          search_vector: unknown
           strength: string | null
           unit_price: number | null
         }
@@ -532,6 +533,7 @@ export type Database = {
           generic_name?: string | null
           id?: string
           pack_size?: string | null
+          search_vector?: unknown
           strength?: string | null
           unit_price?: number | null
         }
@@ -544,6 +546,7 @@ export type Database = {
           generic_name?: string | null
           id?: string
           pack_size?: string | null
+          search_vector?: unknown
           strength?: string | null
           unit_price?: number | null
         }
