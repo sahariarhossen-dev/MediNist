@@ -464,7 +464,7 @@ const Inventory = () => {
         ) : (
           <>
             {/* Section: In Your Inventory */}
-            {filteredMedicines.length === 0 && !searchQuery ? (
+            {filteredMedicines.length === 0 && !isDualMode ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Pill size={48} className="text-muted-foreground mb-4" />
                 <p className="text-muted-foreground font-medium">No medicines added yet.</p>
@@ -472,10 +472,15 @@ const Inventory = () => {
               </div>
             ) : (
               <>
-                {searchQuery && filteredMedicines.length > 0 && (
+                {isDualMode && (
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">
                     In Your Inventory ({filteredMedicines.length})
                   </p>
+                )}
+                {isDualMode && filteredMedicines.length === 0 && (
+                  <div className="bg-white/60 border border-dashed border-gray-200 rounded-2xl py-6 text-center">
+                    <p className="text-xs text-muted-foreground">No items from this selection in your shop yet.</p>
+                  </div>
                 )}
                 {filteredMedicines.map((med) => {
                   const isExpanded = expandedId === med.id;
@@ -577,11 +582,16 @@ const Inventory = () => {
                 })}
 
                 {/* Section: From Catalog */}
-                {searchQuery && filteredCatalog.length > 0 && (
+                {isDualMode && (
                   <>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">
                       From Catalog ({filteredCatalog.length})
                     </p>
+                    {filteredCatalog.length === 0 && (
+                      <div className="bg-white/60 border border-dashed border-gray-200 rounded-2xl py-6 text-center">
+                        <p className="text-xs text-muted-foreground">No more catalog items for this selection.</p>
+                      </div>
+                    )}
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
@@ -672,7 +682,7 @@ const Inventory = () => {
                 )}
 
                 {/* Manual add link at bottom of catalog results */}
-                {searchQuery && filteredCatalog.length > 0 && (
+                {isDualMode && filteredCatalog.length > 0 && (
                   <button
                     onClick={() => navigate("/add-product")}
                     className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-3"
