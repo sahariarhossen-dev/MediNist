@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType } from "@/lib/productType";
 
 interface MasterMedicine {
@@ -39,71 +40,46 @@ const computeStripPerPack = (
 const CatalogSearch = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [results, setResults] = useState<MasterMedicine[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState("");
   const [adding, setAdding] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const reqIdRef = useRef(0);
+
+  useEffect(() => {
+    const fetchCatalog = async () => {
+      const { data, error } = await supabase
+        .from("master_medicines")
+        .select("*")
+        .order("brand_name", { ascending: true });
+
+      if (error) {
+        toast.error("Failed to load catalog");
+      } else {
+        setCatalog(data || []);
+      }
+      setLoading(false);
+    };
+    fetchCatalog();
+  }, []);
 
   useEffect(() => {
     if (searchRef.current) searchRef.current.focus();
   }, []);
 
-  // Reset expansion when query changes so stale expanded card can't bind to a new row
-  useEffect(() => {
-    setExpandedId(null);
-  }, [searchQuery]);
-
-  // Debounced server-side search
-  useEffect(() => {
-    const raw = searchQuery.trim();
-    if (raw.length < 2) {
-      reqIdRef.current += 1; // invalidate any in-flight
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-
-    // Sanitize for PostgREST .or() filter
-    const safe = raw.replace(/[,()%*]/g, " ").trim();
-    if (!safe) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-
-    const myId = ++reqIdRef.current;
-    setResults([]);
-    setSearching(true);
-
-    const timer = setTimeout(async () => {
-      const { data, error } = await supabase
-        .from("master_medicines")
-        .select(
-          "id,brand_name,generic_name,strength,unit_price,company,format,pack_size,box_size"
-        )
-        .or(
-          `brand_name.ilike.%${safe}%,generic_name.ilike.%${safe}%,company.ilike.%${safe}%`
-        )
-        .order("brand_name", { ascending: true })
-        .limit(50);
-
-      if (myId !== reqIdRef.current) return; // out-of-order guard
-
-      if (error) {
-        toast.error("Search failed");
-        setResults([]);
-      } else {
-        setResults((data || []) as MasterMedicine[]);
-      }
-      setSearching(false);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return catalog;
+    const q = normalizeForSearch(searchQuery);
+    if (!q) return catalog;
+    return catalog.filter(
+      (m) =>
+        normalizeForSearch(m.brand_name).includes(q) ||
+        (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
+        (m.company && normalizeForSearch(m.company).includes(q))
+    );
+  }, [catalog, searchQuery]);
 
   const handleExpand = useCallback(
     (id: string) => {
@@ -209,26 +185,14 @@ const CatalogSearch = () => {
 
       {/* Results */}
       <div className="px-4 pt-3 space-y-2">
-        {searching ? (
+        {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-primary" size={32} />
           </div>
-        ) : !searchQuery.trim() ? (
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-muted-foreground font-medium">
-              Start typing to search 21,000+ medicines
-            </p>
-            <button
-              onClick={() => navigate("/add-product")}
-              className="mt-4 text-sm text-primary font-semibold underline-offset-2 hover:underline"
-            >
-              Can't find it? Add manually
-            </button>
-          </div>
-        ) : results.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground font-medium">
-              No medicines found
+              {searchQuery ? "No medicines found" : "Catalog is empty"}
             </p>
             <button
               onClick={() => navigate("/add-product")}
@@ -240,9 +204,9 @@ const CatalogSearch = () => {
         ) : (
           <>
             <p className="text-xs text-muted-foreground px-1 pb-1">
-              {results.length} result{results.length !== 1 ? "s" : ""}
+              {filtered.length} result{filtered.length !== 1 ? "s" : ""}
             </p>
-            {results.map((med) => {
+            {filtered.map((med) => {
               const isExpanded = expandedId === med.id;
               return (
                 <div

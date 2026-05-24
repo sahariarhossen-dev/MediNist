@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, isStrictSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
@@ -55,15 +55,15 @@ const computeStripPerPack = (packSize: string | null, boxSize: string | null): n
   return result > 0 ? result : null;
 };
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType, unitFormat }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null; unitFormat?: string | null }) => {
-  if (isStrictSingleUnit({ product_type: productType, unit_format: unitFormat })) {
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
+  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
       </span>
     );
   }
-  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack || 1, pcsPerStrip || 1);
+  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
   return (
     <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
       {boxes}
@@ -79,8 +79,7 @@ const Inventory = () => {
   const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [catalogResults, setCatalogResults] = useState<MasterMedicine[]>([]);
-  const [catalogSearching, setCatalogSearching] = useState(false);
+  const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,8 +93,6 @@ const Inventory = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
   const [companySearch, setCompanySearch] = useState("");
-  const [masterCompanies, setMasterCompanies] = useState<string[]>([]);
-  const [companiesLoading, setCompaniesLoading] = useState(false);
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
@@ -104,7 +101,6 @@ const Inventory = () => {
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
-  const catalogReqIdRef = useRef(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -112,12 +108,12 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
-      const medsRes = await supabase
-        .from("medicines")
-        .select("*")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .order("name", { ascending: true });
+      const [medsRes, catalogRes] = await Promise.all([
+        supabase.from("medicines").select("*").eq("pharmacy_id", profile.pharmacy_id).order("name", { ascending: true }),
+        supabase.from("master_medicines").select("*").order("brand_name", { ascending: true }),
+      ]);
       setMedicines(medsRes.data || []);
+      setCatalog(catalogRes.data || []);
       setLoading(false);
     };
     fetchData();
@@ -129,73 +125,13 @@ const Inventory = () => {
     }
   }, [searchOpen]);
 
-  // Debounced server-side catalog search against master_medicines
-  useEffect(() => {
-    const raw = searchQuery.trim();
-    if (!searchOpen || raw.length < 2) {
-      catalogReqIdRef.current += 1;
-      setCatalogResults([]);
-      setCatalogSearching(false);
-      return;
-    }
-    const safe = raw.replace(/[,()%*]/g, " ").trim();
-    if (!safe) {
-      setCatalogResults([]);
-      setCatalogSearching(false);
-      return;
-    }
-    const myId = ++catalogReqIdRef.current;
-    setCatalogSearching(true);
-    const timer = setTimeout(async () => {
-      const { data, error } = await supabase
-        .from("master_medicines")
-        .select("id,brand_name,generic_name,strength,unit_price,company,format,pack_size,box_size")
-        .or(`brand_name.ilike.%${safe}%,generic_name.ilike.%${safe}%,company.ilike.%${safe}%`)
-        .order("brand_name", { ascending: true })
-        .limit(50);
-      if (myId !== catalogReqIdRef.current) return;
-      if (error) {
-        toast.error("Catalog search failed");
-        setCatalogResults([]);
-      } else {
-        setCatalogResults((data || []) as MasterMedicine[]);
-      }
-      setCatalogSearching(false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, searchOpen]);
-
-  // Fetch distinct companies from master_medicines when filter opens (once)
-  useEffect(() => {
-    if (!filterOpen || masterCompanies.length > 0 || companiesLoading) return;
-    let cancelled = false;
-    setCompaniesLoading(true);
-    (async () => {
-      // Fetch from the `unique_companies` view (distinct companies aggregated in Postgres).
-      // Cast supabase client because the generated types may not include the new view yet.
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => Promise<{ data: { company: string | null }[] | null; error: unknown }>;
-        };
-      })
-        .from("unique_companies")
-        .select("company");
-      if (cancelled) return;
-      if (error) {
-        toast.error("Failed to load companies");
-      } else {
-        const unique = Array.from(
-          new Set((data || []).map((r) => (r.company || "").trim()).filter(Boolean))
-        ).sort((a, b) => a.localeCompare(b));
-        setMasterCompanies(unique);
-      }
-      setCompaniesLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [filterOpen, masterCompanies.length, companiesLoading]);
-
-  // Unique company names sourced from master catalog
-  const allCompanies = useMemo(() => masterCompanies, [masterCompanies]);
+  // Unique company names from both sources
+  const allCompanies = useMemo(() => {
+    const names = new Set<string>();
+    medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
+    catalog.forEach((m) => { if (m.company) names.add(m.company); });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [medicines, catalog]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return allCompanies;
@@ -234,20 +170,24 @@ const Inventory = () => {
     [medicines, searchQuery, selectedCompanies]
   );
 
-  // Filter catalog results (exclude items already in local inventory; apply company filter)
+  // Filter catalog results (exclude items already in local inventory)
   const filteredCatalog = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const localNames = new Set(
-      medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`)
-    );
-    let result = catalogResults.filter(
-      (m) => !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
+    const q = normalizeForSearch(searchQuery);
+    if (!q) return [];
+    const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
+    let result = catalog.filter(
+      (m) =>
+        (normalizeForSearch(m.brand_name).includes(q) ||
+          (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
+          (m.company && normalizeForSearch(m.company).includes(q))) &&
+        !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
     if (selectedCompanies.size > 0) {
       result = result.filter((m) => m.company && selectedCompanies.has(m.company));
     }
     return result;
-  }, [catalogResults, medicines, searchQuery, selectedCompanies]);
+  }, [catalog, medicines, searchQuery, selectedCompanies]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
@@ -603,7 +543,7 @@ const Inventory = () => {
                             );
                           })() : (
                           <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
+                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                           </div>
                         )}
                       </div>
@@ -612,10 +552,10 @@ const Inventory = () => {
                           <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
                             <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
                             <span className="text-gray-400">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
+                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                             <span className="text-emerald-600 font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} unitFormat={med.unit_format} />
+                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
                             </span>
                           </div>
                         </div>
@@ -706,7 +646,7 @@ const Inventory = () => {
                 )}
 
                 {/* No results at all */}
-                {searchQuery.trim().length >= 2 && !catalogSearching && filteredMedicines.length === 0 && filteredCatalog.length === 0 && (
+                {searchQuery && filteredMedicines.length === 0 && filteredCatalog.length === 0 && (
                   <div className="text-center py-16">
                     <Pill size={48} className="text-muted-foreground mb-4 mx-auto" />
                     <p className="text-muted-foreground font-medium">No medicines found</p>
@@ -716,13 +656,6 @@ const Inventory = () => {
                     >
                       Can't find it? Add manually →
                     </button>
-                  </div>
-                )}
-
-                {/* Catalog spinner */}
-                {searchQuery.trim().length >= 2 && catalogSearching && filteredCatalog.length === 0 && (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 size={20} className="animate-spin text-primary" />
                   </div>
                 )}
 
@@ -776,11 +709,7 @@ const Inventory = () => {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
-            {companiesLoading && filteredCompanies.length === 0 ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 size={20} className="animate-spin text-primary" />
-              </div>
-            ) : filteredCompanies.length === 0 ? (
+            {filteredCompanies.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No companies found</p>
             ) : (
               filteredCompanies.map((company) => (

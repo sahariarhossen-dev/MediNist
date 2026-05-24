@@ -42,7 +42,6 @@ import Privacy from "./pages/Privacy.tsx";
 import Terms from "./pages/Terms.tsx";
 import Blog from "./pages/Blog.tsx";
 import BlogPost from "./pages/BlogPost.tsx";
-import AdminImportMaster from "./pages/AdminImportMaster.tsx";
 
 const queryClient = new QueryClient();
 
@@ -118,7 +117,6 @@ const App = () => (
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
-            <Route path="/admin/import-master" element={<ProtectedRoute><AdminImportMaster /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
