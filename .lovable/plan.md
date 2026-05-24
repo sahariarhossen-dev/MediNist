@@ -1,24 +1,22 @@
-## Debounce Search Input to 300 ms with Custom Hook
+## Fix Catalog Dedup to Use Name + Company + Strength
 
-### Problem
-The search input currently debounces inline at 250 ms. We need a slightly longer 300 ms delay and a cleaner, reusable custom hook.
+### The bug
+In `src/pages/Inventory.tsx`, `filteredCatalog` (lines 266–275) builds an exclusion key from only `name + company_name`. So adding "Antigall 300 mg" hides every Antigall strength from the catalog.
 
-### Solution
+### Fix
+Include strength in the composite key on both sides:
 
-1. **Create `src/hooks/useDebounce.ts`**
-   - Accepts a generic value `T` and a delay (default 300 ms).
-   - Uses `useState` + `useEffect` with `setTimeout`/`clearTimeout`.
-   - Returns the debounced value.
+- Local key: `${name}|${company_name}|${product_size}` (lowercased, trimmed; treat null/empty strength as `""`)
+- Catalog key: `${brand_name}|${company}|${strength}` (same normalization)
 
-2. **Update `src/pages/Inventory.tsx`**
-   - Remove the inline `useEffect` debounce (lines 219–222).
-   - Import and call `useDebounce(searchQuery, 300)` to produce `debouncedSearch`.
-   - All existing logic (`isDualMode`, catalog fetch, stale-request guard, deduplication, UI) remains untouched.
+Now only the exact strength variant added to the shop is excluded; other strengths of the same brand stay in "From Catalog".
+
+### Also align the duplicate guard in `handleAddFromCatalog`
+That handler currently inserts without checking duplicates, but `CatalogSearch.tsx` does a duplicate check on `name + company_name` only. Update both to also match `product_size = master.strength` so the same composite key is used everywhere.
+
+Files:
+- `src/pages/Inventory.tsx` — update `filteredCatalog` key + (optional) add the same composite check before insert in `handleAddFromCatalog`.
+- `src/pages/CatalogSearch.tsx` — update the existing duplicate `.maybeSingle()` query to also `.eq("product_size", med.strength ?? "")` (or skip the eq when strength is null and match `is null`).
 
 ### Result
-- API requests fire only after the user stops typing for 300 ms.
-- Hook is reusable for future components.
-
-### Files changed
-- `src/hooks/useDebounce.ts` (new)
-- `src/pages/Inventory.tsx` (swap inline debounce for hook)
+"Antigall 300 mg" added → only that card moves to inventory; "Antigall 150 mg" stays in catalog.
