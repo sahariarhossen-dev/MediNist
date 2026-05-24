@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Add your auth.users UUID here to access this hidden page.
 // Must match SUPER_ADMIN_USER_IDS in supabase/functions/import-master-medicines/index.ts
 const SUPER_ADMIN_USER_IDS: string[] = [
-  // "your-uuid-here",
+  "41f9a774-97ea-41a6-8da7-6137b5c5c970",
 ];
 
 const BATCH_SIZE = 200;
