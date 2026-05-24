@@ -79,7 +79,8 @@ const Inventory = () => {
   const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
+  const [catalogResults, setCatalogResults] = useState<MasterMedicine[]>([]);
+  const [catalogSearching, setCatalogSearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -101,6 +102,7 @@ const Inventory = () => {
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const catalogReqIdRef = useRef(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -108,12 +110,12 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
-      const [medsRes, catalogRes] = await Promise.all([
-        supabase.from("medicines").select("*").eq("pharmacy_id", profile.pharmacy_id).order("name", { ascending: true }),
-        supabase.from("master_medicines").select("*").order("brand_name", { ascending: true }),
-      ]);
+      const medsRes = await supabase
+        .from("medicines")
+        .select("*")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .order("name", { ascending: true });
       setMedicines(medsRes.data || []);
-      setCatalog(catalogRes.data || []);
       setLoading(false);
     };
     fetchData();
@@ -125,13 +127,49 @@ const Inventory = () => {
     }
   }, [searchOpen]);
 
+  // Debounced server-side catalog search against master_medicines
+  useEffect(() => {
+    const raw = searchQuery.trim();
+    if (!searchOpen || raw.length < 2) {
+      catalogReqIdRef.current += 1;
+      setCatalogResults([]);
+      setCatalogSearching(false);
+      return;
+    }
+    const safe = raw.replace(/[,()%*]/g, " ").trim();
+    if (!safe) {
+      setCatalogResults([]);
+      setCatalogSearching(false);
+      return;
+    }
+    const myId = ++catalogReqIdRef.current;
+    setCatalogSearching(true);
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("master_medicines")
+        .select("id,brand_name,generic_name,strength,unit_price,company,format,pack_size,box_size")
+        .or(`brand_name.ilike.%${safe}%,generic_name.ilike.%${safe}%,company.ilike.%${safe}%`)
+        .order("brand_name", { ascending: true })
+        .limit(50);
+      if (myId !== catalogReqIdRef.current) return;
+      if (error) {
+        toast.error("Catalog search failed");
+        setCatalogResults([]);
+      } else {
+        setCatalogResults((data || []) as MasterMedicine[]);
+      }
+      setCatalogSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchOpen]);
+
   // Unique company names from both sources
   const allCompanies = useMemo(() => {
     const names = new Set<string>();
     medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
-    catalog.forEach((m) => { if (m.company) names.add(m.company); });
+    catalogResults.forEach((m) => { if (m.company) names.add(m.company); });
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [medicines, catalog]);
+  }, [medicines, catalogResults]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return allCompanies;
@@ -170,24 +208,20 @@ const Inventory = () => {
     [medicines, searchQuery, selectedCompanies]
   );
 
-  // Filter catalog results (exclude items already in local inventory)
+  // Filter catalog results (exclude items already in local inventory; apply company filter)
   const filteredCatalog = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const q = normalizeForSearch(searchQuery);
-    if (!q) return [];
-    const localNames = new Set(medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`));
-    let result = catalog.filter(
-      (m) =>
-        (normalizeForSearch(m.brand_name).includes(q) ||
-          (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
-          (m.company && normalizeForSearch(m.company).includes(q))) &&
-        !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
+    const localNames = new Set(
+      medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`)
+    );
+    let result = catalogResults.filter(
+      (m) => !localNames.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
     if (selectedCompanies.size > 0) {
       result = result.filter((m) => m.company && selectedCompanies.has(m.company));
     }
     return result;
-  }, [catalog, medicines, searchQuery, selectedCompanies]);
+  }, [catalogResults, medicines, searchQuery, selectedCompanies]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
