@@ -1,57 +1,52 @@
-# Fix: First Registrant Must Be Admin + Staff Management Guards
+# Fix "Edge Function returned a non-2xx status code" on Registration
 
-## Root cause
+## Root cause (confirmed from edge logs + DB inspection)
 
-The `register-pharmacy` edge function already attempts to set `role: "admin"` on the profile after signup, but the flow is fragile:
+Edge function logs show every registration failing with:
 
-1. `handle_new_user` trigger inserts the profile with the default `role = 'salesman'` the moment `auth.admin.createUser()` runs.
-2. The edge function then issues a separate `.update({ role: "admin" })`.
-3. If that update fails for any reason, the code only `console.error`s it and still returns success — leaving the brand-new pharmacy owner stuck as `salesman`. There is no rollback and no verification.
-4. The auto sign-in step uses the **admin client** (`supabaseAdmin.auth.signInWithPassword`) which is unusual and can produce sessions tied to the service role context.
+```
+Profile admin promotion failed: { code: "P0001", message: "Users cannot change their own role" }
+```
 
-We will make the role assignment atomic, verified, and fail-loud, and lock down staff-management UI to admins only.
+The DB has **two** triggers calling `prevent_role_change()` on `public.profiles`:
 
-## Plan
+1. `prevent_role_self_update` — correct: fires only `WHEN (new.id = auth.uid())`.
+2. `profiles_prevent_role_change` — **buggy**: fires on every UPDATE of `role`, with no `auth.uid()` check.
 
-### 1. Make the registering user an Admin atomically (backend)
+The edge function uses the service-role client (where `auth.uid()` is NULL), but trigger #2 still throws, so the `update({ role: 'admin' })` always fails → rollback deletes the auth user and pharmacy → 500 returned to the client. Nothing wrong with foreign keys or with the TRUNCATE; the trigger was always broken, it just wasn't visible before.
 
-Edit `supabase/functions/register-pharmacy/index.ts`:
+## The fix
 
-- After creating the auth user, replace the silent `.update()` with a verified update:
-  - Run the update with `.select("id, role").single()`.
-  - If `role !== "admin"` or there is any error, roll back: delete the auth user (`supabaseAdmin.auth.admin.deleteUser`) and the pharmacy row, then return an error response.
-- Use a **separate non-admin client** (anon key) for the auto sign-in, not the service-role client, so the returned session is a normal user session.
+### 1. DB migration — remove the redundant role guard
 
-### 2. Harden the profile default (database migration)
+Drop `profiles_prevent_role_change`. Keep `prevent_role_self_update`, which already correctly blocks a logged-in user from editing their own role while letting the service role (and the edge function) promote a new owner to `admin`.
 
-Add a small migration to make the system robust even if a future signup path forgets to set the role:
+```sql
+DROP TRIGGER IF EXISTS profiles_prevent_role_change ON public.profiles;
+```
 
-- Keep `handle_new_user` creating the profile, but change the default insert to `role = NULL` (or leave 'salesman' — see Technical Notes). This isn't strictly required for the bug fix; the edge function is the source of truth. We will keep `'salesman'` as default to avoid breaking the staff-invitation flow, which relies on it.
-- No schema changes needed beyond what's already there. `accept_staff_invitation` already sets the invited user's role correctly to `admin/manager/salesman` from the invitation.
+This preserves the security intent (users still can't escalate their own role; the existing RLS UPDATE policy on `profiles` also blocks role changes by the user) while unblocking server-side promotion.
 
-(So: no migration required — fixing the edge function is sufficient. Listed here for completeness.)
+### 2. `src/pages/Register.tsx` — clear stale session + graceful errors
 
-### 3. Guard staff management in the UI (frontend)
+Before invoking `register-pharmacy`:
 
-In `src/pages/ShopProfile.tsx` (the screen that lists and invites staff):
+- Call `await supabase.auth.signOut().catch(() => {})` so any leftover JWT from a deleted user (the current console shows `user_not_found` 403s for sub `41f9a774…`) doesn't get attached to the function call.
+- Wrap `supabase.functions.invoke(...)` so we surface the function's JSON `{ error }` body even when the SDK throws on non-2xx (currently the SDK error swallows it and the user only sees the generic "non-2xx" string). Use `try/catch` and read `err.context?.response`/`.text()` to extract the server message, falling back to a friendly default.
 
-- Read `profile.role` from `useAuth()`.
-- If `role !== 'admin'`, hide the "Invite staff", "Remove", and "Revoke" controls and the staff list section, showing a small "Admin only" notice instead.
-- Keep RLS as the real enforcement layer — these guards are UX only. Database RLS on `shop_staff` and the `invite-staff` edge function already restrict writes to admins via `is_pharmacy_admin()`.
+### 3. Edge function — small hardening only
 
-### 4. Verify
-
-- Manually sign up a new pharmacy and confirm `profiles.role = 'admin'` for that user.
-- Sign in as a non-admin and confirm the staff management UI is hidden.
-- Confirm an existing admin can still invite staff and that invited users land with the role from the invitation (admin/manager/salesman) via `accept_staff_invitation`.
-
-## Technical notes
-
-- The reported "salesman" outcome happens because the post-signup `.update` either failed silently or never ran (e.g., transient error, network blip). Making it fail-loud + rolling back guarantees only admin-promoted accounts persist.
-- We do not need a new RPC: the service-role client bypasses RLS, and there are currently no triggers attached to `public.profiles` that would block the role change (the `prevent_role_change` function exists but is not bound to any trigger).
-- The `invite-staff` and `accept_staff_invitation` paths already correctly assign admin/manager/salesman roles to invitees, so they don't need changes.
+`supabase/functions/register-pharmacy/index.ts` is already correct in shape (service-role client, verify-then-rollback). Once trigger #2 is gone the existing code works. No edits required beyond keeping the existing rollback path and the existing error log for future debugging.
 
 ## Files touched
 
-- `supabase/functions/register-pharmacy/index.ts` — verified update + rollback, switch auto sign-in to anon client.
-- `src/pages/ShopProfile.tsx` — admin-only guards around staff UI.
+- New migration: drop `profiles_prevent_role_change` trigger.
+- `src/pages/Register.tsx`: pre-call `signOut`, improved error extraction + toast.
+- No edge function code change needed.
+
+## How to verify
+
+1. Run the migration.
+2. From the Register screen, complete all 4 steps and submit.
+3. Expect: toast "Account created successfully!", redirect to `/dashboard`, and in the DB the new `profiles` row has `role = 'admin'` and `pharmacy_id` set.
+4. Edge function logs should no longer contain "Users cannot change their own role".
