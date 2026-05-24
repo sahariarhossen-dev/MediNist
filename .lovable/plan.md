@@ -1,63 +1,93 @@
-# Fix multi-unit display for Suppositories (and similar) in Inventory
+# Master Medicines Import System
 
-## Root cause
+## 1. Database migration
 
-`TriUnitDisplay` in `src/pages/Inventory.tsx` decides single vs. matrix purely via `isSingleUnit({ pcs_per_strip, strip_per_pack })` from `src/lib/stockUtils.ts`. That helper returns `single` whenever both numbers are `null`, `0`, or `1`. For Suppositories the master JSON often lacks usable pack/box numbers, so the card falls back to "1" instead of "1 • 0 • 0", even though structurally the product is sold in strips/boxes.
+Add three nullable text columns to `public.master_medicines`:
 
-## Strategy
+- `format` (text)
+- `pack_size` (text)
+- `box_size` (text)
 
-Move the single-vs-multi decision to a **format-keyword test** that runs first, then keep the existing pack-number math as the matrix value source. Pack numbers default to 1 when missing, so a quantity of `1` cleanly renders as `1 • 0 • 0`.
+No data backfill, no RLS changes (existing read-only policies stay).
 
-### New helper in `src/lib/stockUtils.ts`
+After the migration runs, `src/integrations/supabase/types.ts` regenerates automatically.
 
-```ts
-// Strict single-unit forms — anything matching is rendered as a bare digit.
-const STRICT_SINGLE_UNIT_RE =
-  /\b(injection|inject|iv|im|vial|ampoule|ampule|syrup|suspension|oral\s*liquid|solution|drop|drops|spray|inhaler|inhalation|mdi|dpi|aerosol|respule|nebul\w*|cream|ointment|gel|lotion|sachet|powder)\b/i;
+## 2. Hidden importer route
 
-export const isStrictSingleUnit = (med: {
-  unit_format?: string | null;
-  product_type?: string | null;
-  format?: string | null;
-}): boolean => {
-  const s = `${med?.unit_format ?? ""} ${med?.product_type ?? ""} ${med?.format ?? ""}`;
-  return STRICT_SINGLE_UNIT_RE.test(s);
-};
+New page **`src/pages/AdminImportMaster.tsx`** mounted at `/admin/import-master` in `App.tsx`. Not linked from any menu.
+
+Access guard inside the page:
+- Requires authenticated user.
+- Compares `user.id` against a hardcoded allowlist constant `SUPER_ADMIN_IDS` (we'll need your user ID — see Questions below). Anyone else gets a 404-style "Not found".
+
+UI (mobile-first, semantic tokens, matches existing pages):
+
+```text
+┌────────────────────────────────────────┐
+│  Master Data Importer (Hidden)         │
+├────────────────────────────────────────┤
+│  [ Choose medicines.json ]             │
+│  Parsed: 5,234 rows · 1.8 MB           │
+│                                        │
+│  ⚠ This will TRUNCATE master_medicines │
+│     and re-insert from scratch.        │
+│                                        │
+│  [ Clear & Sync Fresh Database ]       │
+│                                        │
+│  ▓▓▓▓▓▓▓▓░░░░░░░  1,200 / 5,234        │
+│  Batch 6 / 27 · 200 rows each          │
+│  Elapsed 00:18                         │
+└────────────────────────────────────────┘
 ```
 
-Add a thin wrapper used by the UI:
+Flow:
+1. File picker accepts `.json`, parses client-side, validates it's an array, shows row count.
+2. Confirm dialog ("This will wipe existing master_medicines. Continue?").
+3. Slice array into 200-row chunks. First chunk is sent with `truncate: true`; subsequent chunks with `truncate: false`.
+4. Sequential `fetch` to the edge function per chunk; update progress bar after each success.
+5. On final success → sonner toast `"Master database successfully synchronized!"` + final count.
+6. On any chunk failure → stop, show error toast with batch index and server message, keep progress where it failed (user can retry the whole sync).
 
-```ts
-export const shouldDisplayAsMatrix = (med): boolean => !isStrictSingleUnit(med);
+## 3. Edge function `import-master-medicines`
+
+`supabase/functions/import-master-medicines/index.ts`, `verify_jwt = false` (default), uses service role to bypass the "no client writes" RLS on `master_medicines`.
+
+Request body:
+```json
+{ "rows": [...up to 200 mapped rows...], "truncate": false }
 ```
 
-The existing `isSingleUnit(packInfo)` stays as-is for callers that genuinely need pack-math single detection (e.g. `handleAddFromCatalog`'s `boxesToPieces` decision).
+Logic:
+1. CORS preflight handled.
+2. Validate caller JWT in code: read `Authorization: Bearer <token>`, call `supabase.auth.getUser(token)`, reject if the user ID isn't in the same `SUPER_ADMIN_IDS` allowlist (mirrored as an env constant or hardcoded — see Questions).
+3. Zod-validate body: `rows` is an array (1–200), each row has `brand_name: string`.
+4. If `truncate === true`: `DELETE FROM master_medicines` (via service-role client). Logged.
+5. Map each row defensively:
+   - `brand_name` → string (required)
+   - `generic_name` → string | null
+   - `strength` → string, default `"N/A"` if missing/empty/`"N/A"`
+   - `unit_price` → `Number(parseFloat)`, NaN → `0`
+   - `company` → string | null
+   - `format`, `pack_size`, `box_size` → string | null
+6. Bulk `insert()` the chunk. Return `{ inserted: N, truncated: boolean }`.
+7. All responses (success + error) include CORS headers.
 
-### Update `TriUnitDisplay` (Inventory.tsx)
+## 4. Client → function wiring
 
-- Accept the medicine record (or at least `unit_format` + `product_type`) in addition to the existing pack fields.
-- Decision tree:
-  1. `isStrictSingleUnit(med)` → render bare `totalPcs`.
-  2. Otherwise → render `boxes • strips • pcs` from `totalPiecesToTriUnitObj(totalPcs, stripPerPack || 1, pcsPerStrip || 1)`. The `|| 1` fallback guarantees `1 → 1 • 0 • 0`, `12 → 12 • 0 • 0` for products with no pack data.
+- Use `supabase.functions.invoke('import-master-medicines', { body: { rows, truncate } })` so the user's JWT is auto-attached for the in-function allowlist check.
+- Sequential loop (not parallel) to keep ordering predictable and progress monotonically increasing.
 
-### Update `src/pages/ShortItems.tsx`
+## 5. Files touched
 
-Same swap: use `isStrictSingleUnit(item)` instead of `isSingleUnit(item)` when choosing between `${qty} Pcs` and `totalPiecesToTriUnit(...)`. Pass `unit_format` through the `select(...)` query so the helper has the keyword source.
+- New migration (add 3 columns)
+- New: `src/pages/AdminImportMaster.tsx`
+- New: `supabase/functions/import-master-medicines/index.ts`
+- Edit: `src/App.tsx` (add `/admin/import-master` route, no nav link)
 
-## Files touched
+No changes to existing inventory/pharmacy code paths.
 
-- `src/lib/stockUtils.ts` — add `STRICT_SINGLE_UNIT_RE`, `isStrictSingleUnit`, `shouldDisplayAsMatrix`. Leave `isSingleUnit` for pack-math callers.
-- `src/pages/Inventory.tsx` — `TriUnitDisplay` signature + call sites use new helper; matrix fallback uses `|| 1`.
-- `src/pages/ShortItems.tsx` — query adds `unit_format`; render uses new helper.
+## Questions before I implement
 
-## Out of scope
-
-- No change to how stock is **added** (`handleAddFromCatalog`, manual Add Product). Behavior for new entries is unchanged; this is purely a display refactor as the task specifies.
-- No DB migration; logic is derived from existing columns.
-
-## Verification
-
-1. A Suppository row in inventory with `stock_quantity = 1`, no pack numbers → renders `1 • 0 • 0`.
-2. A Tablet row with `pcs_per_strip = 10, strip_per_pack = 10, stock_quantity = 100` → still renders `1 • 0 • 0`.
-3. A Syrup row with `stock_quantity = 5` → still renders `5` (strict single, keyword match).
-4. Mobile viewport (390px) — `TriUnitDisplay` keeps `whitespace-nowrap text-[11px]`; no layout regression.
+1. **Your user ID** for the allowlist — please share the UUID from `auth.users` (your logged-in account). Without it I'd have to gate by email, which is less precise.
+2. **Strength default** — confirm `"N/A"` (string) is what you want stored when missing, vs. `null`. Your spec says "N/A" so I'll go with that unless you say otherwise.
+3. **Pre-existing rows** — confirm it's fine that the truncate is unconditional and irreversible (no soft-delete, no backup table).
