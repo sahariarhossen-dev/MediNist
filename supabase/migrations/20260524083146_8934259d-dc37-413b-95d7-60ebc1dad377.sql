@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS profiles_prevent_role_change ON public.profiles;

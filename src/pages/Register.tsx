@@ -98,6 +98,10 @@ const Register = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      // Clear any stale local session so a leftover JWT from a deleted user
+      // isn't attached to the function call.
+      await supabase.auth.signOut().catch(() => {});
+
       const res = await supabase.functions.invoke("register-pharmacy", {
         body: {
           shopName: form.shopName.trim(),
@@ -113,7 +117,19 @@ const Register = () => {
       });
 
       if (res.error) {
-        toast.error(res.error.message || "Registration failed");
+        // FunctionsHttpError swallows the JSON body in `.message`; try to read it.
+        let serverMsg: string | undefined;
+        try {
+          const ctx: any = (res.error as any).context;
+          if (ctx?.json) {
+            const j = await ctx.json();
+            serverMsg = j?.error;
+          } else if (ctx?.text) {
+            const t = await ctx.text();
+            try { serverMsg = JSON.parse(t)?.error; } catch { serverMsg = t; }
+          }
+        } catch {}
+        toast.error(serverMsg || res.error.message || "Registration failed");
         return;
       }
 
