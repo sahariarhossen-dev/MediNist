@@ -680,7 +680,7 @@ const Inventory = () => {
                 )}
 
                 {/* No results at all */}
-                {searchQuery && filteredMedicines.length === 0 && filteredCatalog.length === 0 && (
+                {searchQuery.trim().length >= 2 && !catalogSearching && filteredMedicines.length === 0 && filteredCatalog.length === 0 && (
                   <div className="text-center py-16">
                     <Pill size={48} className="text-muted-foreground mb-4 mx-auto" />
                     <p className="text-muted-foreground font-medium">No medicines found</p>
@@ -690,6 +690,13 @@ const Inventory = () => {
                     >
                       Can't find it? Add manually →
                     </button>
+                  </div>
+                )}
+
+                {/* Catalog spinner */}
+                {searchQuery.trim().length >= 2 && catalogSearching && filteredCatalog.length === 0 && (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 size={20} className="animate-spin text-primary" />
                   </div>
                 )}
 
