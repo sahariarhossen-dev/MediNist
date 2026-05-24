@@ -97,14 +97,20 @@ const CatalogSearch = () => {
 
     setAdding(true);
 
-    // Duplicate check
-    const { data: existing } = await supabase
+    // Duplicate check — composite on brand + company + strength so different
+    // strengths of the same brand can coexist in inventory.
+    let dupQuery = supabase
       .from("medicines")
       .select("id")
       .eq("pharmacy_id", profile.pharmacy_id)
       .eq("name", med.brand_name)
-      .eq("company_name", med.company || "")
-      .maybeSingle();
+      .eq("company_name", med.company || "");
+    if (med.strength) {
+      dupQuery = dupQuery.eq("product_size", med.strength);
+    } else {
+      dupQuery = dupQuery.is("product_size", null);
+    }
+    const { data: existing } = await dupQuery.maybeSingle();
 
     if (existing) {
       toast.info("Already in your inventory");
