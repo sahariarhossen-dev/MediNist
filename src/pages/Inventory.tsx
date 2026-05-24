@@ -14,6 +14,7 @@ import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stoc
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Medicine {
   id: string;
@@ -98,7 +99,6 @@ const Inventory = () => {
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedCatalogId, setExpandedCatalogId] = useState<string | null>(null);
@@ -216,10 +216,7 @@ const Inventory = () => {
   const isDualMode = selectedCompanies.size > 0 || !!searchQuery.trim();
 
   // Debounce the search input so we don't hit Supabase on every keystroke.
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
+  const debouncedSearch = useDebounce(searchQuery.trim(), 300);
 
   // On-demand catalog fetch: server-side filter by company and/or search.
   // Replaces the previous mount-time full-table load that was silently
