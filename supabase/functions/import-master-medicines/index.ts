@@ -4,7 +4,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 // Allowlist of super-admin user IDs allowed to run the master import.
 // Add your auth.users UUID here.
 const SUPER_ADMIN_USER_IDS: string[] = [
-  // "your-uuid-here",
+  "41f9a774-97ea-41a6-8da7-6137b5c5c970",
 ];
 
 interface RawRow {
