@@ -80,9 +80,12 @@ const Inventory = () => {
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
+  const [catalogCompanies, setCatalogCompanies] = useState<string[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedCatalogId, setExpandedCatalogId] = useState<string | null>(null);
@@ -108,13 +111,38 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
-      const [medsRes, catalogRes] = await Promise.all([
-        supabase.from("medicines").select("*").eq("pharmacy_id", profile.pharmacy_id).order("name", { ascending: true }),
-        supabase.from("master_medicines").select("*").order("brand_name", { ascending: true }),
-      ]);
+      const medsRes = await supabase
+        .from("medicines")
+        .select("*")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .order("name", { ascending: true });
       setMedicines(medsRes.data || []);
-      setCatalog(catalogRes.data || []);
       setLoading(false);
+
+      // Fetch full distinct company list from master_medicines.
+      // Paginated because the table has ~21k rows (Supabase caps at 1000/call).
+      try {
+        const PAGE = 1000;
+        const seen = new Set<string>();
+        let from = 0;
+        // Cap iterations to avoid runaway loops if the table grows huge.
+        for (let i = 0; i < 50; i++) {
+          const { data, error } = await supabase
+            .from("master_medicines")
+            .select("company")
+            .order("company", { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (error || !data || data.length === 0) break;
+          for (const row of data) {
+            if (row.company) seen.add(row.company);
+          }
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        setCatalogCompanies(Array.from(seen).sort((a, b) => a.localeCompare(b)));
+      } catch {
+        // Non-fatal — filter list will just be derived from local medicines.
+      }
     };
     fetchData();
   }, [profile?.pharmacy_id]);
@@ -129,9 +157,9 @@ const Inventory = () => {
   const allCompanies = useMemo(() => {
     const names = new Set<string>();
     medicines.forEach((m) => { if (m.company_name) names.add(m.company_name); });
-    catalog.forEach((m) => { if (m.company) names.add(m.company); });
+    catalogCompanies.forEach((c) => names.add(c));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [medicines, catalog]);
+  }, [medicines, catalogCompanies]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return allCompanies;
@@ -174,32 +202,66 @@ const Inventory = () => {
   // or actively searching. Otherwise we show only the default inventory list.
   const isDualMode = selectedCompanies.size > 0 || !!searchQuery.trim();
 
+  // Debounce the search input so we don't hit Supabase on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // On-demand catalog fetch: server-side filter by company and/or search.
+  // Replaces the previous mount-time full-table load that was silently
+  // truncated to the first 1000 rows by Supabase's default limit.
+  useEffect(() => {
+    if (!isDualMode) {
+      setCatalog([]);
+      return;
+    }
+    let cancelled = false;
+    const reqId = Symbol("catalog-fetch");
+    (window as any).__catalogReqId = reqId;
+
+    const run = async () => {
+      setCatalogLoading(true);
+      let q = supabase
+        .from("master_medicines")
+        .select("*")
+        .order("brand_name", { ascending: true })
+        .range(0, 4999);
+
+      if (selectedCompanies.size > 0) {
+        q = q.in("company", Array.from(selectedCompanies));
+      }
+      if (debouncedSearch) {
+        const term = debouncedSearch.replace(/[%,]/g, " ");
+        q = q.or(
+          `brand_name.ilike.%${term}%,generic_name.ilike.%${term}%,company.ilike.%${term}%`
+        );
+      }
+
+      const { data, error } = await q;
+      if (cancelled || (window as any).__catalogReqId !== reqId) return;
+      if (!error) setCatalog(data || []);
+      setCatalogLoading(false);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDualMode, selectedCompanies, debouncedSearch]);
+
   // Filter catalog results (exclude items already in local inventory).
-  // Powered by either the company filter, the search query, or both.
+  // Server already filtered by company/search; we just dedupe against
+  // medicines already present in the local inventory.
   const filteredCatalog = useMemo(() => {
     if (!isDualMode) return [];
     const localKeys = new Set(
       medicines.map((m) => `${m.name.toLowerCase()}|${(m.company_name || "").toLowerCase()}`)
     );
-    let result = catalog.filter(
+    const result = catalog.filter(
       (m) => !localKeys.has(`${m.brand_name.toLowerCase()}|${(m.company || "").toLowerCase()}`)
     );
-    if (selectedCompanies.size > 0) {
-      result = result.filter((m) => m.company && selectedCompanies.has(m.company));
-    }
-    if (searchQuery.trim()) {
-      const q = normalizeForSearch(searchQuery);
-      if (q) {
-        result = result.filter(
-          (m) =>
-            normalizeForSearch(m.brand_name).includes(q) ||
-            (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
-            (m.company && normalizeForSearch(m.company).includes(q))
-        );
-      }
-    }
     return result.sort((a, b) => a.brand_name.localeCompare(b.brand_name));
-  }, [catalog, medicines, searchQuery, selectedCompanies, isDualMode]);
+  }, [catalog, medicines, isDualMode]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
