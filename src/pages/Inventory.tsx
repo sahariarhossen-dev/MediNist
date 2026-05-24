@@ -649,7 +649,12 @@ const Inventory = () => {
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">
                       From Catalog ({filteredCatalog.length})
                     </p>
-                    {filteredCatalog.length === 0 && (
+                    {catalogLoading && (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 size={20} className="animate-spin text-emerald-500" />
+                      </div>
+                    )}
+                    {!catalogLoading && filteredCatalog.length === 0 && (
                       <div className="bg-white/60 border border-dashed border-gray-200 rounded-2xl py-6 text-center">
                         <p className="text-xs text-muted-foreground">No more catalog items for this selection.</p>
                       </div>
