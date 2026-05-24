@@ -1,55 +1,64 @@
-## Goal
-
-Fix the three search bugs on `/catalog-search` (CatalogSearch.tsx) by moving from a client-side full-table load to a debounced server-side query against `master_medicines`.
-
 ## Root cause
 
-`src/pages/CatalogSearch.tsx` currently does `supabase.from("master_medicines").select("*").order("brand_name")` on mount. Supabase caps responses at 1000 rows, so only the first ~1000 of 21,168 rows ever reach the client. Anything outside that slice (e.g. "ramoril") is invisible, regardless of case. Filtering then runs in JS on that partial set.
+`src/pages/Inventory.tsx` (the page users actually use to add products from the Global Catalog) loads the entire `master_medicines` table on mount:
 
-## Changes
+```ts
+supabase.from("master_medicines").select("*").order("brand_name")
+```
 
-### 1. `src/pages/CatalogSearch.tsx` — server-side search
+Supabase caps responses at 1000 rows, so only the first ~1000 of 21,168 medicines ever reach the client. "ramoril" is well past that slice, so it can never be found by the client-side `filteredCatalog` filter. (CatalogSearch.tsx was already fixed in the previous turn; Inventory.tsx is the remaining offender.)
 
-- Remove the on-mount `fetchCatalog` that loads all rows. Remove the `catalog` state and the `useMemo` client filter.
-- Add `results: MasterMedicine[]`, `searching: boolean`, and keep `searchQuery`.
-- Add a 300ms debounce on `searchQuery` (small inline `useEffect` with `setTimeout`/`clearTimeout`; no new dependency).
-- On each debounced query:
-  - If query is empty → clear `results`, show an empty-state prompt ("Start typing to search the catalog").
-  - Otherwise, before firing the request, **clear `results` and set `searching=true`** so stale rows never render against a new query.
-  - Run:
-    ```ts
-    supabase
-      .from("master_medicines")
-      .select("id,brand_name,generic_name,strength,unit_price,company,format,pack_size,box_size")
-      .or(`brand_name.ilike.%${q}%,generic_name.ilike.%${q}%,company.ilike.%${q}%`)
-      .order("brand_name")
-      .limit(50)
-    ```
-  - Guard against out-of-order responses with a request-id ref (increment per fire, ignore response if id no longer current). This is what prevents the "wrong product details" / mismatched cards.
-- Sanitize the query for PostgREST `or()`: escape `%`, `,`, `(`, `)` and trim. Skip queries shorter than 2 chars to avoid huge result sets.
-- Keep the existing expanded-card "Add to inventory" flow as-is; it already binds fields by the selected `med` object so there's no cross-binding once results are properly keyed by `med.id`.
-- Ensure `key={med.id}` (already present) and that `expandedId` resets to `null` whenever `searchQuery` changes, so an expanded card from a previous query can't visually attach to a different medicine in the new list.
+## Changes — `src/pages/Inventory.tsx` only
 
-### 2. Empty / loading / no-results states
+1. **Remove the catalog preload**
+   - Drop the second leg of the `Promise.all` in `fetchData` (the `master_medicines` select).
+   - Drop the `catalog` state. Local inventory load (`medicines`) stays untouched.
 
-- Initial (no query): friendly prompt + "Add manually" link.
-- Searching: spinner.
-- Query ≥ 2 chars, 0 results: existing "No medicines found" + manual-add link.
+2. **Add debounced server-side catalog search**
+   - New state: `catalogResults: MasterMedicine[]`, `catalogSearching: boolean`.
+   - New ref: `catalogReqIdRef` for out-of-order response protection.
+   - `useEffect` keyed on `[searchQuery, searchOpen]`:
+     - If `!searchOpen` or trimmed query length < 2 → invalidate, clear results, return.
+     - Sanitize query for PostgREST `.or()` (strip `, ( ) % *`).
+     - After 300ms debounce, run:
+       ```ts
+       supabase
+         .from("master_medicines")
+         .select("id,brand_name,generic_name,strength,unit_price,company,format,pack_size,box_size")
+         .or(`brand_name.ilike.%${safe}%,generic_name.ilike.%${safe}%,company.ilike.%${safe}%`)
+         .order("brand_name", { ascending: true })
+         .limit(50)
+       ```
+     - Drop response if `myId !== catalogReqIdRef.current`.
+     - Toast on error; set `catalogResults` on success.
 
-### 3. Mobile-first styling
+3. **Replace `filteredCatalog` derivation**
+   - Remove the `useMemo` that filtered `catalog` client-side.
+   - New `filteredCatalog` derives from `catalogResults`:
+     - Exclude items already in local inventory (same `brand_name|company` key as today).
+     - Apply the existing company-filter (`selectedCompanies`) on top.
+   - The "From Catalog (N)" section, expand-and-add UX, and `handleAddFromCatalog` stay exactly as-is — they already bind by the selected `med` object and `key={med.id}`.
 
-No layout changes — the current card list is already mobile-first (single column, `px-4`, sticky search). Just verify the new states keep the same paddings.
+4. **Company filter source**
+   - `allCompanies` currently unions `medicines` + `catalog`. With `catalog` gone, it becomes `medicines` ∪ `catalogResults`. Acceptable: filter chip list grows as the user types, which mirrors what's actually searchable. No UI change.
 
-### 4. Out of scope
+5. **Loading state**
+   - `loading` now reflects only the medicines query. Show a small spinner in the catalog section while `catalogSearching` is true (mirrors CatalogSearch.tsx).
 
-- No schema changes (indexes on `master_medicines` are optional; with `.limit(50)` and ILIKE on 21k rows performance is fine).
-- No changes to `AddPrescriptionSheet` medicine search (that searches the per-pharmacy `medicines` table, different concern).
+6. **No-results copy**
+   - Keep existing "No medicines found" block, shown when `searchQuery` length ≥ 2, `catalogSearching` is false, and both `filteredMedicines` and `filteredCatalog` are empty.
+
+## Out of scope
+
+- No changes to `master_medicines` schema or indexes (ILIKE on 21k rows with `.limit(50)` is fine).
+- No changes to `CatalogSearch.tsx` (already fixed).
+- No changes to `AddPrescriptionSheet` (searches per-pharmacy `medicines`, different concern).
 - No changes to the importer or edge function.
 
 ## Verification
 
-After implementation:
-1. Search "ramoril" → returns the row (case-insensitive, server-side).
-2. Search "RAMORIL" / "Ramoril" → identical results.
-3. Type quickly through "ram" → "ramo" → "ramoril": only the final query's results render; no flashing of stale rows.
-4. Each expanded card's Add-to-Inventory uses the correct brand/company/price.
+1. Open Inventory → tap search → type "ramoril" → row appears under "From Catalog" within ~300ms.
+2. "RAMORIL" / "Ramoril" / "ramoril" return identical results (case-insensitive).
+3. Type "ram" → "ramo" → "ramoril" quickly: only the final query's results render (request-id guard).
+4. Tap a catalog card, enter qty, Add → correct brand/company/price inserted into `medicines`; row also disappears from "From Catalog" because it's now in local inventory.
+5. Mobile viewport: layout unchanged, search bar + cards remain single-column and responsive.
