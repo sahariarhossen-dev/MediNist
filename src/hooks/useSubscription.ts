@@ -28,57 +28,79 @@ export function useSubscription() {
     [],
   );
 
+  const buildDefaultTrialSub = useCallback((): SubscriptionInfo => {
+    const now = new Date();
+    const expiry = new Date(now.getTime() + 30 * 86_400_000);
+    return {
+      plan: "Free Trial",
+      started_at: now.toISOString(),
+      expiry_date: expiry.toISOString(),
+      total_days: 30,
+    };
+  }, []);
+
   const refetch = useCallback(async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData.user?.id;
-    if (!uid) {
-      setLoading(false);
-      return;
-    }
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("pharmacy_id")
-      .eq("id", uid)
-      .maybeSingle();
-    const pid = prof?.pharmacy_id ?? null;
-    setPharmacyId(pid);
-    if (!pid) {
-      setLoading(false);
-      return;
-    }
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) {
+        setSub(buildDefaultTrialSub());
+        return;
+      }
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("pharmacy_id")
+        .eq("id", uid)
+        .maybeSingle();
+      const pid = prof?.pharmacy_id ?? null;
+      setPharmacyId(pid);
+      if (!pid) {
+        setSub(buildDefaultTrialSub());
+        setLastPopupShown(null);
+        setPayments([]);
+        return;
+      }
 
-    const [{ data: pharm }, { data: pays }] = await Promise.all([
-      supabase
-        .from("pharmacies")
-        .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown")
-        .eq("id", pid)
-        .maybeSingle(),
-      supabase
-        .from("subscription_payments")
-        .select("id, created_at, amount_bdt, duration_days, status")
-        .eq("pharmacy_id", pid)
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+      const [pharmRes, paysRes] = await Promise.all([
+        supabase
+          .from("pharmacies")
+          .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown")
+          .eq("id", pid)
+          .maybeSingle(),
+        supabase
+          .from("subscription_payments")
+          .select("id, created_at, amount_bdt, duration_days, status")
+          .eq("pharmacy_id", pid)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
 
-    if (pharm && (pharm as any).subscription_expiry) {
-      setSub(buildSub(pharm as any));
-      setLastPopupShown(((pharm as any).last_popup_shown as string | null) ?? null);
-    } else {
-      setSub(null);
-      setLastPopupShown(null);
+      const pharm = pharmRes.data as any;
+      const pays = paysRes.data as any[] | null;
+
+      if (pharm && pharm.subscription_expiry) {
+        setSub(buildSub(pharm));
+        setLastPopupShown((pharm.last_popup_shown as string | null) ?? null);
+      } else {
+        setSub(buildDefaultTrialSub());
+        setLastPopupShown(null);
+      }
+      setPayments(
+        (pays ?? []).map((p: any) => ({
+          id: p.id,
+          date: p.created_at,
+          amount_bdt: Number(p.amount_bdt),
+          duration_days: p.duration_days,
+          status: p.status as "success" | "pending",
+        })),
+      );
+    } catch (err) {
+      console.error("useSubscription refetch failed:", err);
+      setSub(buildDefaultTrialSub());
+    } finally {
+      setLoading(false);
     }
-    setPayments(
-      (pays ?? []).map((p: any) => ({
-        id: p.id,
-        date: p.created_at,
-        amount_bdt: Number(p.amount_bdt),
-        duration_days: p.duration_days,
-        status: p.status as "success" | "pending",
-      })),
-    );
-    setLoading(false);
-  }, [buildSub]);
+  }, [buildSub, buildDefaultTrialSub]);
 
   useEffect(() => {
     refetch();
