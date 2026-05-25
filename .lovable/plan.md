@@ -1,52 +1,36 @@
-# Fix "Edge Function returned a non-2xx status code" on Registration
+# Fix Subscription page infinite loading
 
-## Root cause (confirmed from edge logs + DB inspection)
+## Root cause
 
-Edge function logs show every registration failing with:
+`src/pages/Subscription.tsx` renders the spinner whenever `loading || !sub` is true. In `src/hooks/useSubscription.ts`:
 
-```
-Profile admin promotion failed: { code: "P0001", message: "Users cannot change their own role" }
-```
+- If the user has no `pharmacy_id` yet, the hook returns early with `sub = null`.
+- If the pharmacy row has no `subscription_expiry`, `sub` is left as `null`.
+- The pharmacies query uses `.maybeSingle()` so it won't throw, but a transient error still leaves `sub = null` with `loading = false` → spinner shows forever because of the `!sub` guard.
 
-The DB has **two** triggers calling `prevent_role_change()` on `public.profiles`:
+## Changes
 
-1. `prevent_role_self_update` — correct: fires only `WHEN (new.id = auth.uid())`.
-2. `profiles_prevent_role_change` — **buggy**: fires on every UPDATE of `role`, with no `auth.uid()` check.
+### 1. `src/hooks/useSubscription.ts`
+- Wrap both Supabase calls in `try / catch / finally` so `setLoading(false)` always runs, even on PGRST116 or network errors.
+- Add a `buildDefaultTrialSub()` helper that returns a 30‑day Free Trial starting now (plan: `"Free Trial"`, `total_days: 30`).
+- If `pharmacy_id` is missing, or the pharmacy row is missing, or `subscription_expiry` is null/undefined, set `sub` to the default trial instead of `null`.
+- Keep `status` derivation untouched — with no successful payments it naturally resolves to `"trial"`, so `isTrial` becomes true and the welcome modal/badge behave correctly.
 
-The edge function uses the service-role client (where `auth.uid()` is NULL), but trigger #2 still throws, so the `update({ role: 'admin' })` always fails → rollback deletes the auth user and pharmacy → 500 returned to the client. Nothing wrong with foreign keys or with the TRUNCATE; the trigger was always broken, it just wasn't visible before.
+### 2. `src/pages/Subscription.tsx`
+- Change the loading guard from `loading || !sub` to just `loading`, since `sub` is now always populated after load.
+- Keep the existing `StatusCard` / `RenewButton` / `PaymentHistory` rendering — they already handle the trial case via `isTrial`.
+- Guard the `WelcomeTrialModal` and other `sub`-dependent blocks with a simple `sub &&` (defensive, even though it will always be truthy post‑load).
 
-## The fix
+### 3. No DB / RLS / edge‑function changes
+The existing schema already defaults `subscription_plan` to `'Pharmacy Pro'` and trial logic is purely client-side based on absence of successful payments. No migration needed.
 
-### 1. DB migration — remove the redundant role guard
+## Acceptance criteria
 
-Drop `profiles_prevent_role_change`. Keep `prevent_role_self_update`, which already correctly blocks a logged-in user from editing their own role while letting the service role (and the edge function) promote a new owner to `admin`.
-
-```sql
-DROP TRIGGER IF EXISTS profiles_prevent_role_change ON public.profiles;
-```
-
-This preserves the security intent (users still can't escalate their own role; the existing RLS UPDATE policy on `profiles` also blocks role changes by the user) while unblocking server-side promotion.
-
-### 2. `src/pages/Register.tsx` — clear stale session + graceful errors
-
-Before invoking `register-pharmacy`:
-
-- Call `await supabase.auth.signOut().catch(() => {})` so any leftover JWT from a deleted user (the current console shows `user_not_found` 403s for sub `41f9a774…`) doesn't get attached to the function call.
-- Wrap `supabase.functions.invoke(...)` so we surface the function's JSON `{ error }` body even when the SDK throws on non-2xx (currently the SDK error swallows it and the user only sees the generic "non-2xx" string). Use `try/catch` and read `err.context?.response`/`.text()` to extract the server message, falling back to a friendly default.
-
-### 3. Edge function — small hardening only
-
-`supabase/functions/register-pharmacy/index.ts` is already correct in shape (service-role client, verify-then-rollback). Once trigger #2 is gone the existing code works. No edits required beyond keeping the existing rollback path and the existing error log for future debugging.
+- A freshly registered user (no pharmacy subscription row populated) lands on `/subscription` and immediately sees: Plan = Free Trial, Status = Active, 30‑day countdown.
+- Spinner disappears within one render even if the pharmacy query errors.
+- Existing users with a real `subscription_expiry` continue to see their real plan and countdown — behavior unchanged.
 
 ## Files touched
 
-- New migration: drop `profiles_prevent_role_change` trigger.
-- `src/pages/Register.tsx`: pre-call `signOut`, improved error extraction + toast.
-- No edge function code change needed.
-
-## How to verify
-
-1. Run the migration.
-2. From the Register screen, complete all 4 steps and submit.
-3. Expect: toast "Account created successfully!", redirect to `/dashboard`, and in the DB the new `profiles` row has `role = 'admin'` and `pharmacy_id` set.
-4. Edge function logs should no longer contain "Users cannot change their own role".
+- `src/hooks/useSubscription.ts`
+- `src/pages/Subscription.tsx`
