@@ -1,36 +1,37 @@
-# Fix Subscription page infinite loading
-
 ## Root cause
 
-`src/pages/Subscription.tsx` renders the spinner whenever `loading || !sub` is true. In `src/hooks/useSubscription.ts`:
+`buildDefaultTrialSub()` in `src/hooks/useSubscription.ts` uses `new Date()` as the trial start every time the hook runs. On refresh, the 30-day window restarts. There is no persistence and no tie to the user's actual signup time.
 
-- If the user has no `pharmacy_id` yet, the hook returns early with `sub = null`.
-- If the pharmacy row has no `subscription_expiry`, `sub` is left as `null`.
-- The pharmacies query uses `.maybeSingle()` so it won't throw, but a transient error still leaves `sub = null` with `loading = false` → spinner shows forever because of the `!sub` guard.
+## Fix
 
-## Changes
+Anchor the default trial to `auth.user.created_at` so the countdown is deterministic across refreshes and devices, and naturally expires 30 days after signup.
 
 ### 1. `src/hooks/useSubscription.ts`
-- Wrap both Supabase calls in `try / catch / finally` so `setLoading(false)` always runs, even on PGRST116 or network errors.
-- Add a `buildDefaultTrialSub()` helper that returns a 30‑day Free Trial starting now (plan: `"Free Trial"`, `total_days: 30`).
-- If `pharmacy_id` is missing, or the pharmacy row is missing, or `subscription_expiry` is null/undefined, set `sub` to the default trial instead of `null`.
-- Keep `status` derivation untouched — with no successful payments it naturally resolves to `"trial"`, so `isTrial` becomes true and the welcome modal/badge behave correctly.
 
-### 2. `src/pages/Subscription.tsx`
-- Change the loading guard from `loading || !sub` to just `loading`, since `sub` is now always populated after load.
-- Keep the existing `StatusCard` / `RenewButton` / `PaymentHistory` rendering — they already handle the trial case via `isTrial`.
-- Guard the `WelcomeTrialModal` and other `sub`-dependent blocks with a simple `sub &&` (defensive, even though it will always be truthy post‑load).
+- Change `buildDefaultTrialSub` to accept a `createdAt: string` argument:
+  - `started_at = createdAt`
+  - `expiry_date = new Date(createdAt).getTime() + 30 * 86_400_000` (ISO string)
+  - `total_days = 30`
+  - `plan = "Free Trial"`
+- In `refetch`, read `userData.user?.created_at` alongside `uid`. Pass it into every `buildDefaultTrialSub(createdAt)` call (missing user, missing pharmacy_id, missing/expired pharmacy row, catch branch).
+- If `created_at` is somehow missing (shouldn't happen for an authenticated user), fall back to `new Date().toISOString()` to avoid crashes.
+- Leave the real `buildSub(pharm)` path untouched — paid users still use `subscription_expiry` from the DB.
 
-### 3. No DB / RLS / edge‑function changes
-The existing schema already defaults `subscription_plan` to `'Pharmacy Pro'` and trial logic is purely client-side based on absence of successful payments. No migration needed.
+### 2. Expiration behavior
+
+No new code needed. `getStatus(sub, payments)` in `src/lib/subscriptionStatus.ts` already returns `"expired"` when `expiry_date < now` and no successful payment exists. `Subscription.tsx` already renders the rose "renew to unlock the app" banner when `isExpired`, and `SubscriptionExpiredOverlay` (mounted elsewhere) prompts payment. Because trial expiry is now derived from `created_at + 30d`, a refresh after day 30 will correctly flip the UI from "Free Trial" → "Expired".
+
+### 3. No other changes
+
+- No DB migration (purely client-derived from `auth.users.created_at`, which is always available via `supabase.auth.getUser()`).
+- No changes to `StatusCard`, `CountdownTimer`, `useCountdown`, or `Subscription.tsx` — they already consume `sub.expiry_date` and `sub.total_days`.
 
 ## Acceptance criteria
 
-- A freshly registered user (no pharmacy subscription row populated) lands on `/subscription` and immediately sees: Plan = Free Trial, Status = Active, 30‑day countdown.
-- Spinner disappears within one render even if the pharmacy query errors.
-- Existing users with a real `subscription_expiry` continue to see their real plan and countdown — behavior unchanged.
+- New user registered at T sees a countdown to T+30d. Refreshing at any later time shows the same target, with seconds ticking down continuously.
+- After T+30d, the page shows "Expired" status + renew banner instead of "Free Trial".
+- Paid users (real `subscription_expiry` in `pharmacies`) are unaffected.
 
 ## Files touched
 
-- `src/hooks/useSubscription.ts`
-- `src/pages/Subscription.tsx`
+- `src/hooks/useSubscription.ts` (only)

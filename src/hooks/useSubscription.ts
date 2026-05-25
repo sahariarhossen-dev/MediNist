@@ -28,12 +28,13 @@ export function useSubscription() {
     [],
   );
 
-  const buildDefaultTrialSub = useCallback((): SubscriptionInfo => {
-    const now = new Date();
-    const expiry = new Date(now.getTime() + 30 * 86_400_000);
+  const buildDefaultTrialSub = useCallback((createdAt?: string | null): SubscriptionInfo => {
+    const startIso = createdAt ?? new Date().toISOString();
+    const startMs = new Date(startIso).getTime();
+    const expiry = new Date(startMs + 30 * 86_400_000);
     return {
       plan: "Free Trial",
-      started_at: now.toISOString(),
+      started_at: startIso,
       expiry_date: expiry.toISOString(),
       total_days: 30,
     };
@@ -43,8 +44,9 @@ export function useSubscription() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData.user?.id;
+      const createdAt = userData.user?.created_at ?? null;
       if (!uid) {
-        setSub(buildDefaultTrialSub());
+        setSub(buildDefaultTrialSub(createdAt));
         return;
       }
       const { data: prof } = await supabase
@@ -55,7 +57,7 @@ export function useSubscription() {
       const pid = prof?.pharmacy_id ?? null;
       setPharmacyId(pid);
       if (!pid) {
-        setSub(buildDefaultTrialSub());
+        setSub(buildDefaultTrialSub(createdAt));
         setLastPopupShown(null);
         setPayments([]);
         return;
@@ -82,7 +84,7 @@ export function useSubscription() {
         setSub(buildSub(pharm));
         setLastPopupShown((pharm.last_popup_shown as string | null) ?? null);
       } else {
-        setSub(buildDefaultTrialSub());
+        setSub(buildDefaultTrialSub(createdAt));
         setLastPopupShown(null);
       }
       setPayments(
@@ -96,7 +98,8 @@ export function useSubscription() {
       );
     } catch (err) {
       console.error("useSubscription refetch failed:", err);
-      setSub(buildDefaultTrialSub());
+      const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } as any }));
+      setSub(buildDefaultTrialSub(userData?.user?.created_at ?? null));
     } finally {
       setLoading(false);
     }
