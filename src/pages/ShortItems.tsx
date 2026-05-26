@@ -24,6 +24,7 @@ interface LowStockItem {
   pcs_per_strip: number | null;
   price: number | null;
   product_size: string | null;
+  packaging_type: "single" | "strip_based" | null;
 }
 
 const ShortItems = () => {
@@ -38,7 +39,7 @@ const ShortItems = () => {
       if (!profile?.pharmacy_id) return;
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip, product_size")
+        .select("id, name, product_type, company_name, stock_quantity, price, stock_alert, strip_per_pack, pcs_per_strip, product_size, packaging_type")
         .eq("pharmacy_id", profile.pharmacy_id);
 
       const filtered = (data ?? [])
@@ -53,6 +54,7 @@ const ShortItems = () => {
           pcs_per_strip: m.pcs_per_strip,
           price: m.price,
           product_size: m.product_size,
+          packaging_type: (m as { packaging_type?: "single" | "strip_based" | null }).packaging_type ?? null,
         }));
 
       setItems(filtered);
