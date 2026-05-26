@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, classifyCatalogPack } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, looksSingleUnit, classifyCatalogPack } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
@@ -587,7 +587,7 @@ const Inventory = () => {
                          {isExpanded ? (() => {
                             const rawInput = unitInputs[med.id] || "";
                             const { addedPieces, isTriple } = parseStockInput(rawInput, med);
-                            const label = isTriple ? "B.S.P" : isSingleUnit(med) ? "Qty" : "Box";
+                            const label = isTriple ? "B.S.P" : looksSingleUnit(med) ? "Qty" : "Box";
                             return (
                               <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <span className="text-[10px] text-muted-foreground flex-shrink-0">{label}</span>
