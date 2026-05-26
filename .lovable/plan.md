@@ -1,94 +1,97 @@
+# Fix Tablet/Capsule STK regression
+
 ## Root cause
 
-The `CreateSale` search row already uses the correct UI rule:
+Two compounding problems:
 
-```ts
-STK: {isSingleUnit(med) ? `${med.stock_quantity ?? 0} Pcs`
-                       : totalPiecesToTriUnit(...)}
-```
+1. **Data hole.** Several `medicines` rows (e.g. `Ace 500 mg Tablet`) currently have `pcs_per_strip = NULL` AND `strip_per_pack = NULL`, even though the matching `master_medicines` row has `box_size = "100s"` and `pack_size = "10s strip"`. With both pack fields null, `getPackMode` returns `"single"` → `isSingleUnit` returns true → `looksSingleUnit` returns true → label renders as `STK: 140 Pcs`.
 
-`isSingleUnit` reads from `medicines.pcs_per_strip` / `strip_per_pack`. The new `classifyCatalogPack` writes those as `null` for single products — but only for items added **after** the fix.
+2. **Helper has no hard guard for Tablet/Capsule.** `looksSingleUnit` only checks `strip_per_pack > 1`. When that field is null (data hole above), nothing prevents a Tablet from collapsing to "single". The user's rule is explicit: a `Tablet` / `Capsule` must NEVER render as a single flat count.
 
-The rows the user is seeing (A-Phenicol Eye Drop, Ace Pediatric Drop, Alarid Eye Drop, Ace Syrup) were inserted earlier with `pcs_per_strip` populated (10, 30, 5, 60) even though their `master_medicines.box_size = "1"`. So `getPackMode` returns `"strip"` and the matrix renders.
+The previous syrup/drop regex is correct and is not the problem — it does not match the word "Tablet".
 
-DB confirms:
+## Fix
 
-```
-A-Phenicol Eye Drop  pcs_per_strip=10  strip_per_pack=null
-Ace (Pediatric Drop) pcs_per_strip=30  strip_per_pack=null
-Alarid (Eye Drop)    pcs_per_strip=5   strip_per_pack=null
-Ace (Syrup)          pcs_per_strip=60  strip_per_pack=null
-```
+### 1. Data heal migration (re-derive strip data from master catalog)
 
-Master catalog for all of these: `box_size = "1"`.
-
-No UI rewrite is needed — the rule is already there. We need to (a) heal the legacy data so existing single products flip to flat STK display, and (b) add a defensive UI fallback so any future row that slips through still renders correctly.
-
-## Changes
-
-### 1. Data heal migration (one-time)
-
-Add a Supabase migration that nullifies pack fields for any `medicines` row whose matching catalog entry is a single unit (`box_size` parses to ≤ 1):
+New migration that, for every `medicines` row where BOTH `pcs_per_strip` and `strip_per_pack` are NULL, finds the matching `master_medicines` (by `brand_name` + `company` + `format`) and back-fills using the same rule as `classifyCatalogPack`:
 
 ```sql
+WITH parsed AS (
+  SELECT
+    m.id,
+    NULLIF(substring(mm.box_size  from '(\d+)'), '')::int AS box_n,
+    NULLIF(substring(mm.pack_size from '(\d+)'), '')::int AS pack_n
+  FROM medicines m
+  JOIN master_medicines mm
+    ON lower(m.name) = lower(mm.brand_name)
+   AND lower(coalesce(m.company_name,'')) = lower(coalesce(mm.company,''))
+   AND lower(coalesce(m.product_type,'')) = lower(coalesce(mm.format,''))
+  WHERE m.pcs_per_strip IS NULL
+    AND m.strip_per_pack IS NULL
+)
 UPDATE medicines m
-SET pcs_per_strip = NULL,
-    strip_per_pack = NULL
-FROM master_medicines mm
-WHERE m.name = mm.brand_name
-  AND COALESCE(m.company_name, '') = COALESCE(mm.company, '')
-  AND (
-    mm.box_size IS NULL
-    OR mm.box_size = ''
-    OR mm.box_size = 'N/A'
-    OR substring(mm.box_size from '^\\s*(\\d+)')::int <= 1
-  );
+SET pcs_per_strip = parsed.pack_n,
+    strip_per_pack = CASE
+      WHEN parsed.box_n > 1 AND parsed.pack_n > 1 AND (parsed.box_n / parsed.pack_n) > 1
+        THEN parsed.box_n / parsed.pack_n
+      ELSE NULL
+    END
+FROM parsed
+WHERE m.id = parsed.id
+  AND parsed.box_n > 1
+  AND parsed.pack_n > 1
+  AND (parsed.box_n / parsed.pack_n) > 1;
 ```
 
-Also catch orphan rows that never matched the catalog but were saved as obvious singles (`strip_per_pack IS NULL` and `product_type` in the drop/syrup/cream/ointment/suspension/inhaler/lotion/gel/solution family):
+This restores `Ace 500 mg Tablet` to `pcs_per_strip = 10`, `strip_per_pack = 10` → `140` pcs renders as `1 : 4 : 0`. Drops/Syrups/Suspensions stay null (their `box_n <= 1`), so they keep showing flat `Pcs`.
 
-```sql
-UPDATE medicines
-SET pcs_per_strip = NULL
-WHERE strip_per_pack IS NULL
-  AND product_type ILIKE ANY (ARRAY[
-    '%drop%','%syrup%','%suspension%','%cream%','%ointment%',
-    '%gel%','%lotion%','%inhaler%','%spray%','%solution%','%shampoo%'
-  ]);
-```
+### 2. Harden `looksSingleUnit` in `src/lib/stockUtils.ts`
 
-### 2. UI defensive fallback in `CreateSale.tsx` search row + cart row
-
-Tighten the STK label so even a row with stale `pcs_per_strip` but no `strip_per_pack` and a non-strip product type renders flat:
+Add a hard Tablet/Capsule guard before any regex matching:
 
 ```ts
-const looksSingle =
-  isSingleUnit(med) ||
-  (!med.strip_per_pack &&
-    /drop|syrup|suspension|cream|ointment|gel|lotion|inhaler|spray|solution|shampoo/i
-      .test(med.product_type ?? ""));
+const STRIP_TYPE_RE = /^(tablet|capsule)s?$/i;
 
-STK: {looksSingle
-  ? `${med.stock_quantity ?? 0} Pcs`
-  : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}
+export const looksSingleUnit = (med) => {
+  // Hard rule: Tablet / Capsule are NEVER single-unit at the UI layer,
+  // even if their pack fields got nulled out by stale data.
+  const typeRaw = (med?.product_type ?? med?.format ?? "").trim();
+  if (STRIP_TYPE_RE.test(typeRaw)) return false;
+
+  if (isSingleUnit(med)) return true;
+  const spp = Number(med?.strip_per_pack ?? 0);
+  if (spp > 1) return false;
+
+  // Only the explicit single-unit formats opt into flat Pcs display
+  const formatStr = `${med?.product_type ?? ""} ${med?.unit_format ?? ""} ${med?.format ?? ""}`;
+  return SINGLE_UNIT_TYPE_RE.test(formatStr);
+};
 ```
 
-Apply the same `looksSingle` check to the cart row STK label and to `Inventory.tsx` row + `ShortItems.tsx` row so the rule is uniform across all three list surfaces.
+Key tightening:
+- Tablet/Capsule short-circuit returns `false` before anything else runs.
+- The regex test is unchanged (`drop|syrup|suspension|cream|ointment|gel|lotion|inhaler|spray|solution|shampoo`) — it never matched "Tablet"/"Capsule", but moving it after the hard guard makes the intent explicit.
 
-### 3. No catalog/import logic changes
+### 3. No changes needed in `CreateSale.tsx`, `Inventory.tsx`, `ShortItems.tsx`
 
-`classifyCatalogPack` already handles new inserts correctly — leave it as-is.
-
-## Files touched
-
-- `supabase/migrations/<timestamp>_heal_single_unit_packs.sql` — new migration with the two UPDATEs above.
-- `src/pages/CreateSale.tsx` — replace `isSingleUnit(med)` with `looksSingle` helper in the two STK label spots.
-- `src/pages/Inventory.tsx` — same helper for the inventory row stock label.
-- `src/pages/ShortItems.tsx` — same helper for the STK column.
+All three already call `looksSingleUnit(med)`. Fixing the helper + restoring the data is enough.
 
 ## Verification
 
-- After migration, re-query `medicines` for A-Phenicol Eye Drop / Ace Pediatric Drop / Alarid / Ace Syrup → `pcs_per_strip` and `strip_per_pack` are both NULL.
-- `/create-sale` search shows `STK: 148 Pcs`, `STK: 14 Pcs`, `STK: 596 Pcs` — no colons.
-- Strip products (Aceta Tablet, Acelock Tablet) still show `STK: B : S : P` matrix.
-- Cart, Inventory list, and Short Items list mirror the same behavior.
+After applying:
+- `Ace 500 mg Tablet` (stock 140, pps 10, spp 10) → `STK: 1 : 4 : 0`
+- `Ace Duo Tablet` (already populated) → `STK: 2 : 0 : 0`
+- `A-Phenicol Eye Drop` (stock 48, both null, type "Eye Drop") → `STK: 48 Pcs`
+- `Ace Pediatric Drop` (stock 148) → `STK: 148 Pcs`
+- `Ace Syrup` (stock 596) → `STK: 596 Pcs`
+- `Ace Suppository` (stock 49, type "Suppository") → falls through to matrix `0 : 0 : 49`. If user wants Suppositories flat too, we can add `suppository` to the regex — flag during build.
+
+Same labels appear in `/create-sale` search, cart row, `/inventory`, and `/short-items`.
+
+## Files touched
+
+- `supabase/migrations/<new>_reheal_tablet_capsule_packs.sql` — back-fill migration above.
+- `src/lib/stockUtils.ts` — add Tablet/Capsule hard guard at the top of `looksSingleUnit`.
+
+No other UI files need edits.
