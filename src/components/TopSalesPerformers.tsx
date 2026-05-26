@@ -14,13 +14,36 @@ interface Row {
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
 
-const TopSalesPerformers = ({ pharmacyId }: { pharmacyId: string | undefined }) => {
+const rangeLabelMap: Record<string, string> = {
+  today: "Today",
+  "7days": "Last 7 Days",
+  "15days": "Last 15 Days",
+  "30days": "Last 30 Days",
+};
+
+function getRangeStart(range: string): Date {
+  const d = new Date();
+  switch (range) {
+    case "7days": d.setDate(d.getDate() - 7); return d;
+    case "15days": d.setDate(d.getDate() - 15); return d;
+    case "30days": d.setDate(d.getDate() - 30); return d;
+    default: return startOfDay(d);
+  }
+}
+
+const TopSalesPerformers = ({
+  pharmacyId,
+  timeRange = "today",
+}: {
+  pharmacyId: string | undefined;
+  timeRange?: string;
+}) => {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!pharmacyId) return;
-    const from = startOfDay(new Date()).toISOString();
+    const from = getRangeStart(timeRange).toISOString();
     const to = endOfDay(new Date()).toISOString();
 
     const [salesRes, namesRes] = await Promise.all([
@@ -55,7 +78,7 @@ const TopSalesPerformers = ({ pharmacyId }: { pharmacyId: string | undefined }) 
 
     setRows(aggregated);
     setLoading(false);
-  }, [pharmacyId]);
+  }, [pharmacyId, timeRange]);
 
   useEffect(() => {
     fetchData();
@@ -99,7 +122,7 @@ const TopSalesPerformers = ({ pharmacyId }: { pharmacyId: string | undefined }) 
       <Card className="p-4 border-0 shadow-sm rounded-xl bg-white">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-fluid-base font-bold text-gray-900">Top Sales Performers</h2>
-          <span className="text-fluid-xs text-muted-foreground">Today</span>
+          <span className="text-fluid-xs text-muted-foreground">{rangeLabelMap[timeRange] ?? "Today"}</span>
         </div>
 
         {loading ? (
@@ -114,7 +137,7 @@ const TopSalesPerformers = ({ pharmacyId }: { pharmacyId: string | undefined }) 
           </div>
         ) : rows.length === 0 ? (
           <p className="text-fluid-xs text-muted-foreground text-center py-4">
-            No sales data yet for today
+            No sales data yet for this range
           </p>
         ) : (
           <ul className="space-y-2.5">
