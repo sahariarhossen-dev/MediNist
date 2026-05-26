@@ -318,7 +318,7 @@ const Index = () => {
             timeRange={timeRange}
             scope="shop"
           />
-          <TopSalesPerformers pharmacyId={profile?.pharmacy_id} />
+          <TopSalesPerformers pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />
         </>
       )}
     </div>
