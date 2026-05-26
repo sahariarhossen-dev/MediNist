@@ -58,6 +58,7 @@ const Index = () => {
   const [myTodaySales, setMyTodaySales] = useState(0);
   const [myTodayInvoices, setMyTodayInvoices] = useState(0);
   const [myRangeSales, setMyRangeSales] = useState(0);
+  const [myRangeInvoices, setMyRangeInvoices] = useState(0);
   const [shopRangeSales, setShopRangeSales] = useState(0);
   const [activeStaffToday, setActiveStaffToday] = useState(0);
   const [stockAlerts, setStockAlerts] = useState(0);
@@ -65,6 +66,7 @@ const Index = () => {
   const isManager = profile?.role === "manager";
   const isOwner = profile?.role === "admin";
   const canSeeShopDashboard = isOwner || isManager;
+  const showDateFilter = canSeeShopDashboard || isSalesman;
   const rangeLabels: Record<string, string> = isManager
     ? { today: "Today", "7days": "Last 7 Days" }
     : fullRangeLabels;
@@ -76,29 +78,36 @@ const Index = () => {
     }
   }, [isManager, timeRange]);
 
-  // Range-aware sales (Owner only): both personal and shop totals from one query.
   const fetchRangeSales = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
     const userId = profile?.id;
-    if (!pharmacyId || !userId || !canSeeShopDashboard) return;
+    if (!pharmacyId || !userId) return;
+    if (!canSeeShopDashboard && !isSalesman) return;
     const startDate = getStartDate(timeRange);
-    const { data } = await supabase
+    let q = supabase
       .from("sales")
       .select("total, user_id")
       .eq("pharmacy_id", pharmacyId)
       .eq("status", "completed")
       .gte("created_at", startDate);
+    if (isSalesman) q = q.eq("user_id", userId);
+    const { data } = await q;
     const rows = data ?? [];
     let mine = 0;
     let shop = 0;
+    let mineCount = 0;
     for (const r of rows as any[]) {
       const t = Number(r.total || 0);
       shop += t;
-      if (r.user_id === userId) mine += t;
+      if (r.user_id === userId) {
+        mine += t;
+        mineCount += 1;
+      }
     }
     setMyRangeSales(mine);
+    setMyRangeInvoices(mineCount);
     setShopRangeSales(shop);
-  }, [profile?.pharmacy_id, profile?.id, timeRange, canSeeShopDashboard]);
+  }, [profile?.pharmacy_id, profile?.id, timeRange, canSeeShopDashboard, isSalesman]);
 
   // Today-only meta: active staff count + low-stock count. Independent of range.
   const fetchTodayMeta = useCallback(async () => {
@@ -276,22 +285,26 @@ const Index = () => {
       ]
     : [
         {
-          title: "Today's Sale",
-          value: `৳${formatBDT(myTodaySales)}`,
+          title: isToday ? "Today's Sale" : "My Personal Sales",
+          value: `৳${formatBDT(isToday ? myTodaySales : myRangeSales)}`,
           icon: TrendingUp,
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/personal-report"),
         },
         {
           title: "Total Invoices",
-          value: String(myTodayInvoices),
+          value: String(isToday ? myTodayInvoices : myRangeInvoices),
           icon: Receipt,
           color: "bg-blue-100 text-blue-600",
           onClick: undefined as undefined | (() => void),
         },
         {
           title: "Average Sales",
-          value: `৳${formatBDT(myTodayInvoices > 0 ? myTodaySales / myTodayInvoices : 0)}`,
+          value: (() => {
+            const sales = isToday ? myTodaySales : myRangeSales;
+            const invs = isToday ? myTodayInvoices : myRangeInvoices;
+            return `৳${formatBDT(invs > 0 ? sales / invs : 0)}`;
+          })(),
           icon: BarChart3,
           color: "bg-blue-100 text-blue-600",
           onClick: undefined as undefined | (() => void),
@@ -319,7 +332,7 @@ const Index = () => {
             <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-fluid-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
-          {canSeeShopDashboard && (
+          {showDateFilter && (
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-fluid-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
               <SelectValue />
@@ -347,8 +360,8 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Sales Trend Chart + Top Performers — Owner & Manager */}
-      {canSeeShopDashboard && (
+      {/* Sales Trend Chart + Top Performers */}
+      {canSeeShopDashboard ? (
         <>
           <SalesTrendChart
             pharmacyId={profile?.pharmacy_id}
@@ -357,7 +370,13 @@ const Index = () => {
           />
           <TopSalesPerformers pharmacyId={profile?.pharmacy_id} timeRange={timeRange} />
         </>
-      )}
+      ) : isSalesman ? (
+        <SalesTrendChart
+          pharmacyId={profile?.pharmacy_id}
+          timeRange={timeRange}
+          scope="personal"
+        />
+      ) : null}
     </div>
   );
 };

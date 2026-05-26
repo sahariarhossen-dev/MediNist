@@ -1,29 +1,22 @@
-## Salesman Dashboard Redesign
+## Salesman Dashboard: Add Date Filter + Personal Sales Trend Chart
 
-Update `src/pages/Index.tsx` to render a dedicated 4-card view when `profile.role === 'salesman'`. No other files affected.
+Single-file change: `src/pages/Index.tsx`. No DB, RLS, or component API changes (the `SalesTrendChart` already supports `scope="personal"`).
 
-### Behavior
+### Changes
 
-- Hide the date filter dropdown (already gated by `canSeeShopDashboard`, salesman is excluded — confirmed).
-- Hide the Sales Trend chart and Top Performers (already gated — confirmed).
-- Render exactly 4 cards for salesman, today-only scope.
+1. **Show date filter for salesman** — extend gating from `canSeeShopDashboard` to include `isSalesman`. Salesman gets the full 4 options: Today, Last 7 Days, Last 15 Days, Last 30 Days (use `fullRangeLabels`; manager still capped to today/7days).
 
-### Cards
+2. **Range-aware personal data fetch** — generalize `fetchRangeSales` to also run for salesman. For salesman, query is `eq("user_id", userId)` only (no shop totals needed). Track `myRangeInvoices` count from the same query.
 
-1. **Today's Sale** — `৳{myTodaySales}` (already fetched via `fetchMyTodaySales`). Icon: `TrendingUp`. Tap → `/personal-report`.
-2. **Total Invoices** — count of completed sales rows by this user today. New state `myTodayInvoices`. Icon: `Receipt` (lucide).
-3. **Average Sales** — `myTodaySales / myTodayInvoices`, formatted `৳…`; show `৳0` when invoices === 0 (guard NaN). Icon: `BarChart3`.
-4. **Short Items** — reuse existing `stockAlerts` count (already fetched via `fetchTodayMeta`). Icon: `AlertTriangle`. Tap → `/short-items`.
+3. **Update salesman cards to range-aware**:
+   - Card 1 "My Personal Sales" — `isToday ? myTodaySales : myRangeSales`
+   - Card 2 "Total Invoices" — `isToday ? myTodayInvoices : myRangeInvoices`
+   - Card 3 "Average Sales" — `sales / invoices`, guard divide-by-zero → `৳0`
+   - Card 4 "Short Items" — unchanged (real-time, pharmacy-wide)
 
-### Data changes
-
-- Extend `fetchMyTodaySales` to also return the row count, or add `myTodayInvoices` state populated from the same query (just use `.length` of the response). No new round-trip.
-- Realtime debounced refresh already covers `sales` table changes — invoices count will auto-update.
-
-### Branch
-
-Replace the current salesman fallback (currently shows only 2 cards: "Today's My Sale" + "Short Items") with the 4-card grid above. Owner/Manager branch untouched.
+4. **Show personal Sales Trend Chart for salesman** — render `<SalesTrendChart scope="personal" timeRange={timeRange} pharmacyId=… />` for salesman. Owner/manager keep their `scope="shop"` chart unchanged. (No Top Performers for salesman.)
 
 ### Out of scope
 
-No DB, RLS, edge function, or styling-system changes. Reuses existing card classes and grid.
+- No RLS changes — salesman already can only read their own sales rows per existing policy.
+- Owner and Manager dashboards untouched.
