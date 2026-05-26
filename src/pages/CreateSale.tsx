@@ -112,7 +112,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -203,7 +203,7 @@ const CreateSale = () => {
     if (presc.medicine_id) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
         .eq("id", presc.medicine_id)
         .maybeSingle();
       med = (data as Medicine | null) ?? null;
@@ -211,7 +211,7 @@ const CreateSale = () => {
     if (!med) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
         .eq("pharmacy_id", profile.pharmacy_id)
         .ilike("name", presc.medicine_name)
         .limit(1)
