@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, classifyCatalogPack } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
@@ -41,20 +41,6 @@ interface MasterMedicine {
   pack_size: string | null;
   box_size: string | null;
 }
-
-const parsePackSize = (val: string | null): number | null => {
-  if (!val || val === "N/A") return null;
-  const match = val.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
-
-const computeStripPerPack = (packSize: string | null, boxSize: string | null): number | null => {
-  const pcs = parsePackSize(packSize);
-  const box = parsePackSize(boxSize);
-  if (!pcs || !box || pcs === 0) return null;
-  const result = Math.floor(box / pcs);
-  return result > 0 ? result : null;
-};
 
 // Build a Postgres tsquery from raw user input. Strips punctuation,
 // splits on whitespace, appends `:*` to each token for prefix matching,
@@ -356,8 +342,8 @@ const Inventory = () => {
       return;
     }
     setAddingCatalog(true);
-    const pcsPerStrip = parsePackSize(med.pack_size);
-    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+    const { pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack } =
+      classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
     // Keep verbatim format for unmappable types so the pharmacy still gets a
@@ -677,8 +663,8 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
-                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+                      const { pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack } =
+                        classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
                       const catalogIsMulti = !isSingleUnit({
                         pcs_per_strip: catalogPcsPerStrip,
                         strip_per_pack: catalogStripPerPack,

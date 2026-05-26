@@ -92,6 +92,66 @@ export const isSingleUnit = (med: PackInfo | null | undefined): boolean => {
 };
 
 /**
+ * Parse a raw pack/box size string from the master catalog (e.g. "10s",
+ * "100s", "1", "30ml", "N/A") into a positive integer count. Returns null
+ * when the value is missing, "N/A", or has no leading number.
+ */
+export const parsePackSize = (val: string | null | undefined): number | null => {
+  if (!val || val === "N/A") return null;
+  const match = String(val).match(/(\d+)/);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export interface CatalogPackInput {
+  pack_size?: string | null;
+  box_size?: string | null;
+}
+
+export interface CatalogPackClassification {
+  mode: PackMode;
+  pcs_per_strip: number | null;
+  strip_per_pack: number | null;
+}
+
+/**
+ * Centralized rule that decides whether a catalog medicine should be
+ * persisted in `medicines` as a single whole unit (Syrup, Drop, Cream,
+ * "30s pot" sold as one pack) or as a strip/box-divided product.
+ *
+ * Rules:
+ * - `box_size` ≤ 1 (or missing) → SINGLE, regardless of `pack_size`.
+ *   A 30s pot of Allion Gold is one unit, not 30 strips.
+ * - `box_size` > 1 and `pack_size` > 1 → FULL strip+box.
+ * - `box_size` > 1 with no usable `pack_size` → BOX only.
+ * - Anything else falls back to SINGLE.
+ */
+export const classifyCatalogPack = (
+  input: CatalogPackInput
+): CatalogPackClassification => {
+  const box = parsePackSize(input.box_size);
+  const pack = parsePackSize(input.pack_size);
+
+  // Single whole unit — no internal strip divisions.
+  if (!box || box <= 1) {
+    return { mode: "single", pcs_per_strip: null, strip_per_pack: null };
+  }
+
+  if (pack && pack > 1) {
+    const strips = Math.floor(box / pack);
+    if (strips > 1) {
+      return { mode: "full", pcs_per_strip: pack, strip_per_pack: strips };
+    }
+    // box divisible into a single strip → treat as plain box of pieces
+    return { mode: "box", pcs_per_strip: null, strip_per_pack: box };
+  }
+
+  // box > 1 with no strip info → flat box of N pieces
+  return { mode: "box", pcs_per_strip: null, strip_per_pack: box };
+};
+
+/**
  * Convert a number of boxes into total pieces.
  */
 export const boxesToPieces = (
