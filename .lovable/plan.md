@@ -1,22 +1,37 @@
-## Salesman Dashboard: Add Date Filter + Personal Sales Trend Chart
+# Sync subscription countdown across Owner, Manager, Salesman
 
-Single-file change: `src/pages/Index.tsx`. No DB, RLS, or component API changes (the `SalesTrendChart` already supports `scope="personal"`).
+## Root cause
 
-### Changes
+In `src/hooks/useSubscription.ts`, when the pharmacy has no `subscription_expiry` set, the hook falls back to `buildDefaultTrialSub(userData.user.created_at)` — the **currently logged-in user's** signup timestamp.
 
-1. **Show date filter for salesman** — extend gating from `canSeeShopDashboard` to include `isSalesman`. Salesman gets the full 4 options: Today, Last 7 Days, Last 15 Days, Last 30 Days (use `fullRangeLabels`; manager still capped to today/7days).
+- Owner: signed up at shop creation → trial end ≈ shop_created + 30d (looks correct).
+- Manager / Salesman: invited later → their `auth.users.created_at` is later → countdown is different per user and shifts whenever they re-auth.
 
-2. **Range-aware personal data fetch** — generalize `fetchRangeSales` to also run for salesman. For salesman, query is `eq("user_id", userId)` only (no shop totals needed). Track `myRangeInvoices` count from the same query.
+The countdown must be anchored to a single shop-wide timestamp for every role.
 
-3. **Update salesman cards to range-aware**:
-   - Card 1 "My Personal Sales" — `isToday ? myTodaySales : myRangeSales`
-   - Card 2 "Total Invoices" — `isToday ? myTodayInvoices : myRangeInvoices`
-   - Card 3 "Average Sales" — `sales / invoices`, guard divide-by-zero → `৳0`
-   - Card 4 "Short Items" — unchanged (real-time, pharmacy-wide)
+## Fix
 
-4. **Show personal Sales Trend Chart for salesman** — render `<SalesTrendChart scope="personal" timeRange={timeRange} pharmacyId=… />` for salesman. Owner/manager keep their `scope="shop"` chart unchanged. (No Top Performers for salesman.)
+Use `pharmacies.created_at` as the universal anchor for the free-trial fallback. Everyone in the same shop then sees the identical "Shop created + 30 days" target, and refresh just recomputes `target - now()` against that fixed value.
 
-### Out of scope
+### Changes — `src/hooks/useSubscription.ts` only
 
-- No RLS changes — salesman already can only read their own sales rows per existing policy.
-- Owner and Manager dashboards untouched.
+1. Extend the pharmacy select to also fetch `created_at`:
+   ```ts
+   .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown, created_at")
+   ```
+2. Change the trial fallback path so it uses `pharm.created_at` (not the auth user's `created_at`):
+   - When `pharm` exists but `subscription_expiry` is null → `buildDefaultTrialSub(pharm.created_at)`.
+   - When user has no pharmacy yet (pre-onboarding) → keep current behavior using auth user's `created_at` (only the unattached signer sees this; no shop members involved).
+3. `buildDefaultTrialSub` logic itself is unchanged: `expiry = started + 30 days`, `total_days = 30`. Because `started` is now the pharmacy's creation timestamp, the expiry is identical for Owner, Manager and Salesman.
+
+No changes needed to:
+- `CountdownTimer` / `useCountdown` — already pure `target - now()`.
+- `StatusCard` — already renders from `sub.expiry_date` and `sub.started_at`.
+- `Subscription.tsx` UI / fallback label ("Free Trial") — already uniform.
+- RLS — `pharmacies` SELECT policy already allows all members to read their own pharmacy row (including `created_at`).
+
+## Verification
+
+- Log in as Owner → trial card shows X days remaining anchored to shop creation.
+- Log in as Manager and Salesman in same shop → identical days/hours/minutes (within seconds), and refreshing does not reset or jump.
+- Once a real `subscription_expiry` is set on the pharmacy, all roles continue to share the same active countdown (already working).

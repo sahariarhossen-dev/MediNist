@@ -66,7 +66,7 @@ export function useSubscription() {
       const [pharmRes, paysRes] = await Promise.all([
         supabase
           .from("pharmacies")
-          .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown")
+          .select("subscription_plan, subscription_started_at, subscription_expiry, last_popup_shown, created_at")
           .eq("id", pid)
           .maybeSingle(),
         supabase
@@ -84,7 +84,7 @@ export function useSubscription() {
         setSub(buildSub(pharm));
         setLastPopupShown((pharm.last_popup_shown as string | null) ?? null);
       } else {
-        setSub(buildDefaultTrialSub(createdAt));
+        setSub(buildDefaultTrialSub((pharm?.created_at as string | null) ?? createdAt));
         setLastPopupShown(null);
       }
       setPayments(
