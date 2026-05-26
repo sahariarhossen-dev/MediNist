@@ -1,58 +1,48 @@
-## Root cause
+## Dashboard cards — filter-aware logic for Owner
 
-Both `src/pages/DailyTransactions.tsx` and `src/pages/Index.tsx` compute today's starting cash as:
+Update `src/pages/Index.tsx` so the 4 summary cards behave differently per selected range, and lock the aggregated view to the Owner (admin) role only.
 
-```
-prev daily_closings row → net_balance, else → pharmacy_settings.starting_cash_balance
-```
+### Card behavior (Owner only)
 
-The `daily_closings` table is empty (verified via DB query — 0 rows). The scheduled `close-daily-transactions` edge function has not been writing rows (its recent log shows only a boot, no runs), and no one has manually submitted a blind closing. So every day falls back to `starting_cash_balance` (0), and yesterday's ৳666 net never carries forward — even though it's visible on the Daily Transactions page because that screen *computes* it live from raw rows.
+| # | Range = Today | Range = 7/15/30 Days |
+|---|---|---|
+| 1 | **Today's My Sale** — current user's completed sales today | **My Total Sale** — current user's completed sales for the range |
+| 2 | **Cash in Hand** — live, ignores range (always today's real-time value) | Same — unchanged by filter |
+| 3 | **Active Staff** — distinct sellers today | **Total Shop Sale** — sum of ALL users' completed sales for the range |
+| 4 | **Short Items** — live low-stock count | Same — unchanged by filter |
 
-## Fix
+### Implementation
 
-Stop depending on `daily_closings` for the opening balance. Compute it directly from all activity strictly **before** today's `from` timestamp, using the same formula already used for "today" — so the number is always continuous regardless of whether the cron ran.
+1. **Role gating**
+   - Only `admin` (Owner) sees the filter dropdown + aggregated stats, Sales Trend, and Top Sales Performers.
+   - Manager and Salesman: hide the range dropdown and render a simplified personal view (Today's My Sale + Short Items), no shop aggregates. Remove the existing manager-range branch.
 
-Opening balance formula (matches `submit_blind_closing` math):
+2. **State split in `Index.tsx`**
+   - `myRangeSales` — current user's total for selected range (drives Card 1 when not Today; for Today uses existing `myTodaySales`).
+   - `shopRangeSales` — all-users total for selected range (drives Card 3 when not Today).
+   - `activeStaffToday` — distinct seller count for today only (drives Card 3 when Today).
+   - `cashInHand` — unchanged, always computed for today, **not** re-fetched when `timeRange` changes.
+   - `stockAlerts` — unchanged, live.
 
-```
-opening = pharmacy_settings.starting_cash_balance
-        + max(0, completed_sales_before_today − new_dues_before_today)   // cash portion of sales
-        + due_collections_before_today                                    // category=due_collection
-        + other_cash_in_before_today                                      // category=other_in
-        − payments_before_today                                           // direction=out
-```
+3. **Fetch logic**
+   - Replace `fetchStats` with two effects:
+     - `fetchRangeSales(timeRange)` — runs on range change. Queries `sales` filtered by `pharmacy_id`, `status=completed`, `created_at >= start`. Computes both `myRangeSales` (filter by `user_id`) and `shopRangeSales` (sum all) from one query.
+     - `fetchTodayMeta()` — runs once / on realtime. Computes `activeStaffToday` (today only) and `stockAlerts`.
+   - Keep `fetchCashInHand` exactly as is — never depends on `timeRange`.
 
-Then today's Cash in Hand = `opening + todayCashSales + todayDueReceived + todayCashInInvestments − todayPayments` (unchanged).
+4. **Card rendering**
+   - Build `summaryCards` dynamically based on `timeRange === "today"`:
+     - Card 1 title: `Today's My Sale` | `My Total Sale`; value uses `myTodaySales` | `myRangeSales`.
+     - Card 3 title/value: `Active Staff` (count) | `Total Shop Sale` (৳ amount); icon switches `Users` ↔ `TrendingUp`.
+   - Cards 2 & 4 unchanged.
 
-Because this scans the full history, wrap it in a small shared helper to keep both pages in sync.
+5. **Sales Trend + Top Performers**
+   - Already receive `timeRange` — confirm they re-render on change. No code change unless they currently ignore range.
 
-### Files to change
+6. **Realtime**
+   - Existing channel debounce calls `fetchCashInHand` + `fetchStats` + `fetchMyTodaySales`. Replace `fetchStats`/`fetchMyTodaySales` with `fetchRangeSales` + `fetchTodayMeta`. Cash in Hand keeps live updates on `sales`/`cash_transactions`/`customer_ledger` changes for today.
 
-1. **New** `src/lib/openingBalance.ts`
-   - Exports `async function getOpeningBalance(pharmacyId: string, dayStartISO: string): Promise<number>`.
-   - Runs 4 parallel queries with `.lt(...)` on the appropriate timestamp column:
-     - `sales.total` where status=completed, created_at < dayStart
-     - `customer_ledger.amount` where entry_type='due', occurred_at < dayStart
-     - `cash_transactions(direction,category,amount)` where occurred_at < dayStart
-     - `pharmacy_settings.starting_cash_balance`
-   - Applies the formula above and returns the number.
-   - Note on the 1000-row default limit: use `.select(..., { count: 'exact', head: false })` plus paging, or aggregate via successive `.range()` calls. Simpler: fetch only the numeric columns and page in chunks of 1000 until exhausted. (Document the helper as O(history); fine for pharmacy-scale data.)
+### Files touched
+- `src/pages/Index.tsx` (only)
 
-2. **`src/pages/DailyTransactions.tsx`** (~lines 78–133)
-   - Remove the `prevClosingRes` query and the `pharmacy_settings` query from the Promise.all batch.
-   - Call `getOpeningBalance(profile.pharmacy_id, from)` instead.
-   - `setStartingBalance(opening)`.
-   - `previousClosing` state is only used to render the "Yesterday's closing ৳X" line (line ~326). Replace it with `setPreviousClosing({ closing_date: <yesterday>, net_balance: opening })` so that subline still shows the carried-forward value. Keep the existing type.
-
-3. **`src/pages/Index.tsx`** (~lines 163–199)
-   - Remove `settingsRes` and `prevClosingRes` from the Promise.all batch.
-   - Call `getOpeningBalance(pharmacyId, from)`.
-   - `startingBalance = opening`. Rest of the Cash in Hand math stays identical.
-
-4. Keep the realtime channel subscriptions as-is — when a new sale/transaction is inserted today, both pages re-pull and recompute opening from history, which naturally stays correct.
-
-### Out of scope
-
-- No DB migration. The `daily_closings` table and the cron remain useful for audit/blind-close, but are no longer the source of truth for opening balance.
-- No change to `submit_blind_closing` or `close-daily-transactions`.
-- No change to subscription logic.
+No DB changes, no other components.
