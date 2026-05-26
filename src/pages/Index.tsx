@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, endOfDay } from "date-fns";
-import { TrendingUp, Wallet, Users, AlertTriangle, BarChart3 } from "lucide-react";
+import { TrendingUp, Wallet, Users, AlertTriangle, BarChart3, Receipt } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -56,6 +56,7 @@ const Index = () => {
   const [timeRange, setTimeRange] = useState("today");
   const [cashInHand, setCashInHand] = useState(0);
   const [myTodaySales, setMyTodaySales] = useState(0);
+  const [myTodayInvoices, setMyTodayInvoices] = useState(0);
   const [myRangeSales, setMyRangeSales] = useState(0);
   const [shopRangeSales, setShopRangeSales] = useState(0);
   const [activeStaffToday, setActiveStaffToday] = useState(0);
@@ -137,6 +138,7 @@ const Index = () => {
       .lte("created_at", to);
     const sum = (res.data ?? []).reduce((s, r: any) => s + Number(r.total || 0), 0);
     setMyTodaySales(sum);
+    setMyTodayInvoices((res.data ?? []).length);
   }, [profile?.pharmacy_id, profile?.id]);
 
   const fetchCashInHand = useCallback(async () => {
@@ -273,8 +275,34 @@ const Index = () => {
         { title: "Short Items", value: String(stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [
-        { title: "Today's My Sale", value: `৳${formatBDT(myTodaySales)}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600", onClick: undefined as undefined | (() => void) },
-        { title: "Short Items", value: String(stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
+        {
+          title: "Today's Sale",
+          value: `৳${formatBDT(myTodaySales)}`,
+          icon: TrendingUp,
+          color: "bg-blue-100 text-blue-600",
+          onClick: () => navigate("/personal-report"),
+        },
+        {
+          title: "Total Invoices",
+          value: String(myTodayInvoices),
+          icon: Receipt,
+          color: "bg-blue-100 text-blue-600",
+          onClick: undefined as undefined | (() => void),
+        },
+        {
+          title: "Average Sales",
+          value: `৳${formatBDT(myTodayInvoices > 0 ? myTodaySales / myTodayInvoices : 0)}`,
+          icon: BarChart3,
+          color: "bg-blue-100 text-blue-600",
+          onClick: undefined as undefined | (() => void),
+        },
+        {
+          title: "Short Items",
+          value: String(stockAlerts),
+          icon: AlertTriangle,
+          color: "bg-orange-100 text-orange-500",
+          onClick: () => navigate("/short-items"),
+        },
       ];
 
   return (
