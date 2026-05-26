@@ -1,63 +1,94 @@
-## Goal
+## Root cause
 
-Treat single-unit products (Syrups, Drops, Creams, full pots like Allion Gold — `box_size` = 1, no strip subdivision) differently from strip-based multi-unit products (Sefrate Capsule, Atoz Premium — `box_size` > 1 with a `pack_size` like "10s"). Single = flat integer stock + 1-click cart add at unit price. Multi = current Box • Strip • Pcs matrix.
+The `CreateSale` search row already uses the correct UI rule:
 
-## Current state
+```ts
+STK: {isSingleUnit(med) ? `${med.stock_quantity ?? 0} Pcs`
+                       : totalPiecesToTriUnit(...)}
+```
 
-- `src/lib/stockUtils.ts` already exposes `getPackMode` and `isSingleUnit`, but they only look at the inventory row's `pcs_per_strip` / `strip_per_pack`. They have no awareness of the raw catalog `box_size` / `pack_size` strings.
-- `src/pages/CatalogSearch.tsx` and `src/pages/Inventory.tsx` both have private `parsePackSize` + `computeStripPerPack` helpers — duplicated, not shared.
-- `CreateSale` already renders stock via `isSingleUnit` and adds quantity = 1 at unit price, so single-product cart behavior is mostly correct as long as the inventory row was saved with the right pack metadata.
-- The real gap: when a catalog item has `box_size` = "1" (single pot/syrup) but a non-empty `pack_size` like "30s", `computeStripPerPack` returns `floor(1/30) = 0 → null`, which is fine — but `pcs_per_strip` is still set to 30, so `isSingleUnit` returns `false` and the item incorrectly renders as a strip product.
+`isSingleUnit` reads from `medicines.pcs_per_strip` / `strip_per_pack`. The new `classifyCatalogPack` writes those as `null` for single products — but only for items added **after** the fix.
+
+The rows the user is seeing (A-Phenicol Eye Drop, Ace Pediatric Drop, Alarid Eye Drop, Ace Syrup) were inserted earlier with `pcs_per_strip` populated (10, 30, 5, 60) even though their `master_medicines.box_size = "1"`. So `getPackMode` returns `"strip"` and the matrix renders.
+
+DB confirms:
+
+```
+A-Phenicol Eye Drop  pcs_per_strip=10  strip_per_pack=null
+Ace (Pediatric Drop) pcs_per_strip=30  strip_per_pack=null
+Alarid (Eye Drop)    pcs_per_strip=5   strip_per_pack=null
+Ace (Syrup)          pcs_per_strip=60  strip_per_pack=null
+```
+
+Master catalog for all of these: `box_size = "1"`.
+
+No UI rewrite is needed — the rule is already there. We need to (a) heal the legacy data so existing single products flip to flat STK display, and (b) add a defensive UI fallback so any future row that slips through still renders correctly.
 
 ## Changes
 
-### 1. Single source of truth in `src/lib/stockUtils.ts`
+### 1. Data heal migration (one-time)
 
-- Export `parsePackSize(raw)` and a new `classifyCatalogPack({ pack_size, box_size, format })` that returns `{ mode: "single" | "strip" | "box" | "full", pcs_per_strip, strip_per_pack }`.
-- Rule:
-  - `box_size` parses to ≤ 1 → **single**: `pcs_per_strip = null`, `strip_per_pack = null` (regardless of `pack_size`, because a "30s pot" sold as one whole unit has no internal strip).
-  - `box_size` > 1 and `pack_size` parses to > 1 → **full** strip+box: `pcs_per_strip = pack`, `strip_per_pack = floor(box / pack)`.
-  - `box_size` > 1 with no usable `pack_size` → **box** only.
-  - Anything else falls back to **single**.
-- Keep `isSingleUnit` working off the resolved `pcs_per_strip` / `strip_per_pack` so existing call sites stay untouched.
+Add a Supabase migration that nullifies pack fields for any `medicines` row whose matching catalog entry is a single unit (`box_size` parses to ≤ 1):
 
-### 2. Use the shared classifier everywhere
+```sql
+UPDATE medicines m
+SET pcs_per_strip = NULL,
+    strip_per_pack = NULL
+FROM master_medicines mm
+WHERE m.name = mm.brand_name
+  AND COALESCE(m.company_name, '') = COALESCE(mm.company, '')
+  AND (
+    mm.box_size IS NULL
+    OR mm.box_size = ''
+    OR mm.box_size = 'N/A'
+    OR substring(mm.box_size from '^\\s*(\\d+)')::int <= 1
+  );
+```
 
-- `src/pages/CatalogSearch.tsx`: replace local `parsePackSize` / `computeStripPerPack` with `classifyCatalogPack` when inserting into `medicines`. Single products are now persisted with both pack fields `null`, which makes every downstream check correct automatically.
-- `src/pages/Inventory.tsx`: same swap in the two places that compute pack info from catalog rows (around lines 359 and 680).
-- `src/pages/AddProduct.tsx`: if it accepts `box_size` / `pack_size` style inputs, route them through the classifier too. (Verify during implementation; no behavior change if it already uses tri-unit fields directly.)
+Also catch orphan rows that never matched the catalog but were saved as obvious singles (`strip_per_pack IS NULL` and `product_type` in the drop/syrup/cream/ointment/suspension/inhaler/lotion/gel/solution family):
 
-### 3. Stock display
+```sql
+UPDATE medicines
+SET pcs_per_strip = NULL
+WHERE strip_per_pack IS NULL
+  AND product_type ILIKE ANY (ARRAY[
+    '%drop%','%syrup%','%suspension%','%cream%','%ointment%',
+    '%gel%','%lotion%','%inhaler%','%spray%','%solution%','%shampoo%'
+  ]);
+```
 
-Already driven by `isSingleUnit`, so once classification is corrected the displays will switch automatically:
+### 2. UI defensive fallback in `CreateSale.tsx` search row + cart row
 
-- **Single** → flat integer (e.g. `5`, `1`) in `CreateSale` search row, `CreateSale` cart row, `Inventory` row, and `ShortItems` row.
-- **Multi** → existing `Box • Strip • Pcs` matrix (e.g. `1 • 0 • 0`).
+Tighten the STK label so even a row with stale `pcs_per_strip` but no `strip_per_pack` and a non-strip product type renders flat:
 
-No template edits needed beyond confirming the four call sites still read the right value.
+```ts
+const looksSingle =
+  isSingleUnit(med) ||
+  (!med.strip_per_pack &&
+    /drop|syrup|suspension|cream|ointment|gel|lotion|inhaler|spray|solution|shampoo/i
+      .test(med.product_type ?? ""));
 
-### 4. Cart add logic
+STK: {looksSingle
+  ? `${med.stock_quantity ?? 0} Pcs`
+  : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}
+```
 
-`CreateSale.addToCart` already inserts `quantity: 1` at `medicine.price`. After the classifier fix, single products will have `pcs_per_strip = null`, so the +/- stepper in the cart treats the quantity as flat units (pots/bottles), exactly as requested. No code change beyond verification.
+Apply the same `looksSingle` check to the cart row STK label and to `Inventory.tsx` row + `ShortItems.tsx` row so the rule is uniform across all three list surfaces.
 
-### 5. One-off data heal (optional, ask first)
+### 3. No catalog/import logic changes
 
-Existing `medicines` rows that were imported before this fix may still have `pcs_per_strip` populated for single-unit products. We can either:
-
-- (a) Leave them — user can re-add from catalog, or
-- (b) Run a one-time SQL update to null out `pcs_per_strip` / `strip_per_pack` for rows whose source catalog entry has `box_size` ≤ 1.
-
-I'll confirm with you before touching production data.
+`classifyCatalogPack` already handles new inserts correctly — leave it as-is.
 
 ## Files touched
 
-- `src/lib/stockUtils.ts` — add `parsePackSize`, `classifyCatalogPack`; keep existing exports.
-- `src/pages/CatalogSearch.tsx` — use shared classifier on insert.
-- `src/pages/Inventory.tsx` — use shared classifier; remove local duplicates.
-- `src/pages/AddProduct.tsx` — verify and align if it handles box/pack strings.
+- `supabase/migrations/<timestamp>_heal_single_unit_packs.sql` — new migration with the two UPDATEs above.
+- `src/pages/CreateSale.tsx` — replace `isSingleUnit(med)` with `looksSingle` helper in the two STK label spots.
+- `src/pages/Inventory.tsx` — same helper for the inventory row stock label.
+- `src/pages/ShortItems.tsx` — same helper for the STK column.
 
 ## Verification
 
-- Add a syrup (e.g. `box_size: "1"`, `pack_size: "100ml"`) from catalog → inventory + sales search both show flat `Qty: N`, cart adds 1 unit at unit price.
-- Add a strip product (e.g. `box_size: "100s"`, `pack_size: "10s"`) → stays as `Box • Strip • Pcs`, existing tri-unit cart controls unchanged.
-- `ShortItems` and the cart row both reflect the new classification automatically.
+- After migration, re-query `medicines` for A-Phenicol Eye Drop / Ace Pediatric Drop / Alarid / Ace Syrup → `pcs_per_strip` and `strip_per_pack` are both NULL.
+- `/create-sale` search shows `STK: 148 Pcs`, `STK: 14 Pcs`, `STK: 596 Pcs` — no colons.
+- Strip products (Aceta Tablet, Acelock Tablet) still show `STK: B : S : P` matrix.
+- Cart, Inventory list, and Short Items list mirror the same behavior.
