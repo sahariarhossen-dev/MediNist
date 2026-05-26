@@ -74,6 +74,10 @@ const AddProduct = () => {
   const [mrp, setMrp] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
+  // Explicit packaging mode chosen by the user.
+  // "single"      → pots, bottles, drops, syrups, inhalers, single-pack tablets
+  // "strip_based" → real tablet/capsule strips inside a box
+  const [packagingType, setPackagingType] = useState<"single" | "strip_based">("single");
 
   const standardizedType = getStandardizedType(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
@@ -125,6 +129,15 @@ const AddProduct = () => {
     if (s.mrp) setMrp(s.mrp);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
     if (s.stripPerBox) setStripPerBox(s.stripPerBox);
+    if (s.packagingType === "single" || s.packagingType === "strip_based") {
+      setPackagingType(s.packagingType);
+    } else if (
+      Number(s.pcsPerStrip || 0) > 1 &&
+      Number(s.stripPerBox || 0) > 1
+    ) {
+      // Back-compat: legacy rows without packaging_type — infer from numbers.
+      setPackagingType("strip_based");
+    }
   }, []);
 
   const strengthConfig = getStrengthConfig(productType);
@@ -184,8 +197,19 @@ const AddProduct = () => {
       // Persist whatever pack data the user entered (>0). Visibility of the
       // strip/box UI is no longer tied to product_type — it follows the
       // actual packaging numbers, matching the master JSON catalog shape.
-      pcs_per_strip: pcsPerStrip && Number(pcsPerStrip) > 0 ? Number(pcsPerStrip) : null,
-      strip_per_pack: stripPerBox && Number(stripPerBox) > 0 ? Number(stripPerBox) : null,
+      pcs_per_strip:
+        packagingType === "single"
+          ? null
+          : pcsPerStrip && Number(pcsPerStrip) > 0
+            ? Number(pcsPerStrip)
+            : null,
+      strip_per_pack:
+        packagingType === "single"
+          ? null
+          : stripPerBox && Number(stripPerBox) > 0
+            ? Number(stripPerBox)
+            : null,
+      packaging_type: packagingType,
     };
 
     let error;
