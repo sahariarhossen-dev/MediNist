@@ -581,7 +581,6 @@ export type Database = {
           id: string
           name: string
           pack_size: string | null
-          packaging_type: string | null
           pcs_per_strip: number | null
           pharmacy_id: string
           price: number | null
@@ -603,7 +602,6 @@ export type Database = {
           id?: string
           name: string
           pack_size?: string | null
-          packaging_type?: string | null
           pcs_per_strip?: number | null
           pharmacy_id: string
           price?: number | null
@@ -625,7 +623,6 @@ export type Database = {
           id?: string
           name?: string
           pack_size?: string | null
-          packaging_type?: string | null
           pcs_per_strip?: number | null
           pharmacy_id?: string
           price?: number | null
@@ -1303,7 +1300,6 @@ export type Database = {
           id: string
           name: string
           pack_size: string | null
-          packaging_type: string | null
           pcs_per_strip: number | null
           pharmacy_id: string
           price: number | null

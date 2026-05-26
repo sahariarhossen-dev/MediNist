@@ -22,7 +22,6 @@ interface Medicine {
   product_type: string | null;
   unit_format: string | null;
   product_size: string | null;
-  packaging_type: string | null;
 }
 
 interface CartItem {
@@ -112,7 +111,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -131,7 +130,6 @@ const CreateSale = () => {
               product_type: null,
               unit_format: null,
               product_size: null,
-              packaging_type: null,
             },
             quantity: it.quantity,
             discountPercent: (it as any).discount_percent ?? 0,
@@ -204,7 +202,7 @@ const CreateSale = () => {
     if (presc.medicine_id) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
         .eq("id", presc.medicine_id)
         .maybeSingle();
       med = (data as Medicine | null) ?? null;
@@ -212,7 +210,7 @@ const CreateSale = () => {
     if (!med) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
         .eq("pharmacy_id", profile.pharmacy_id)
         .ilike("name", presc.medicine_name)
         .limit(1)

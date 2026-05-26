@@ -28,7 +28,6 @@ interface Medicine {
   unit_format: string | null;
   product_size: string | null;
   stock_alert: number | null;
-  packaging_type: string | null;
 }
 
 interface MasterMedicine {
@@ -367,17 +366,6 @@ const Inventory = () => {
       functionalType === "Other" && med.format ? med.format : functionalType;
     const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack });
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
-    // Real strip-in-box products (Tablet/Capsule with both numbers > 1)
-    // are the only thing we treat as strip_based. Everything else (pots,
-    // drops, syrups, inhalers, single-pack tablets) is a single unit.
-    const isTabletOrCapsule =
-      functionalType === "Tablet" || functionalType === "Capsule";
-    const packagingType: "single" | "strip_based" =
-      isTabletOrCapsule &&
-      (pcsPerStrip ?? 0) > 1 &&
-      (stripPerPack ?? 0) > 1
-        ? "strip_based"
-        : "single";
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
@@ -390,7 +378,6 @@ const Inventory = () => {
       stock_quantity: stockQty,
       pcs_per_strip: pcsPerStrip,
       strip_per_pack: stripPerPack,
-      packaging_type: packagingType,
     }).select().single();
 
     if (error) {
@@ -449,7 +436,6 @@ const Inventory = () => {
         totalQuantity: med.stock_quantity?.toString() || "",
         stockAlert: med.stock_alert?.toString() || "",
         mrp: med.price?.toString() || "",
-        packagingType: med.packaging_type || "",
       },
     });
   };

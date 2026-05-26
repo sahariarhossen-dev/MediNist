@@ -74,10 +74,6 @@ const AddProduct = () => {
   const [mrp, setMrp] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
-  // Explicit packaging mode chosen by the user.
-  // "single"      → pots, bottles, drops, syrups, inhalers, single-pack tablets
-  // "strip_based" → real tablet/capsule strips inside a box
-  const [packagingType, setPackagingType] = useState<"single" | "strip_based">("single");
 
   const standardizedType = getStandardizedType(productType);
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
@@ -129,15 +125,6 @@ const AddProduct = () => {
     if (s.mrp) setMrp(s.mrp);
     if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
     if (s.stripPerBox) setStripPerBox(s.stripPerBox);
-    if (s.packagingType === "single" || s.packagingType === "strip_based") {
-      setPackagingType(s.packagingType);
-    } else if (
-      Number(s.pcsPerStrip || 0) > 1 &&
-      Number(s.stripPerBox || 0) > 1
-    ) {
-      // Back-compat: legacy rows without packaging_type — infer from numbers.
-      setPackagingType("strip_based");
-    }
   }, []);
 
   const strengthConfig = getStrengthConfig(productType);
@@ -197,19 +184,8 @@ const AddProduct = () => {
       // Persist whatever pack data the user entered (>0). Visibility of the
       // strip/box UI is no longer tied to product_type — it follows the
       // actual packaging numbers, matching the master JSON catalog shape.
-      pcs_per_strip:
-        packagingType === "single"
-          ? null
-          : pcsPerStrip && Number(pcsPerStrip) > 0
-            ? Number(pcsPerStrip)
-            : null,
-      strip_per_pack:
-        packagingType === "single"
-          ? null
-          : stripPerBox && Number(stripPerBox) > 0
-            ? Number(stripPerBox)
-            : null,
-      packaging_type: packagingType,
+      pcs_per_strip: pcsPerStrip && Number(pcsPerStrip) > 0 ? Number(pcsPerStrip) : null,
+      strip_per_pack: stripPerBox && Number(stripPerBox) > 0 ? Number(stripPerBox) : null,
     };
 
     let error;
@@ -346,35 +322,10 @@ const AddProduct = () => {
         {/* 3b. Strip & Pack Details — driven by data, not product type.
             Leave both blank (or 1) for single-unit products. */}
         <div className="space-y-3">
-            <Label className="text-sm font-medium text-foreground">Packaging</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setPackagingType("single")}
-                className={`rounded-xl h-12 text-xs font-semibold transition border ${
-                  packagingType === "single"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-muted text-foreground border-transparent"
-                }`}
-              >
-                Single unit
-                <span className="block text-[10px] font-normal opacity-80">pot / bottle / drop / syrup</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPackagingType("strip_based")}
-                className={`rounded-xl h-12 text-xs font-semibold transition border ${
-                  packagingType === "strip_based"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-muted text-foreground border-transparent"
-                }`}
-              >
-                Strip-based
-                <span className="block text-[10px] font-normal opacity-80">tablet strips in a box</span>
-              </button>
-            </div>
-            {packagingType === "strip_based" && (
-              <>
+            <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
+            <p className="text-xs text-muted-foreground">
+              Leave blank or set to 1 for single-unit products (bottles, tubes, vials).
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
@@ -402,8 +353,6 @@ const AddProduct = () => {
                 Total Box Size: <span className="font-semibold text-foreground">{pcsPerStrip} × {stripPerBox} = {totalBoxSize} pcs</span>
               </p>
             )}
-              </>
-            )}
         </div>
 
         {/* 4. Company Name */}
@@ -414,7 +363,7 @@ const AddProduct = () => {
             onClick={() =>
               navigate("/add-company", {
                 state: {
-                  formData: { editId, name, companyName, productType, strength, stockAlert, mrp, pcsPerStrip, stripPerBox, packagingType },
+                  formData: { editId, name, companyName, productType, strength, stockAlert, mrp, pcsPerStrip, stripPerBox },
                 },
               })
             }
