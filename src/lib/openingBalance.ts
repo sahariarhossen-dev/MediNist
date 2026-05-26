@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 const PAGE = 1000;
 
 async function pageAll<T>(
-  build: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; ; from += PAGE) {
