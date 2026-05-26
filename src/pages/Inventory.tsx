@@ -342,8 +342,8 @@ const Inventory = () => {
       return;
     }
     setAddingCatalog(true);
-    const pcsPerStrip = parsePackSize(med.pack_size);
-    const stripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+    const { pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack } =
+      classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
     // Keep verbatim format for unmappable types so the pharmacy still gets a
@@ -663,8 +663,8 @@ const Inventory = () => {
                     {filteredCatalog.map((med) => {
                       const isExpanded = expandedCatalogId === med.id;
                       const catalogType = toFunctionalType(med.format);
-                      const catalogPcsPerStrip = parsePackSize(med.pack_size);
-                      const catalogStripPerPack = computeStripPerPack(med.pack_size, med.box_size);
+                      const { pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack } =
+                        classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
                       const catalogIsMulti = !isSingleUnit({
                         pcs_per_strip: catalogPcsPerStrip,
                         strip_per_pack: catalogStripPerPack,
