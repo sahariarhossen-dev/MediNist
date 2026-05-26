@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, endOfDay } from "date-fns";
-import { TrendingUp, Wallet, Users, AlertTriangle } from "lucide-react";
+import { TrendingUp, Wallet, Users, AlertTriangle, BarChart3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -44,10 +44,6 @@ const fullRangeLabels: Record<string, string> = {
   "15days": "Last 15 Days",
   "30days": "Last 30 Days",
 };
-const managerRangeLabels: Record<string, string> = {
-  today: "Today",
-  "7days": "Last 7 Days",
-};
 
 const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
@@ -58,59 +54,62 @@ const Index = () => {
   const initials = profile?.full_name ? profile.full_name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
   const [timeRange, setTimeRange] = useState("today");
-  const [stats, setStats] = useState({ totalSales: 0, activeStaff: 0, stockAlerts: 0 });
   const [cashInHand, setCashInHand] = useState(0);
   const [myTodaySales, setMyTodaySales] = useState(0);
+  const [myRangeSales, setMyRangeSales] = useState(0);
+  const [shopRangeSales, setShopRangeSales] = useState(0);
+  const [activeStaffToday, setActiveStaffToday] = useState(0);
+  const [stockAlerts, setStockAlerts] = useState(0);
   const isSalesman = profile?.role === "salesman";
   const isManager = profile?.role === "manager";
   const isOwner = profile?.role === "admin";
-  const isShopScope = isOwner || isManager;
-  const rangeLabels = isManager ? managerRangeLabels : fullRangeLabels;
+  const rangeLabels = fullRangeLabels;
+  const isToday = timeRange === "today";
 
-  // Clamp manager to allowed ranges.
-  useEffect(() => {
-    if (isManager && !(timeRange in managerRangeLabels)) {
-      setTimeRange("7days");
-    }
-  }, [isManager, timeRange]);
-
-  const fetchStats = useCallback(async () => {
+  // Range-aware sales (Owner only): both personal and shop totals from one query.
+  const fetchRangeSales = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
     const userId = profile?.id;
-    if (!pharmacyId || !userId) return;
-
+    if (!pharmacyId || !userId || !isOwner) return;
     const startDate = getStartDate(timeRange);
-
-    const salesScopedQuery = supabase
+    const { data } = await supabase
       .from("sales")
-      .select("total, id, user_id")
+      .select("total, user_id")
       .eq("pharmacy_id", pharmacyId)
       .eq("status", "completed")
       .gte("created_at", startDate);
+    const rows = data ?? [];
+    let mine = 0;
+    let shop = 0;
+    for (const r of rows as any[]) {
+      const t = Number(r.total || 0);
+      shop += t;
+      if (r.user_id === userId) mine += t;
+    }
+    setMyRangeSales(mine);
+    setShopRangeSales(shop);
+  }, [profile?.pharmacy_id, profile?.id, timeRange, isOwner]);
 
-    const [salesRes, staffRes, alertsRes] = await Promise.all([
-      isShopScope ? salesScopedQuery : salesScopedQuery.eq("user_id", userId),
+  // Today-only meta: active staff count + low-stock count. Independent of range.
+  const fetchTodayMeta = useCallback(async () => {
+    const pharmacyId = profile?.pharmacy_id;
+    if (!pharmacyId) return;
+    const todayStart = startOfDay(new Date()).toISOString();
+    const [staffRes, alertsRes] = await Promise.all([
       supabase
         .from("sales")
         .select("user_id")
         .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", startDate),
+        .gte("created_at", todayStart),
       supabase
         .from("medicines")
         .select("id, stock_quantity, stock_alert, product_type, strip_per_pack, pcs_per_strip")
         .eq("pharmacy_id", pharmacyId),
     ]);
-
-    const sales = salesRes.data ?? [];
-    const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
-
-    const staffIds = new Set((staffRes.data ?? []).map(s => s.user_id));
-    const activeStaff = staffIds.size;
-
-    const stockAlerts = (alertsRes.data ?? []).filter(m => isLowStock(m)).length;
-
-    setStats({ totalSales, activeStaff, stockAlerts });
-  }, [profile?.pharmacy_id, profile?.id, timeRange, isShopScope]);
+    const staffIds = new Set((staffRes.data ?? []).map((s: any) => s.user_id));
+    setActiveStaffToday(staffIds.size);
+    setStockAlerts((alertsRes.data ?? []).filter((m: any) => isLowStock(m)).length);
+  }, [profile?.pharmacy_id]);
 
   const fetchMyTodaySales = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
@@ -186,8 +185,12 @@ const Index = () => {
   }, [profile?.pharmacy_id, isSalesman]);
 
   useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+    fetchRangeSales();
+  }, [fetchRangeSales]);
+
+  useEffect(() => {
+    fetchTodayMeta();
+  }, [fetchTodayMeta]);
 
   useEffect(() => {
     fetchMyTodaySales();
@@ -208,7 +211,8 @@ const Index = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         if (!isSalesman) fetchCashInHand();
-        fetchStats();
+        fetchRangeSales();
+        fetchTodayMeta();
         fetchMyTodaySales();
       }, 250);
     };
@@ -224,13 +228,13 @@ const Index = () => {
       if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [profile?.pharmacy_id, fetchCashInHand, fetchStats, fetchMyTodaySales, isSalesman]);
+  }, [profile?.pharmacy_id, fetchCashInHand, fetchRangeSales, fetchTodayMeta, fetchMyTodaySales, isSalesman]);
 
-  const summaryCards = isShopScope
+  const summaryCards = isOwner
     ? [
         {
-          title: "Today's My Sale",
-          value: `৳${formatBDT(myTodaySales)}`,
+          title: isToday ? "Today's My Sale" : "My Total Sale",
+          value: `৳${formatBDT(isToday ? myTodaySales : myRangeSales)}`,
           icon: TrendingUp,
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/personal-report"),
@@ -242,20 +246,26 @@ const Index = () => {
           color: "bg-blue-100 text-blue-600",
           onClick: () => navigate("/more/daily-transactions"),
         },
-        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
-        { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
+        isToday
+          ? {
+              title: "Active Staff",
+              value: String(activeStaffToday),
+              icon: Users,
+              color: "bg-blue-100 text-blue-600",
+              onClick: undefined as undefined | (() => void),
+            }
+          : {
+              title: "Total Shop Sale",
+              value: `৳${formatBDT(shopRangeSales)}`,
+              icon: BarChart3,
+              color: "bg-blue-100 text-blue-600",
+              onClick: undefined as undefined | (() => void),
+            },
+        { title: "Short Items", value: String(stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ]
     : [
-        { title: "Today's My Sale", value: `৳${formatBDT(myTodaySales)}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600" },
-        {
-          title: "Cash in Hand",
-          value: "N/A",
-          icon: Wallet,
-          color: "bg-blue-100 text-blue-600",
-          onClick: undefined as undefined | (() => void),
-        },
-        { title: "Active Staff", value: String(stats.activeStaff), icon: Users, color: "bg-blue-100 text-blue-600" },
-        { title: "Short Items", value: String(stats.stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
+        { title: "Today's My Sale", value: `৳${formatBDT(myTodaySales)}`, icon: TrendingUp, color: "bg-blue-100 text-blue-600", onClick: undefined as undefined | (() => void) },
+        { title: "Short Items", value: String(stockAlerts), icon: AlertTriangle, color: "bg-orange-100 text-orange-500", onClick: () => navigate("/short-items") },
       ];
 
   return (
@@ -272,6 +282,7 @@ const Index = () => {
             <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-fluid-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
+          {isOwner && (
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-fluid-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
               <SelectValue />
@@ -282,6 +293,7 @@ const Index = () => {
               ))}
             </SelectContent>
           </Select>
+          )}
         </div>
       </div>
 
@@ -298,14 +310,17 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Sales Trend Chart */}
-      <SalesTrendChart
-        pharmacyId={profile?.pharmacy_id}
-        timeRange={timeRange}
-        scope={isShopScope ? "shop" : "personal"}
-      />
-
-      {isShopScope && <TopSalesPerformers pharmacyId={profile?.pharmacy_id} />}
+      {/* Sales Trend Chart + Top Performers — Owner only */}
+      {isOwner && (
+        <>
+          <SalesTrendChart
+            pharmacyId={profile?.pharmacy_id}
+            timeRange={timeRange}
+            scope="shop"
+          />
+          <TopSalesPerformers pharmacyId={profile?.pharmacy_id} />
+        </>
+      )}
     </div>
   );
 };
