@@ -22,7 +22,7 @@ interface Medicine {
   product_type: string | null;
   unit_format: string | null;
   product_size: string | null;
-  packaging_type: "single" | "strip_based" | null;
+  packaging_type: string | null;
 }
 
 interface CartItem {
@@ -131,6 +131,7 @@ const CreateSale = () => {
               product_type: null,
               unit_format: null,
               product_size: null,
+              packaging_type: null,
             },
             quantity: it.quantity,
             discountPercent: (it as any).discount_percent ?? 0,
