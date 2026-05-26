@@ -449,6 +449,7 @@ const Inventory = () => {
         totalQuantity: med.stock_quantity?.toString() || "",
         stockAlert: med.stock_alert?.toString() || "",
         mrp: med.price?.toString() || "",
+        packagingType: med.packaging_type || "",
       },
     });
   };
