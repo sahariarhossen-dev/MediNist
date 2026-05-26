@@ -24,9 +24,13 @@ export type PackMode = "single" | "strip" | "box" | "full";
 export interface PackInfo {
   pcs_per_strip?: number | null;
   strip_per_pack?: number | null;
+  packaging_type?: "single" | "strip_based" | string | null;
 }
 
 export const getPackMode = (med: PackInfo | null | undefined): PackMode => {
+  // Explicit packaging_type wins over heuristics so pots/drops/syrups
+  // (often stored with pcs_per_strip>1) render as a single unit.
+  if (med?.packaging_type === "single") return "single";
   const pps = Number(med?.pcs_per_strip ?? 0);
   const spp = Number(med?.strip_per_pack ?? 0);
   const hasStrip = pps > 1;
