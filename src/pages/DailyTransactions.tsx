@@ -74,7 +74,6 @@ const DailyTransactions = () => {
     setLoading(true);
     const from = startOfDay(date).toISOString();
     const to = endOfDay(date).toISOString();
-    const dateStr = format(date, "yyyy-MM-dd");
 
     const [salesRes, txRes, duesRes, opening] = await Promise.all([
       supabase
