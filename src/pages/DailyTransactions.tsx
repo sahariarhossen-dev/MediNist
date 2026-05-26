@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import LogTransactionSheet from "@/components/transactions/LogTransactionSheet";
+import { getOpeningBalance } from "@/lib/openingBalance";
 
 type CashTx = {
   id: string;
@@ -75,7 +76,7 @@ const DailyTransactions = () => {
     const to = endOfDay(date).toISOString();
     const dateStr = format(date, "yyyy-MM-dd");
 
-    const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
+    const [salesRes, txRes, duesRes, opening] = await Promise.all([
       supabase
         .from("sales")
         .select("id,created_at,total,sale_type")
@@ -98,19 +99,7 @@ const DailyTransactions = () => {
         .eq("entry_type", "due")
         .gte("occurred_at", from)
         .lte("occurred_at", to),
-      supabase
-        .from("pharmacy_settings")
-        .select("starting_cash_balance")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .maybeSingle(),
-      supabase
-        .from("daily_closings")
-        .select("closing_date,net_balance")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .lt("closing_date", dateStr)
-        .order("closing_date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      getOpeningBalance(profile.pharmacy_id, from),
     ]);
 
     setSalesRows((salesRes.data ?? []) as SaleRow[]);
@@ -121,16 +110,11 @@ const DailyTransactions = () => {
         0,
       ),
     );
-    const prev = prevClosingRes.data
-      ? {
-          closing_date: prevClosingRes.data.closing_date as string,
-          net_balance: Number(prevClosingRes.data.net_balance ?? 0),
-        }
-      : null;
-    setPreviousClosing(prev);
-    setStartingBalance(
-      prev ? prev.net_balance : Number(settingsRes.data?.starting_cash_balance ?? 0),
+    const yesterdayStr = format(subDays(date, 1), "yyyy-MM-dd");
+    setPreviousClosing(
+      opening > 0 ? { closing_date: yesterdayStr, net_balance: opening } : null,
     );
+    setStartingBalance(opening);
     setLoading(false);
   }, [profile?.pharmacy_id, profile?.id, date]);
 
