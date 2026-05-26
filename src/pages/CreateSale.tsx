@@ -5,7 +5,7 @@ import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { totalPiecesToTriUnit, isSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, isSingleUnit, looksSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
 import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
