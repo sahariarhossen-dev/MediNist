@@ -3,7 +3,7 @@ import { ArrowLeft, PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { totalPiecesToTriUnit, isSingleUnit, isLowStock } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, looksSingleUnit, isLowStock } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import {
@@ -158,7 +158,7 @@ const ShortItems = () => {
                       </td>
                       <td className={`px-1.5 py-3 font-mono text-left whitespace-nowrap tabular-nums ${stockColor(item.stock_quantity)}`}>
                         <span className="whitespace-nowrap tabular-nums">
-                          {isSingleUnit(item) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
+                          {looksSingleUnit(item) ? `${item.stock_quantity} Pcs` : totalPiecesToTriUnit(item.stock_quantity, item.strip_per_pack, item.pcs_per_strip)}
                         </span>
                       </td>
                       <td className="px-2 py-3 text-right text-gray-700 whitespace-nowrap tabular-nums">

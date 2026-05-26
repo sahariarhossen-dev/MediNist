@@ -92,6 +92,31 @@ export const isSingleUnit = (med: PackInfo | null | undefined): boolean => {
 };
 
 /**
+ * Single-source-of-truth UI rule for "is this a single-unit product?".
+ *
+ * Defensive over `isSingleUnit`: also returns true when the row has no box
+ * subdivision (`strip_per_pack` empty) AND its product_type is a format that
+ * is intrinsically a single whole unit (Drops, Syrups, Creams, Inhalers,
+ * Suspensions, Ointments, Gels, Lotions, Sprays, Solutions, Shampoos),
+ * even if a stale `pcs_per_strip` value is still attached from legacy imports.
+ */
+const SINGLE_UNIT_TYPE_RE =
+  /drop|syrup|suspension|cream|ointment|gel|lotion|inhaler|spray|solution|shampoo/i;
+
+export const looksSingleUnit = (
+  med:
+    | (PackInfo & { product_type?: string | null; unit_format?: string | null; format?: string | null })
+    | null
+    | undefined
+): boolean => {
+  if (isSingleUnit(med)) return true;
+  const spp = Number(med?.strip_per_pack ?? 0);
+  if (spp > 1) return false; // has a real box subdivision → not single
+  const typeStr = `${med?.product_type ?? ""} ${med?.unit_format ?? ""} ${med?.format ?? ""}`;
+  return SINGLE_UNIT_TYPE_RE.test(typeStr);
+};
+
+/**
  * Parse a raw pack/box size string from the master catalog (e.g. "10s",
  * "100s", "1", "30ml", "N/A") into a positive integer count. Returns null
  * when the value is missing, "N/A", or has no leading number.
