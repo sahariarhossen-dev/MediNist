@@ -103,12 +103,22 @@ export const isSingleUnit = (med: PackInfo | null | undefined): boolean => {
 const SINGLE_UNIT_TYPE_RE =
   /drop|syrup|suspension|cream|ointment|gel|lotion|inhaler|spray|solution|shampoo/i;
 
+/**
+ * Tablet / Capsule are always strip-based at the UI layer, even if their
+ * pack fields are temporarily null due to stale data. Hard-guard them.
+ */
+const STRIP_ONLY_TYPE_RE = /^\s*(tablet|capsule)s?\s*$/i;
+
 export const looksSingleUnit = (
   med:
     | (PackInfo & { product_type?: string | null; unit_format?: string | null; format?: string | null })
     | null
     | undefined
 ): boolean => {
+  // Hard rule: a Tablet or Capsule is never single-unit.
+  const typeRaw = (med?.product_type ?? med?.format ?? "").toString();
+  if (STRIP_ONLY_TYPE_RE.test(typeRaw)) return false;
+
   if (isSingleUnit(med)) return true;
   const spp = Number(med?.strip_per_pack ?? 0);
   if (spp > 1) return false; // has a real box subdivision → not single
