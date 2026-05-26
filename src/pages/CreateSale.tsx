@@ -22,6 +22,7 @@ interface Medicine {
   product_type: string | null;
   unit_format: string | null;
   product_size: string | null;
+  packaging_type: "single" | "strip_based" | null;
 }
 
 interface CartItem {
