@@ -319,8 +319,8 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Sales Trend Chart + Top Performers — Owner only */}
-      {isOwner && (
+      {/* Sales Trend Chart + Top Performers — Owner & Manager */}
+      {canSeeShopDashboard && (
         <>
           <SalesTrendChart
             pharmacyId={profile?.pharmacy_id}
