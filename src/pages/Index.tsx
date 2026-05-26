@@ -282,7 +282,7 @@ const Index = () => {
             <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-fluid-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
-          {isOwner && (
+          {canSeeShopDashboard && (
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-fluid-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
               <SelectValue />
