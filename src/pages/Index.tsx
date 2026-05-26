@@ -63,14 +63,23 @@ const Index = () => {
   const isSalesman = profile?.role === "salesman";
   const isManager = profile?.role === "manager";
   const isOwner = profile?.role === "admin";
-  const rangeLabels = fullRangeLabels;
+  const canSeeShopDashboard = isOwner || isManager;
+  const rangeLabels: Record<string, string> = isManager
+    ? { today: "Today", "7days": "Last 7 Days" }
+    : fullRangeLabels;
   const isToday = timeRange === "today";
+
+  useEffect(() => {
+    if (isManager && (timeRange === "15days" || timeRange === "30days")) {
+      setTimeRange("today");
+    }
+  }, [isManager, timeRange]);
 
   // Range-aware sales (Owner only): both personal and shop totals from one query.
   const fetchRangeSales = useCallback(async () => {
     const pharmacyId = profile?.pharmacy_id;
     const userId = profile?.id;
-    if (!pharmacyId || !userId || !isOwner) return;
+    if (!pharmacyId || !userId || !canSeeShopDashboard) return;
     const startDate = getStartDate(timeRange);
     const { data } = await supabase
       .from("sales")
@@ -88,7 +97,7 @@ const Index = () => {
     }
     setMyRangeSales(mine);
     setShopRangeSales(shop);
-  }, [profile?.pharmacy_id, profile?.id, timeRange, isOwner]);
+  }, [profile?.pharmacy_id, profile?.id, timeRange, canSeeShopDashboard]);
 
   // Today-only meta: active staff count + low-stock count. Independent of range.
   const fetchTodayMeta = useCallback(async () => {
@@ -230,7 +239,7 @@ const Index = () => {
     };
   }, [profile?.pharmacy_id, fetchCashInHand, fetchRangeSales, fetchTodayMeta, fetchMyTodaySales, isSalesman]);
 
-  const summaryCards = isOwner
+  const summaryCards = canSeeShopDashboard
     ? [
         {
           title: isToday ? "Today's My Sale" : "My Total Sale",
@@ -282,7 +291,7 @@ const Index = () => {
             <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-fluid-xs mt-0.5 text-secondary-foreground">{pharmacyName || "Your Pharmacy"} Overview</p>
           </div>
-          {isOwner && (
+          {canSeeShopDashboard && (
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-auto h-8 bg-white border rounded-lg px-3 text-fluid-xs font-medium shadow-sm text-secondary-foreground border-secondary-foreground gap-1">
               <SelectValue />
@@ -310,8 +319,8 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Sales Trend Chart + Top Performers — Owner only */}
-      {isOwner && (
+      {/* Sales Trend Chart + Top Performers — Owner & Manager */}
+      {canSeeShopDashboard && (
         <>
           <SalesTrendChart
             pharmacyId={profile?.pharmacy_id}

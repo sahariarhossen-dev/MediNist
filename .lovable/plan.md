@@ -1,27 +1,42 @@
-# Fix: "Edge Function returned a non-2xx status code" on invitation accept
+## Goal
+Give Managers the same dashboard as Owners (4 cards + Sales Trend + Top Performers), but restrict the date filter to **Today** and **Last 7 Days** only.
 
-## Root cause
+## Changes — `src/pages/Index.tsx`
 
-The edge function log shows `createUser error: Database error creating new user`. This happens because `auth.users` has a trigger `on_auth_user_created_subscription` that runs `handle_new_user_subscription()`, which inserts into `public.subscriptions` — a table that does not exist in the database. Every new auth user insert therefore fails, blocking the entire accept-invitation flow (and any other signup).
+1. **Treat manager like owner for dashboard rendering**
+   - Introduce `const canSeeShopDashboard = isOwner || isManager;`
+   - Replace existing `isOwner ? [...] : [...]` summary card logic so the rich 4-card layout, Sales Trend chart, and Top Performers all render when `canSeeShopDashboard` is true.
+   - Salesman keeps the existing 2-card minimal view.
 
-The trial countdown logic was already moved to the frontend (`useSubscription` derives the 30-day trial from `auth.users.created_at`), so this trigger/function is dead weight.
+2. **Restrict range options for Manager**
+   - Build `rangeLabels` dynamically:
+     - Owner → `today, 7days, 15days, 30days`
+     - Manager → `today, 7days` only
+   - Guard `setTimeRange`: if a manager somehow has `15days`/`30days` selected, snap back to `today`.
+   - Show the `<Select>` for both owner and manager (currently only owner).
 
-## Fix (single migration)
+3. **Data fetches already work for both roles**
+   - `fetchRangeSales` currently early-returns unless `isOwner`. Change condition to `canSeeShopDashboard` so manager's personal + shop totals populate.
+   - `fetchCashInHand` already runs for non-salesmen — no change.
+   - `fetchTodayMeta` and `fetchMyTodaySales` already role-agnostic — no change.
 
-Drop the broken trigger and its function:
+4. **Cards for Manager** (same shape as Owner)
+   - Card 1: `Today's My Sale` / `My Total Sale` (personal)
+   - Card 2: `Cash in Hand` (shop real-time)
+   - Card 3: `Active Staff` when Today, else `Total Shop Sale` (will only ever be 7 days for manager)
+   - Card 4: `Short Items` (real-time)
 
-```sql
-DROP TRIGGER IF EXISTS on_auth_user_created_subscription ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user_subscription();
-```
+5. **Top Performers + Sales Trend**
+   - Render for `canSeeShopDashboard`, passing the same `timeRange` so they stay in sync.
 
-The remaining `on_auth_user_created` → `handle_new_user()` trigger (which creates the `profiles` row) stays in place and works correctly.
+## Out of scope
+- No DB/RLS changes — sales/cash tables already readable by pharmacy members.
+- No edge function changes.
+- No styling changes; reuses existing card classes.
 
 ## Verification
-
-- After migration, retry the invitation link for `mehedi@gamil.com` → "Fahim Medical Hall". `accept-invitation` should: create the auth user, run `handle_new_user` (creates profile), sign in, run `accept_staff_invitation` (links to pharmacy with manager role), and return 200 with a session.
-- Confirm no edge function code changes are needed — the function is correct; it was the DB trigger failing underneath it.
-
-## Files
-
-- New migration only. No app code changes.
+- Sign in as Manager → dashboard shows 4 cards, chart, leaderboard.
+- Dropdown lists only Today / Last 7 Days.
+- Switching to 7 Days updates Card 1 title to "My Total Sale", Card 3 to "Total Shop Sale".
+- Sign in as Owner → unchanged (all 4 range options visible).
+- Sign in as Salesman → unchanged (2-card view).
