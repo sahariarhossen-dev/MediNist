@@ -346,10 +346,35 @@ const AddProduct = () => {
         {/* 3b. Strip & Pack Details — driven by data, not product type.
             Leave both blank (or 1) for single-unit products. */}
         <div className="space-y-3">
-            <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
-            <p className="text-xs text-muted-foreground">
-              Leave blank or set to 1 for single-unit products (bottles, tubes, vials).
-            </p>
+            <Label className="text-sm font-medium text-foreground">Packaging</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPackagingType("single")}
+                className={`rounded-xl h-12 text-xs font-semibold transition border ${
+                  packagingType === "single"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted text-foreground border-transparent"
+                }`}
+              >
+                Single unit
+                <span className="block text-[10px] font-normal opacity-80">pot / bottle / drop / syrup</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPackagingType("strip_based")}
+                className={`rounded-xl h-12 text-xs font-semibold transition border ${
+                  packagingType === "strip_based"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted text-foreground border-transparent"
+                }`}
+              >
+                Strip-based
+                <span className="block text-[10px] font-normal opacity-80">tablet strips in a box</span>
+              </button>
+            </div>
+            {packagingType === "strip_based" && (
+              <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Pcs per Strip</Label>
@@ -376,6 +401,8 @@ const AddProduct = () => {
               <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                 Total Box Size: <span className="font-semibold text-foreground">{pcsPerStrip} × {stripPerBox} = {totalBoxSize} pcs</span>
               </p>
+            )}
+              </>
             )}
         </div>
 
