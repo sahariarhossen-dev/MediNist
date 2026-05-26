@@ -56,7 +56,7 @@ const toTsQuery = (raw: string): string =>
     .join(" & ");
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
-  if (isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack })) {
+  if (looksSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType })) {
     return (
       <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
         {totalPcs}
