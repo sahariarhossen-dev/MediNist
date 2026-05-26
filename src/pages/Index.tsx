@@ -17,6 +17,7 @@ import AppHeader from "@/components/AppHeader";
 import BroadcastBanner from "@/components/BroadcastBanner";
 import TopSalesPerformers from "@/components/TopSalesPerformers";
 import { isLowStock } from "@/lib/stockUtils";
+import { getOpeningBalance } from "@/lib/openingBalance";
 
 
 function getStartDate(range: string): string {
@@ -136,10 +137,9 @@ const Index = () => {
     const today = new Date();
     const from = startOfDay(today).toISOString();
     const to = endOfDay(today).toISOString();
-    const dateStr = format(today, "yyyy-MM-dd");
 
     // Mirrors the formula on Daily Transactions so both screens always agree.
-    const [salesRes, txRes, duesRes, settingsRes, prevClosingRes] = await Promise.all([
+    const [salesRes, txRes, duesRes, startingBalance] = await Promise.all([
       supabase
         .from("sales")
         .select("total")
@@ -160,19 +160,7 @@ const Index = () => {
         .eq("entry_type", "due")
         .gte("occurred_at", from)
         .lte("occurred_at", to),
-      supabase
-        .from("pharmacy_settings")
-        .select("starting_cash_balance")
-        .eq("pharmacy_id", pharmacyId)
-        .maybeSingle(),
-      supabase
-        .from("daily_closings")
-        .select("net_balance")
-        .eq("pharmacy_id", pharmacyId)
-        .lt("closing_date", dateStr)
-        .order("closing_date", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      getOpeningBalance(pharmacyId, from),
     ]);
 
     const salesToday = (salesRes.data ?? []).reduce((s, r) => s + Number(r.total || 0), 0);
@@ -191,9 +179,6 @@ const Index = () => {
     const paymentsToday = txs
       .filter((t: any) => t.direction === "out")
       .reduce((s: number, t: any) => s + Number(t.amount), 0);
-    const startingBalance = prevClosingRes.data
-      ? Number(prevClosingRes.data.net_balance ?? 0)
-      : Number(settingsRes.data?.starting_cash_balance ?? 0);
 
     setCashInHand(
       startingBalance + cashSalesToday + dueReceived + cashInInvestments - paymentsToday,
