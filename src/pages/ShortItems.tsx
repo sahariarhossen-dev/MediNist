@@ -24,7 +24,7 @@ interface LowStockItem {
   pcs_per_strip: number | null;
   price: number | null;
   product_size: string | null;
-  packaging_type: "single" | "strip_based" | null;
+  packaging_type: string | null;
 }
 
 const ShortItems = () => {
@@ -54,7 +54,7 @@ const ShortItems = () => {
           pcs_per_strip: m.pcs_per_strip,
           price: m.price,
           product_size: m.product_size,
-          packaging_type: (m as { packaging_type?: "single" | "strip_based" | null }).packaging_type ?? null,
+          packaging_type: (m as { packaging_type?: string | null }).packaging_type ?? null,
         }));
 
       setItems(filtered);
