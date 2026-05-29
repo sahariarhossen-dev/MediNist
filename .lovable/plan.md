@@ -1,48 +1,40 @@
-# Fix: Product Target Progress Stuck at 0
+# Fix "Add Prescription" sheet keyboard cutoff
 
-## Root Cause
+## Root cause
 
-A timezone bug in the frontend `firstOfMonth()` helper. It builds a *local-midnight* `Date` for the 1st of the month, then calls `.toISOString().slice(0,10)`. In Bangladesh (UTC+6) the UTC instant is the **previous day**, so for May 2026 the value written to `product_targets.target_month` is **`2026-04-30`** instead of `2026-05-01`.
+`SheetContent` (in `src/components/ui/sheet.tsx`) reacts to the on-screen keyboard by translating the whole bottom sheet upward by the keyboard height (`transform: translateY(-inset)`). When the form is taller than `viewportHeight − keyboardHeight`, the top of the sheet (Search inventory field, header) moves above the viewport and the user cannot scroll it back because the lift happens on the sheet element itself, not on its scroll container.
 
-Confirmed in the DB:
+`max-h-[92vh] overflow-y-auto` does not help because `92vh` is measured against the layout viewport, not the visual viewport, so the sheet stays taller than the visible area while the keyboard is open.
 
-```
-medicine: Anadol SR
-target_quantity: 30
-current_progress: 0
-target_month: 2026-04-30   ← wrong, should be 2026-05-01
-```
+## Fix (frontend only, scoped to the Add Prescription modal)
 
-The Postgres trigger that increments progress (`increment_product_target_progress`) computes the bucket with `date_trunc('month', _occurred_at)::date`, which yields `2026-05-01` for a May sale. The `UPDATE … WHERE target_month = v_month` therefore matches no row, and progress stays at 0.
+Update **`src/components/customers/AddPrescriptionSheet.tsx`**:
 
-The list query also calls `firstOfMonth()`, so the (wrongly-dated) row is still *visible* in the UI — which is why the target appears but never advances. All roles are affected because the bug is in the shared insert path, not in role-based logic.
+1. Override the sheet's default lift behavior for this modal by passing an inline `style={{ transform: "none" }}` to `SheetContent`, so the sheet stays anchored to the bottom of the visual viewport.
+2. Replace `max-h-[92vh]` on `SheetContent` with a dynamic cap that subtracts the keyboard inset:
+   - Use `useKeyboardInset()` to get current keyboard height.
+   - Set `maxHeight: \`calc(100dvh - ${inset}px)\`` (with a small top margin so the rounded top edge is visible).
+3. Wrap the form body (everything inside `SheetContent` after `SheetHeader`) in the existing `KeyboardAvoidingScroll` component (`src/components/ui/keyboard-avoiding-scroll.tsx`) so:
+   - The focused input auto-scrolls into view (already implemented in that component).
+   - Bottom padding equals the keyboard inset, guaranteeing the last field is reachable.
+4. Keep `SheetHeader` outside the scroll area (sticky-feeling top) so the title stays visible, and make the inner scroll container fill remaining height (`flex-1 min-h-0`). Restructure `SheetContent` children as a flex column:
 
-## Fix
+   ```text
+   SheetContent (flex flex-col, maxHeight dynamic)
+   ├── SheetHeader (shrink-0)
+   └── KeyboardAvoidingScroll (flex-1 min-h-0)
+       └── existing form fields
+   ```
 
-### 1. Frontend — `src/components/staff/AddProductTargetSheet.tsx` and `src/components/staff/ProductTargetsList.tsx`
+5. Remove the now-redundant `overflow-y-auto` from `SheetContent` since scrolling moves to the inner container.
 
-Replace `firstOfMonth()` in both files with a timezone-safe string builder:
+## What stays the same
 
-```ts
-const firstOfMonth = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}-01`;
-};
-```
-
-No other component changes needed — the trigger already does the aggregation correctly once the month key matches.
-
-### 2. Migration — repair existing data
-
-- Normalize any `product_targets.target_month` that is the last day of a month to the first of the following month: `target_month := date_trunc('month', target_month + interval '2 day')::date`. This safely converts `2026-04-30` → `2026-05-01` without touching legitimate `YYYY-MM-01` rows.
-- Recompute `current_progress` for every target in the current month by summing `sale_items.quantity` for matching `(pharmacy_id, user_id, medicine_id)` across completed sales whose `date_trunc('month', sales.created_at)` equals the target month.
-- Set `achieved_at = now()` where `achieved_at IS NULL AND current_progress >= target_quantity`, clear it otherwise.
-
-After the migration, Anadol SR should jump to the actual sold quantity, and any future sale will increment progress in real time via the existing triggers.
+- Visual appearance when the keyboard is closed (same paddings, rounded top, header copy, field styles).
+- No changes to `sheet.tsx`, `useKeyboardInsets`, or any other modal — the override is local to `AddPrescriptionSheet` to avoid regressing other bottom sheets.
+- No backend, query, or data changes.
 
 ## Out of scope
 
-- No changes to RLS, the trigger functions, or the search RPC.
-- No changes to other pages (Inventory, ShortItems, CreateSale).
+- Other bottom sheets that may have the same pattern (can be migrated later if reported).
+- React Native `KeyboardAvoidingView` / `Platform.OS` APIs — this is a web project (React + Vite), so the web equivalents (`visualViewport`, dynamic `maxHeight`, `KeyboardAvoidingScroll`) are used instead.
