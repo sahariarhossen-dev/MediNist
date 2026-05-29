@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { KeyboardAvoidingScroll } from "@/components/ui/keyboard-avoiding-scroll";
+import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 
 export type Prescription = {
   id: string;
@@ -44,6 +46,7 @@ const TIMING_OPTIONS = [
 ];
 
 const AddPrescriptionSheet = ({ open, onOpenChange, customerId, pharmacyId, editing, onSaved }: Props) => {
+  const kbInset = useKeyboardInset();
   const [medicineId, setMedicineId] = useState<string | null>(null);
   const [medicineName, setMedicineName] = useState("");
   const [strength, setStrength] = useState("");
@@ -138,13 +141,20 @@ const AddPrescriptionSheet = ({ open, onOpenChange, customerId, pharmacyId, edit
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-3xl p-0 max-h-[92vh] overflow-y-auto">
-        <SheetHeader className="px-6 pt-6 pb-2 text-left">
+      <SheetContent
+        side="bottom"
+        className="max-w-md mx-auto rounded-t-3xl p-0 flex flex-col"
+        style={{
+          transform: "none",
+          maxHeight: `calc(100dvh - ${kbInset}px - 24px)`,
+        }}
+      >
+        <SheetHeader className="px-6 pt-6 pb-2 text-left shrink-0">
           <SheetTitle className="text-lg font-bold text-gray-900">{editing ? "Edit Prescription" : "Add Prescription"}</SheetTitle>
           <p className="text-xs text-gray-500">Save a recurring medicine and dosage for quick re-billing.</p>
         </SheetHeader>
 
-        <div className="px-6 pb-6 pt-4 space-y-4">
+        <KeyboardAvoidingScroll className="px-6 pb-6 pt-4 space-y-4 flex-1 min-h-0">
           <div className="space-y-1.5">
             <Label className="text-sm text-gray-700">Search inventory (optional)</Label>
             <div className="relative flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white">
@@ -253,7 +263,7 @@ const AddPrescriptionSheet = ({ open, onOpenChange, customerId, pharmacyId, edit
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
             </Button>
           </div>
-        </div>
+        </KeyboardAvoidingScroll>
       </SheetContent>
     </Sheet>
   );
