@@ -6,11 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Pill, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface Medicine {
   id: string;
   name: string;
   company_name: string | null;
+  product_size: string | null;
+  product_type: string | null;
+  unit_format: string | null;
 }
 
 interface Props {
@@ -104,7 +108,17 @@ export default function AddProductTargetSheet({
                   <Pill size={16} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{picked.name}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-sm font-semibold truncate">
+                      {picked.name}
+                      {picked.product_size ? ` ${picked.product_size}` : ""}
+                    </p>
+                    {(picked.product_type || picked.unit_format) && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-md font-medium flex-shrink-0">
+                        {picked.product_type || picked.unit_format}
+                      </Badge>
+                    )}
+                  </div>
                   {picked.company_name && (
                     <p className="text-[11px] text-muted-foreground truncate">{picked.company_name}</p>
                   )}
@@ -133,7 +147,17 @@ export default function AddProductTargetSheet({
                         onClick={() => { setPicked(m); setQuery(""); setResults([]); }}
                         className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                       >
-                        <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {m.name}
+                            {m.product_size ? ` ${m.product_size}` : ""}
+                          </p>
+                          {(m.product_type || m.unit_format) && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-md font-medium flex-shrink-0">
+                              {m.product_type || m.unit_format}
+                            </Badge>
+                          )}
+                        </div>
                         {m.company_name && (
                           <p className="text-[11px] text-muted-foreground truncate">{m.company_name}</p>
                         )}
