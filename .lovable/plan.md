@@ -1,40 +1,38 @@
-# Fix "Add Prescription" sheet keyboard cutoff
+# Update Supabase Configuration to Use Custom Proxy URL
 
-## Root cause
+## Goal
+Replace all occurrences of the default Supabase project URL (`https://hjqcvidezzzkfipcneit.supabase.co`) with the custom Vercel proxy URL (`https://api.medinist.com`) so that all frontend data fetching, auth, and database requests route through the proxy.
 
-`SheetContent` (in `src/components/ui/sheet.tsx`) reacts to the on-screen keyboard by translating the whole bottom sheet upward by the keyboard height (`transform: translateY(-inset)`). When the form is taller than `viewportHeight − keyboardHeight`, the top of the sheet (Search inventory field, header) moves above the viewport and the user cannot scroll it back because the lift happens on the sheet element itself, not on its scroll container.
+## Files to Update
 
-`max-h-[92vh] overflow-y-auto` does not help because `92vh` is measured against the layout viewport, not the visual viewport, so the sheet stays taller than the visible area while the keyboard is open.
+### 1. `.env`
+Update the two URL entries:
+- `SUPABASE_URL="https://api.medinist.com"`
+- `VITE_SUPABASE_URL="https://api.medinist.com"`
 
-## Fix (frontend only, scoped to the Add Prescription modal)
+The project ID and publishable key remain unchanged because the proxy forwards to the same Supabase project.
 
-Update **`src/components/customers/AddPrescriptionSheet.tsx`**:
+### 2. `src/integrations/supabase/client.ts`
+Refactor the client initialization to read the URL from Vite environment variables instead of the current hard-coded string:
 
-1. Override the sheet's default lift behavior for this modal by passing an inline `style={{ transform: "none" }}` to `SheetContent`, so the sheet stays anchored to the bottom of the visual viewport.
-2. Replace `max-h-[92vh]` on `SheetContent` with a dynamic cap that subtracts the keyboard inset:
-   - Use `useKeyboardInset()` to get current keyboard height.
-   - Set `maxHeight: \`calc(100dvh - ${inset}px)\`` (with a small top margin so the rounded top edge is visible).
-3. Wrap the form body (everything inside `SheetContent` after `SheetHeader`) in the existing `KeyboardAvoidingScroll` component (`src/components/ui/keyboard-avoiding-scroll.tsx`) so:
-   - The focused input auto-scrolls into view (already implemented in that component).
-   - Bottom padding equals the keyboard inset, guaranteeing the last field is reachable.
-4. Keep `SheetHeader` outside the scroll area (sticky-feeling top) so the title stays visible, and make the inner scroll container fill remaining height (`flex-1 min-h-0`). Restructure `SheetContent` children as a flex column:
+```ts
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://api.medinist.com";
+```
 
-   ```text
-   SheetContent (flex flex-col, maxHeight dynamic)
-   ├── SheetHeader (shrink-0)
-   └── KeyboardAvoidingScroll (flex-1 min-h-0)
-       └── existing form fields
-   ```
+The publishable key stays hard-coded (it does not need to change). All existing `createClient` options (`auth: { storage: localStorage, persistSession: true, autoRefreshToken: true }`) remain untouched.
 
-5. Remove the now-redundant `overflow-y-auto` from `SheetContent` since scrolling moves to the inner container.
+### 3. `supabase/migrations/20260418065607_04b570e9-4cc4-4438-87f4-ea576df1b32a.sql`
+Update the `net.http_post` URL inside the `close-daily-transactions-midnight` cron job so the server-side trigger also calls the proxy:
 
-## What stays the same
+```sql
+url := 'https://api.medinist.com/functions/v1/close-daily-transactions',
+```
 
-- Visual appearance when the keyboard is closed (same paddings, rounded top, header copy, field styles).
-- No changes to `sheet.tsx`, `useKeyboardInsets`, or any other modal — the override is local to `AddPrescriptionSheet` to avoid regressing other bottom sheets.
-- No backend, query, or data changes.
+The `Authorization` bearer token (anon key) stays the same.
 
-## Out of scope
+## Out of Scope
+- `supabase/config.toml` — the `project_id` field is the Supabase CLI identifier, not an HTTP endpoint, so it does not change.
+- Any other Supabase project settings or keys.
 
-- Other bottom sheets that may have the same pattern (can be migrated later if reported).
-- React Native `KeyboardAvoidingView` / `Platform.OS` APIs — this is a web project (React + Vite), so the web equivalents (`visualViewport`, dynamic `maxHeight`, `KeyboardAvoidingScroll`) are used instead.
+## Verification
+After the changes, a quick `grep` for the old Supabase URL should return zero results in `.env`, `src/integrations/supabase/client.ts`, and the migration file.
