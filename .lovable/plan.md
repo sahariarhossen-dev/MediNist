@@ -1,55 +1,40 @@
+# Fix "Add Prescription" sheet keyboard cutoff
 
-## Problem
+## Root cause
 
-`src/integrations/supabase/client.ts` initializes the Supabase client with `import.meta.env.VITE_SUPABASE_URL`. In `.env`, that variable is currently:
+`SheetContent` (in `src/components/ui/sheet.tsx`) reacts to the on-screen keyboard by translating the whole bottom sheet upward by the keyboard height (`transform: translateY(-inset)`). When the form is taller than `viewportHeight − keyboardHeight`, the top of the sheet (Search inventory field, header) moves above the viewport and the user cannot scroll it back because the lift happens on the sheet element itself, not on its scroll container.
 
-```
-VITE_SUPABASE_URL="https://hjqcvidezzzkfipcneit.supabase.co"
-```
+`max-h-[92vh] overflow-y-auto` does not help because `92vh` is measured against the layout viewport, not the visual viewport, so the sheet stays taller than the visible area while the keyboard is open.
 
-So the app is talking directly to Supabase, not to the `api.medinist.com` Vercel proxy. The proxy's "Valid Configuration" is never being used by the frontend, and the "Invalid login credentials" error is coming back from Supabase itself — meaning the email/password combination is wrong (or the user doesn't exist / isn't confirmed).
+## Fix (frontend only, scoped to the Add Prescription modal)
 
-The anon key is fine — `VITE_SUPABASE_PUBLISHABLE_KEY` matches `SUPABASE_PUBLISHABLE_KEY` exactly, and the client passes it through unchanged.
+Update **`src/components/customers/AddPrescriptionSheet.tsx`**:
 
-## Changes
+1. Override the sheet's default lift behavior for this modal by passing an inline `style={{ transform: "none" }}` to `SheetContent`, so the sheet stays anchored to the bottom of the visual viewport.
+2. Replace `max-h-[92vh]` on `SheetContent` with a dynamic cap that subtracts the keyboard inset:
+   - Use `useKeyboardInset()` to get current keyboard height.
+   - Set `maxHeight: \`calc(100dvh - ${inset}px)\`` (with a small top margin so the rounded top edge is visible).
+3. Wrap the form body (everything inside `SheetContent` after `SheetHeader`) in the existing `KeyboardAvoidingScroll` component (`src/components/ui/keyboard-avoiding-scroll.tsx`) so:
+   - The focused input auto-scrolls into view (already implemented in that component).
+   - Bottom padding equals the keyboard inset, guaranteeing the last field is reachable.
+4. Keep `SheetHeader` outside the scroll area (sticky-feeling top) so the title stays visible, and make the inner scroll container fill remaining height (`flex-1 min-h-0`). Restructure `SheetContent` children as a flex column:
 
-### 1. Update `.env`
+   ```text
+   SheetContent (flex flex-col, maxHeight dynamic)
+   ├── SheetHeader (shrink-0)
+   └── KeyboardAvoidingScroll (flex-1 min-h-0)
+       └── existing form fields
+   ```
 
-Change the frontend-visible URL to the proxy so the browser actually routes auth/REST traffic through `api.medinist.com`:
+5. Remove the now-redundant `overflow-y-auto` from `SheetContent` since scrolling moves to the inner container.
 
-```
-VITE_SUPABASE_URL="https://api.medinist.com"
-```
+## What stays the same
 
-Leave `VITE_SUPABASE_PROJECT_ID` and both publishable keys untouched.
+- Visual appearance when the keyboard is closed (same paddings, rounded top, header copy, field styles).
+- No changes to `sheet.tsx`, `useKeyboardInsets`, or any other modal — the override is local to `AddPrescriptionSheet` to avoid regressing other bottom sheets.
+- No backend, query, or data changes.
 
-### 2. Leave `src/integrations/supabase/client.ts` as-is
+## Out of scope
 
-It already does the right thing:
-
-```ts
-export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL || "https://api.medinist.com";
-```
-
-With the `.env` change above, both the env value and the fallback point at the proxy. The anon key is passed straight into `createClient` with no transformation.
-
-### 3. Verify after the change
-
-Once the dev server picks up the new env value, in the browser DevTools Network tab the login request should go to:
-
-```
-POST https://api.medinist.com/auth/v1/token?grant_type=password
-```
-
-with headers `apikey: <anon key>` and `Content-Type: application/json`.
-
-- If that request returns **200** with a session: proxy + client are fully working.
-- If it still returns **400 "Invalid login credentials"** from `api.medinist.com`: the proxy is working correctly and the problem is the actual account credentials. Reset the password from `/forgot-password`, or confirm the user exists in Supabase Auth → Users.
-- If it returns **401 / CORS / network error**: the proxy is misconfigured (e.g. stripping `apikey` or a SPA fallback rewrite is catching `/auth/v1/*`).
-
-## Notes
-
-- No code in `src/` needs editing; only `.env`.
-- After saving `.env`, the Vite dev server will reload and pick up the new value automatically.
-- The Supabase email confirmation redirect URL in the Supabase dashboard should also include `https://medinist.com` and your preview URL so confirmation links return users to the right place — unrelated to this bug but worth checking while you're in there.
+- Other bottom sheets that may have the same pattern (can be migrated later if reported).
+- React Native `KeyboardAvoidingView` / `Platform.OS` APIs — this is a web project (React + Vite), so the web equivalents (`visualViewport`, dynamic `maxHeight`, `KeyboardAvoidingScroll`) are used instead.

@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://api.medinist.com";
-export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhqcWN2aWRlenp6a2ZpcGNuZWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMDU1NDMsImV4cCI6MjA5MDY4MTU0M30.cKElSFfqIyMNbzHhfbsjTEdb6Y4vaHnCrjI8-DK5UfU";
+export const SUPABASE_URL = "https://hjqcvidezzzkfipcneit.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhqcWN2aWRlenp6a2ZpcGNuZWl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMDU1NDMsImV4cCI6MjA5MDY4MTU0M30.cKElSFfqIyMNbzHhfbsjTEdb6Y4vaHnCrjI8-DK5UfU";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
