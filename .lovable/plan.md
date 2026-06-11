@@ -1,63 +1,55 @@
-## Goal
 
-Provide a correct `vercel.json` for the repo hosting `api.medinist.com` so it transparently proxies all Supabase traffic (REST, Auth, Realtime, Storage, Functions) to `https://hjqcvidezzzkfipcneit.supabase.co` while preserving headers, paths, query strings, and cookies.
+## Problem
 
-## How Vercel rewrites actually behave (important)
+`src/integrations/supabase/client.ts` initializes the Supabase client with `import.meta.env.VITE_SUPABASE_URL`. In `.env`, that variable is currently:
 
-Vercel `rewrites` to an absolute external URL act as a reverse proxy and **forward all request headers as-is by default**, including `apikey`, `Authorization`, `Content-Type`, `x-client-info`, and the request body. Response headers (including `Set-Cookie`) are also passed through unchanged. You do **not** need to enumerate headers — enumerating them with `headers` only *adds/overrides* headers on the response and can actually break Auth if misused.
-
-The two things that usually break Supabase Auth through a Vercel proxy are:
-1. The rewrite source not matching sub-paths like `/auth/v1/token?grant_type=password` (missing wildcard or capturing only no-dot paths).
-2. Mixing a SPA fallback rewrite (`/((?!.*\\.).*) -> /index.html`) into the same project, so `/auth/v1/...` gets rewritten to `index.html` instead of Supabase.
-
-The cleanest fix: **host the proxy on its own Vercel project** (separate repo/project) that *only* contains a `vercel.json`. Do not combine it with the SPA project.
-
-## Deliverable: `vercel.json` for the proxy project
-
-```json
-{
-  "rewrites": [
-    {
-      "source": "/:path*",
-      "destination": "https://hjqcvidezzzkfipcneit.supabase.co/:path*"
-    }
-  ]
-}
+```
+VITE_SUPABASE_URL="https://hjqcvidezzzkfipcneit.supabase.co"
 ```
 
-That is the entire file. Notes:
+So the app is talking directly to Supabase, not to the `api.medinist.com` Vercel proxy. The proxy's "Valid Configuration" is never being used by the frontend, and the "Invalid login credentials" error is coming back from Supabase itself — meaning the email/password combination is wrong (or the user doesn't exist / isn't confirmed).
 
-- `/:path*` matches every path segment including `/auth/v1/token`, `/rest/v1/...`, `/realtime/v1/...`, `/storage/v1/...`, `/functions/v1/...`.
-- Query strings are forwarded automatically.
-- Request headers (`apikey`, `Authorization`, `Content-Type`, `x-client-info`, `Accept`, `Range`, etc.) are forwarded automatically.
-- Response headers including `Set-Cookie` are forwarded automatically.
-- No `headers` block is needed; adding one risks overwriting CORS headers Supabase already sets.
+The anon key is fine — `VITE_SUPABASE_PUBLISHABLE_KEY` matches `SUPABASE_PUBLISHABLE_KEY` exactly, and the client passes it through unchanged.
 
-## Things to verify on the Vercel side
+## Changes
 
-1. The proxy lives in a **separate Vercel project** from the SPA (or at minimum, this project has no `/index.html` fallback rewrite). The current SPA `vercel.json` in this repo (`{ "source": "/((?!.*\\.).*)", "destination": "/index.html" }`) must NOT be in the proxy project.
-2. In the proxy project's Vercel Dashboard → Settings → Domains, `api.medinist.com` is attached.
-3. No Vercel "Deployment Protection" / password protection is enabled on the proxy project (it would inject an auth wall and break API calls, especially in Incognito).
-4. No edge middleware (`middleware.ts`) exists in the proxy project — it would intercept and likely strip auth.
-5. WebSockets (Realtime) work over Vercel rewrites; nothing extra to configure.
+### 1. Update `.env`
 
-## Quick test commands (after deploying the proxy)
+Change the frontend-visible URL to the proxy so the browser actually routes auth/REST traffic through `api.medinist.com`:
 
-```bash
-# Anonymous REST ping — should return [] or row data, not 401 from proxy
-curl -i "https://api.medinist.com/rest/v1/" \
-  -H "apikey: <ANON_KEY>" \
-  -H "Authorization: Bearer <ANON_KEY>"
-
-# Auth password grant — should return access_token JSON, not "Invalid login credentials"
-curl -i "https://api.medinist.com/auth/v1/token?grant_type=password" \
-  -H "apikey: <ANON_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"<email>","password":"<password>"}'
+```
+VITE_SUPABASE_URL="https://api.medinist.com"
 ```
 
-If the direct Supabase URL works with the same payload but `api.medinist.com` returns 400/401, the issue is in the proxy project configuration (most commonly: SPA fallback present, deployment protection on, or middleware running) — not in this codebase.
+Leave `VITE_SUPABASE_PROJECT_ID` and both publishable keys untouched.
 
-## No changes required in this repo
+### 2. Leave `src/integrations/supabase/client.ts` as-is
 
-`src/integrations/supabase/client.ts`, `.env`, and the cron migration already point to `https://api.medinist.com`. Once the proxy `vercel.json` above is deployed on the proxy project, login will work in normal and Incognito browsing.
+It already does the right thing:
+
+```ts
+export const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL || "https://api.medinist.com";
+```
+
+With the `.env` change above, both the env value and the fallback point at the proxy. The anon key is passed straight into `createClient` with no transformation.
+
+### 3. Verify after the change
+
+Once the dev server picks up the new env value, in the browser DevTools Network tab the login request should go to:
+
+```
+POST https://api.medinist.com/auth/v1/token?grant_type=password
+```
+
+with headers `apikey: <anon key>` and `Content-Type: application/json`.
+
+- If that request returns **200** with a session: proxy + client are fully working.
+- If it still returns **400 "Invalid login credentials"** from `api.medinist.com`: the proxy is working correctly and the problem is the actual account credentials. Reset the password from `/forgot-password`, or confirm the user exists in Supabase Auth → Users.
+- If it returns **401 / CORS / network error**: the proxy is misconfigured (e.g. stripping `apikey` or a SPA fallback rewrite is catching `/auth/v1/*`).
+
+## Notes
+
+- No code in `src/` needs editing; only `.env`.
+- After saving `.env`, the Vite dev server will reload and pick up the new value automatically.
+- The Supabase email confirmation redirect URL in the Supabase dashboard should also include `https://medinist.com` and your preview URL so confirmation links return users to the right place — unrelated to this bug but worth checking while you're in there.
