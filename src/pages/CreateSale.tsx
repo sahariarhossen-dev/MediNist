@@ -662,9 +662,13 @@ const CreateSale = () => {
           <div className="space-y-2">
             {cartItems.map((item, idx) => {
               const unitPrice = item.medicine.price || 0;
-              const grossTotal = item.quantity * unitPrice;
+              const pieces = getItemPieces(item);
+              const grossTotal = pieces * unitPrice;
               const lineTotal = getLineTotal(item);
               const isExpanded = expandedId === item.medicine.id;
+              const availableUnits = getAvailableUnits(item.medicine);
+              const showUnitPicker = availableUnits.length > 1;
+              const unitLabel: Record<SaleUnit, string> = { box: "Box", strip: "Strip", pcs: "Pcs" };
 
               if (isExpanded) {
                 return (
@@ -719,7 +723,7 @@ const CreateSale = () => {
                       {/* Retail: show calculation */}
                       {!isWholesale && (
                         <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0 ml-auto">
-                          {item.quantity}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
+                          {pieces}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
                         </span>
                       )}
 
@@ -748,11 +752,36 @@ const CreateSale = () => {
                       </div>
                     </div>
 
+                    {/* Sale unit selector — only for multi-unit products */}
+                    {showUnitPicker && (
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-gray-500 font-medium">Sell as</span>
+                        <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                          {availableUnits.map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() => updateItemUnit(item.medicine.id, u)}
+                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition ${
+                                item.unit === u
+                                  ? "bg-white shadow-sm text-emerald-700"
+                                  : "text-gray-500 hover:text-gray-700"
+                              }`}
+                            >
+                              {unitLabel[u]}
+                              <span className="ml-1 text-[9px] font-mono text-gray-400">×{piecesPerUnit(item.medicine, u)}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-gray-500 font-mono">= {pieces} pcs</span>
+                      </div>
+                    )}
+
                     {/* Row 3: Wholesale calculation string */}
                     {isWholesale && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
                         <p className="text-xs font-mono text-gray-500 text-center">
-                          {formatMoney(unitPrice)} × {item.quantity} = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
+                          {formatMoney(unitPrice)} × {pieces} pcs = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
                         </p>
                       </div>
                     )}
@@ -783,12 +812,12 @@ const CreateSale = () => {
                     </p>
                     {isWholesale ? (
                       <>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
                         <span className="text-xs font-bold text-blue-700">{formatMoney(lineTotal)} ৳</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-[10px] text-secondary">{item.quantity}×{formatMoney(unitPrice)}</span>
+                        <span className="text-[10px] text-secondary">{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}×{formatMoney(unitPrice)}</span>
                         <span className="text-xs font-bold text-emerald-600">{formatMoney(grossTotal)} ৳</span>
                       </>
                     )}
