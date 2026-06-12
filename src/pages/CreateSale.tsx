@@ -840,7 +840,7 @@ const CreateSale = () => {
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
                     {i > 0 && " + "}
-                    {formatMoney(c.quantity * (c.medicine.price || 0))}
+                    {formatMoney(getItemPieces(c) * (c.medicine.price || 0))}
                   </span>
                 ))}
                 {" = "}{formatMoney(subtotal)} ৳
