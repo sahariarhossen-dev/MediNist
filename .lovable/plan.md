@@ -1,72 +1,102 @@
+## Reality check on the request
 
-## Important: schema already supports this
+A couple of numbers don't line up with the request, so calling them out before we touch data:
 
-The `medicines` table already has the exact integers you described, under different names. We should reuse them, not add duplicate columns:
+- The uploaded `medicines.json` has **21,168 rows** — that's the public drug catalog, which already lives in `public.master_medicines` (also 21,168 rows). It is NOT the per-pharmacy `public.medicines` table.
+- `public.medicines` only has **519 rows** across 2 pharmacies. That's stock the shops actually carry. So "update all 21,000+ rows in `medicines`" isn't a thing — there aren't 21k rows there.
 
-| You proposed | Already exists as |
-|---|---|
-| `units_per_package` | `pcs_per_strip` |
-| `packages_per_box`  | `strip_per_pack` |
-| `total_items_in_box` | `pcs_per_strip * strip_per_pack` (derived) |
+The fix only makes sense in two stages:
 
-`stock_quantity` is already stored in pieces. `src/lib/stockUtils.ts` already has `totalPiecesToTriUnit`, `getPackMode`, `looksSingleUnit`, `classifyCatalogPack`, etc. The Add/Edit Product form already shows "Pcs per Strip" and "Strips per Box" with the live "Total Box Size" preview.
+1. Rebuild the catalog (`master_medicines`) from the JSON — single source of truth.
+2. Re-sync the 519 `medicines` rows from the matching catalog row.
 
-Adding three new columns would fork the data model, break every existing dashboard, inventory and target query, and double the migration surface. The plan below keeps the existing names and fills in the gaps.
+## Parsing rule (applied per JSON row)
 
-If you want the new names purely for readability, I can add them as generated views/aliases later — say the word.
+Input fields used: `format`, `pack_size`, `box_size`.
 
-## What's actually missing
+- `pack_n` = leading integer in `pack_size` (e.g. "10s strip" → 10, "3 x 10" → 3, "Each sachet" → null).
+- `pack_n2` = second integer in `pack_size` if present (e.g. "3 x 10" → 10).
+- `box_n` = leading integer in `box_size` (e.g. "100s" → 100, "1" → 1).
 
-1. Existing rows scraped from the catalog still have `pack_size` / `box_size` as raw strings (e.g. "14's strip", "140s", "5 ml") with `pcs_per_strip` / `strip_per_pack` left NULL. The POS treats those as single-unit.
-2. POS (`CreateSale.tsx`) sells in pieces only — no Box / Strip / Pcs selector, and stock is deducted as `c.quantity` regardless of unit.
-3. Dashboard / inventory tiles already render tri-unit via `totalPiecesToTriUnit` ("10 : 4 : 2"); only needs the friendlier "10 Boxes, 4 Strips, 2 Pcs" label variant in a couple of spots.
+Decision:
 
-## Plan
 
-### 1. Backfill migration (no schema change)
+| Case                                                                                              | pcs_per_strip | strip_per_pack               |
+| ------------------------------------------------------------------------------------------------- | ------------- | ---------------------------- |
+| `pack_size` contains "x" (e.g. "3 x 10")                                                          | `pack_n2`     | `pack_n`                     |
+| Tablet/Capsule-like format, `pack_n` ≥ 2 strip, `box_n` > `pack_n`                                | `pack_n`      | `box_n / pack_n`             |
+| Tablet/Capsule, `pack_n` ≥ 2, `box_n` ≤ `pack_n`                                                  | `pack_n`      | 1                            |
+| Tablet/Capsule, no usable `pack_n`, `box_n` > 1                                                   | 1             | `box_n` (flat box of pieces) |
+| Injection/Vial/Ampoule, `box_n` > 1                                                               | 1             | `box_n`                      |
+| Syrup / Drop / Cream / Ointment / Gel / Inhaler / Spray / Solution / Powder / Sachet / Suspension | null          | null (single unit)           |
+| Anything else falling through                                                                     | null          | null                         |
 
-One-time SQL that reuses `classifyCatalogPack` logic in pure SQL:
 
-- For rows where `pcs_per_strip IS NULL AND strip_per_pack IS NULL`:
-  - Parse leading integer from `pack_size` → `pps`, from `box_size` → `box`.
-  - Tablet / Capsule:
-    - If `pps > 1` and `box > pps` → `pcs_per_strip = pps`, `strip_per_pack = box / pps`.
-    - Else if `pps > 1` → `pcs_per_strip = pps`, `strip_per_pack = 1`.
-    - Else if `box > 1` → flat box of `box` pieces: `strip_per_pack = box`, `pcs_per_strip = 1`.
-  - Injection / Vial / Ampoule: `strip_per_pack = box (if >1 else 1)`, `pcs_per_strip = 1`.
-  - Syrup / Suspension / Drop / Cream / Ointment / Inhaler / Spray / Solution: leave NULL (single whole unit — matches current `looksSingleUnit` rule).
-- Idempotent: only touches rows where both columns are NULL.
+This is the same rule already in `classifyCatalogPack`, extended to handle the "N x M" pack_size pattern (which is what triggered Alanil 120: pack_size "3 x 10" → strips=3, pcs=10).
 
-No new columns, no GRANT changes.
+## Stage 1 — Refresh catalog
 
-### 2. POS: Box / Strip / Pcs selector + correct deduction
+Run a Node/TS script (executed in sandbox, not in the app bundle) that:
 
-`src/pages/CreateSale.tsx`:
+- Reads `/mnt/user-uploads/medicines.json`.
+- Computes the three fields above for each row.
+- Connects to Supabase using the service-role key (already a secret).
+- For each row: `UPDATE public.master_medicines SET pack_size=$1, box_size=$2, format=$3, pcs_per_strip=$4, strip_per_pack=$5, unit_price=$6, company=$7, generic_name=$8, strength=$9 WHERE brand_name = $10` — matched on `brand_name` (the catalog's natural key).
+- Batched in chunks of 500 via a single SQL statement per chunk using `UPDATE … FROM (VALUES …)` so the whole job is ~42 round-trips, not 21k.
+- Reports: matched, unmatched (logged to `/tmp/unmatched.json`), changed.
 
-- Extend `CartItem` with `unit: "box" | "strip" | "pcs"` (default = largest available unit for that medicine: box if `strip_per_pack>1`, else strip if `pcs_per_strip>1`, else pcs).
-- Below each cart row's qty stepper, add a small segmented control with the units the medicine actually supports (hidden entirely for single-unit products).
-- Compute `piecesPerUnit = unit==='box' ? spp*pps : unit==='strip' ? pps : 1`.
-- Line total uses `medicine.price` as the price-per-piece × `quantity * piecesPerUnit` (matches today's behavior when unit = pcs). If you'd rather price per selected unit, tell me and I'll switch it.
-- Stock validation: block adding > floor(stock_quantity / piecesPerUnit) of that unit.
-- On checkout, deduct `quantity * piecesPerUnit` pieces (replaces the current raw `c.quantity` subtraction) and persist `quantity * piecesPerUnit` into `sale_items.quantity` so existing reports, targets, and the activity log keep working in pieces.
+Only `pcs_per_strip`, `strip_per_pack`, `pack_size`, `box_size`, `format` are guaranteed to be overwritten. The other columns are refreshed too because they come from the same authoritative JSON; nothing in `master_medicines` is user-edited.
 
-### 3. Friendlier stock label
+## Stage 2 — Re-sync per-pharmacy stock rows
 
-Add `totalPiecesToTriUnitWords(total, spp, pps)` in `stockUtils.ts` → "10 Boxes, 4 Strips, 2 Pcs" (skips zero parts, singularizes 1). Use it on the dashboard stock chips and inventory cards; keep the compact "B : S : P" in tight POS rows.
+A single SQL `UPDATE` (no script needed — 519 rows):
 
-### 4. Out of scope (confirm before I touch)
-
-- Renaming the three columns to your proposed names.
-- Per-unit pricing (separate box price vs strip price vs piece price).
-- Changing `sale_items.quantity` semantics from pieces to selected-unit count.
-
-```text
-Add to cart:  [Anadol SR]  qty [ 1 ] [ Box | Strip | Pcs ]
-                                       ▲ deduct = 1 * (spp*pps) pieces
+```sql
+UPDATE public.medicines m
+SET pcs_per_strip  = mm.pcs_per_strip,
+    strip_per_pack = mm.strip_per_pack,
+    format         = COALESCE(m.format, mm.format),
+    pack_size      = COALESCE(m.pack_size, mm.pack_size),
+    box_size       = COALESCE(m.box_size, mm.box_size),
+    strength       = COALESCE(m.strength, mm.strength),
+    generic_name   = COALESCE(m.generic_name, mm.generic_name)
+FROM public.master_medicines mm
+WHERE lower(m.name) = lower(mm.brand_name)
+  AND lower(coalesce(m.company_name,'')) = lower(coalesce(mm.company,''));
 ```
 
-### Technical notes
+Explicitly NOT touched on `medicines`: `price`, `stock_quantity`, `stock_alert`, `expiry_date`, `pharmacy_id`, `product_type`, `unit_format`, `product_size`, `packaging_type`, `created_at`, `id`. So custom prices and stock counts are safe.
 
-- Files touched: `supabase/migrations/<new>.sql`, `src/pages/CreateSale.tsx`, `src/lib/stockUtils.ts`, plus the 2–3 dashboard/inventory tiles that currently show raw `stock_quantity`.
-- Existing triggers (`tg_sale_item_increment_targets`, `log_sale_activity`) keep working unchanged because `sale_items.quantity` stays in pieces.
-- `AddProductTargetSheet` already targets pieces — no change.
+Rows with no catalog match (e.g. shop-created custom products) are left untouched. Their names get logged for review.
+
+## Safety / rollback
+
+- Before stage 1, snapshot the two affected columns to a temp table:
+  ```sql
+  CREATE TABLE _backup_master_pack_20260612 AS
+  SELECT id, pcs_per_strip, strip_per_pack, pack_size, box_size, format FROM public.master_medicines;
+  CREATE TABLE _backup_medicines_pack_20260612 AS
+  SELECT id, pcs_per_strip, strip_per_pack, pack_size, box_size, format FROM public.medicines;
+  ```
+  Kept for 7 days, then dropped manually.
+- Dry-run first: parse the JSON locally, print 20 sample rows + summary counts ("X rows would change pcs_per_strip, Y would change strip_per_pack, Z unmatched"). Show output, get confirmation, then run for real.
+
+## What I need from you before building
+
+1. Confirm: **catalog rewrite is OK** — `master_medicines.unit_price`, `generic_name`, `strength`, `company`, `format` will be overwritten from the JSON. (Recommended; otherwise we leave stale data.) If not, I'll restrict the catalog update to just the 5 pack-related columns.
+2. Confirm: the "3 x 10" pack_size pattern means `strip_per_pack=3, pcs_per_strip=10` (your Alanil 120 example confirms this). Some catalogs use it the other way around.
+3. For unmatched `medicines` rows (custom shop products), confirm we should leave them alone rather than clearing their pack fields.
+
+Once you confirm, I'll run the dry-run, show the diff summary, then execute both stages.
+
+&nbsp;
+
+Excellent reality check! Your 2-stage plan and the parsing table are 100% accurate and professional. Here are the confirmations you need to proceed:
+
+1. CONFIRMATION 1 (Catalog Rewrite): Yes, it is fully OK to overwrite the other columns (unit_price, generic_name, strength, company, format) from the JSON to make 'master_medicines' the absolute single source of truth. Let's refresh the full data cleanly.
+
+2. CONFIRMATION 2 ("3 x 10" Pattern): Yes, I confirm that the "3 x 10" pattern means strip_per_pack = 3 (3 strips) and pcs_per_strip = 10 (10 pieces per strip). This matches our Alanil 120 structure.
+
+3. CONFIRMATION 3 (Unmatched Rows): Yes, leave the unmatched 'medicines' rows (custom shop products) completely alone. Do not clear or touch their fields.
+
+Your safety/rollback backup strategy is excellent. Please proceed with the dry-run now, show me the sample diff summary, and once verified, execute both stages for real!
