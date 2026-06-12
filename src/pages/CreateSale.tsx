@@ -5,7 +5,7 @@ import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { totalPiecesToTriUnit, isSingleUnit, looksSingleUnit } from "@/lib/stockUtils";
+import { totalPiecesToTriUnit, totalPiecesToTriUnitWords, isSingleUnit, looksSingleUnit } from "@/lib/stockUtils";
 import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
 import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
@@ -28,7 +28,35 @@ interface CartItem {
   medicine: Medicine;
   quantity: number;
   discountPercent: number;
+  unit: SaleUnit;
 }
+
+type SaleUnit = "box" | "strip" | "pcs";
+
+const getAvailableUnits = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit[] => {
+  if (looksSingleUnit(med)) return ["pcs"];
+  const pps = Number(med.pcs_per_strip || 0);
+  const spp = Number(med.strip_per_pack || 0);
+  const units: SaleUnit[] = [];
+  if (spp > 1 && pps > 1) units.push("box");
+  if (pps > 1) units.push("strip");
+  // box-of-pieces (spp > 1, pps <= 1) → expose box as a multi-piece unit
+  if (spp > 1 && pps <= 1) units.push("box");
+  units.push("pcs");
+  return units;
+};
+
+const getDefaultUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit => {
+  return getAvailableUnits(med)[0];
+};
+
+const piecesPerUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack">, unit: SaleUnit): number => {
+  const pps = Number(med.pcs_per_strip || 1) || 1;
+  const spp = Number(med.strip_per_pack || 1) || 1;
+  if (unit === "box") return Math.max(1, pps * spp);
+  if (unit === "strip") return Math.max(1, pps);
+  return 1;
+};
 
 const CreateSale = () => {
   const navigate = useNavigate();
