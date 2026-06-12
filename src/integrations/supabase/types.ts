@@ -670,8 +670,10 @@ export type Database = {
           generic_name: string | null
           id: string
           pack_size: string | null
+          pcs_per_strip: number | null
           search_vector: unknown
           strength: string | null
+          strip_per_pack: number | null
           unit_price: number | null
         }
         Insert: {
@@ -683,8 +685,10 @@ export type Database = {
           generic_name?: string | null
           id?: string
           pack_size?: string | null
+          pcs_per_strip?: number | null
           search_vector?: unknown
           strength?: string | null
+          strip_per_pack?: number | null
           unit_price?: number | null
         }
         Update: {
@@ -696,8 +700,10 @@ export type Database = {
           generic_name?: string | null
           id?: string
           pack_size?: string | null
+          pcs_per_strip?: number | null
           search_vector?: unknown
           strength?: string | null
+          strip_per_pack?: number | null
           unit_price?: number | null
         }
         Relationships: []
