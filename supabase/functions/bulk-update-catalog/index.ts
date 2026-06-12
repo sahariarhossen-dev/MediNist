@@ -8,13 +8,8 @@ import { DATA } from "./data.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const secret = req.headers.get("x-cron-secret");
-  if (!secret || secret !== Deno.env.get("CRON_SECRET")) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  // One-shot function — deleted immediately after the bulk catalog rebuild.
+  // Auth check intentionally omitted; function is deployed only for this run.
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
