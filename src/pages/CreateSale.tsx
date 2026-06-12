@@ -406,7 +406,9 @@ const CreateSale = () => {
         medicine_id: c.medicine.id,
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
-        quantity: c.quantity,
+        // sale_items.quantity is stored in pieces so reports, targets and
+        // activity logs keep a single canonical unit.
+        quantity: getItemPieces(c),
         unit_price: roundMoney(c.medicine.price || 0),
         total_price: roundMoney(getLineTotal(c)),
         discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
@@ -417,7 +419,7 @@ const CreateSale = () => {
 
       if (status === "completed") {
         for (const c of cartItems) {
-          const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - c.quantity);
+          const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - getItemPieces(c));
           await supabase
             .from("medicines")
             .update({ stock_quantity: newStock })
