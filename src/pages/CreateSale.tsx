@@ -310,6 +310,12 @@ const CreateSale = () => {
     );
   }, []);
 
+  const updateItemUnit = useCallback((id: string, unit: SaleUnit) => {
+    setCartItems((prev) =>
+      prev.map((c) => (c.medicine.id === id ? { ...c, unit } : c))
+    );
+  }, []);
+
   // When switching modes, reset item discounts
   const handleSaleTypeChange = useCallback((type: "retail" | "wholesale") => {
     setSaleType(type);
@@ -319,18 +325,23 @@ const CreateSale = () => {
     );
   }, [defaultDiscount]);
 
+  // Convert the user-entered quantity (in selected unit) to total pieces.
+  const getItemPieces = useCallback((item: CartItem) => {
+    return item.quantity * piecesPerUnit(item.medicine, item.unit);
+  }, []);
+
   // Calculate line total for an item (after item-wise discount in wholesale)
   const getLineTotal = useCallback((item: CartItem) => {
-    const gross = item.quantity * (item.medicine.price || 0);
+    const gross = getItemPieces(item) * (item.medicine.price || 0);
     if (saleType === "wholesale") {
       return roundMoney(gross * (1 - item.discountPercent / 100));
     }
     return roundMoney(gross);
-  }, [saleType]);
+  }, [saleType, getItemPieces]);
 
   const subtotal = useMemo(
-    () => roundMoney(cartItems.reduce((sum, c) => sum + c.quantity * (c.medicine.price || 0), 0)),
-    [cartItems]
+    () => roundMoney(cartItems.reduce((sum, c) => sum + getItemPieces(c) * (c.medicine.price || 0), 0)),
+    [cartItems, getItemPieces]
   );
 
   // For wholesale: net total = sum of per-item net amounts (no global discount)
