@@ -1291,6 +1291,7 @@ export type Database = {
         Returns: boolean
       }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
+      realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
       search_medicines: {
         Args: { _pharmacy_id: string; _query: string }
         Returns: {
