@@ -146,8 +146,7 @@ const CreateSale = () => {
 
         const loaded: CartItem[] = items.map((it) => {
           const med = medMap.get(it.medicine_id);
-          return {
-            medicine: med || {
+          const resolvedMed: Medicine = med || {
               id: it.medicine_id,
               name: it.medicine_name,
               company_name: it.company_name,
@@ -158,9 +157,12 @@ const CreateSale = () => {
               product_type: null,
               unit_format: null,
               product_size: null,
-            },
-            quantity: it.quantity,
+          };
+          return {
+            medicine: resolvedMed,
+            quantity: it.quantity, // drafts stored quantity in pieces
             discountPercent: (it as any).discount_percent ?? 0,
+            unit: "pcs" as SaleUnit,
           };
         });
 
@@ -251,7 +253,7 @@ const CreateSale = () => {
     }
     setCartItems((prev) => {
       if (prev.find((c) => c.medicine.id === med!.id)) return prev;
-      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(med!) }, ...prev];
     });
     setExpandedId(med.id);
   }, [profile?.pharmacy_id, saleType, defaultDiscount]);
@@ -283,7 +285,7 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(medicine) }, ...prev];
     });
     setExpandedId(medicine.id);
     setSearchQuery("");
