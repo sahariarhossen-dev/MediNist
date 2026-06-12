@@ -83,6 +83,24 @@ export const totalPiecesToTriUnitLabeled = (
 };
 
 /**
+ * Friendly long-form breakdown: "10 Boxes, 4 Strips, 2 Pcs".
+ * Skips zero parts and singularizes "1 Box" / "1 Strip" / "1 Pc".
+ * Falls back to "0 Pcs" when everything is zero.
+ */
+export const totalPiecesToTriUnitWords = (
+  totalPcs: number,
+  stripPerPack: number | null,
+  pcsPerStrip: number | null
+): string => {
+  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
+  const parts: string[] = [];
+  if (boxes > 0) parts.push(`${boxes} ${boxes === 1 ? "Box" : "Boxes"}`);
+  if (strips > 0) parts.push(`${strips} ${strips === 1 ? "Strip" : "Strips"}`);
+  if (pcs > 0) parts.push(`${pcs} ${pcs === 1 ? "Pc" : "Pcs"}`);
+  return parts.length ? parts.join(", ") : "0 Pcs";
+};
+
+/**
  * True when a medicine's packaging data indicates a single-unit product
  * (no strip or box subdivisions). Driven by the actual pack numbers, not
  * the product_type string.
