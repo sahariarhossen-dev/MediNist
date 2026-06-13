@@ -13,6 +13,7 @@ import {
 } from "@/hooks/useNotes";
 import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
 import { colorHex } from "@/components/notes/ColorPicker";
 import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/BlockText";
@@ -373,98 +374,129 @@ const NoteEditor = () => {
     });
   };
 
-  // ---- AI OCR (mock) ----
+  // ---- AI OCR (live) ----
+  const stripHtml = (h: string) => h.replace(/<[^>]*>/g, "").trim();
+
   const handleScanImage = async (
     block: Extract<NoteBlock, { type: "image" }>,
   ) => {
     if (scanningBlockId) return;
     setScanningBlockId(block.id);
-    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      // 1) fresh signed URL
+      const { data: signed, error: signErr } = await supabase.storage
+        .from("note-attachments")
+        .createSignedUrl(block.path, 300);
+      if (signErr || !signed?.signedUrl) throw signErr ?? new Error("signed url failed");
 
-    let newBlock: NoteBlock;
-    let extractedCount = 0;
-    if (block.category === "invoice") {
-      newBlock = {
-        id: newId(),
-        type: "text",
-        html:
-          '<p><strong>Supplier:</strong> ACME Pharma Ltd.</p>' +
-          '<p><strong>Invoice #:</strong> INV-2026-00481 · <strong>Date:</strong> 13 Jun 2026</p>' +
-          '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:6px 0">' +
-          '<thead><tr><th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px">Item</th><th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px">Qty</th><th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px">Amount</th></tr></thead>' +
-          '<tbody>' +
-          '<tr><td style="padding:4px">Napa Extend 650mg</td><td style="text-align:right;padding:4px">2</td><td style="text-align:right;padding:4px">৳ 240</td></tr>' +
-          '<tr><td style="padding:4px">Sergel 20mg</td><td style="text-align:right;padding:4px">5</td><td style="text-align:right;padding:4px">৳ 600</td></tr>' +
-          '<tr><td style="padding:4px">Seclo 20mg</td><td style="text-align:right;padding:4px">3</td><td style="text-align:right;padding:4px">৳ 400</td></tr>' +
-          '</tbody></table>' +
-          '<p><strong>Total:</strong> ৳ 1,240</p>',
-      };
-      extractedCount = 3;
-    } else {
-      const items = [
-        { id: newId(), text: "Napa Extend 665mg — 2 Boxes", checked: false },
-        { id: newId(), text: "Sergel 20mg — 1 Strip", checked: false },
-        { id: newId(), text: "Monas 10mg — 1 Box", checked: false },
-        { id: newId(), text: "Seclo 20mg — 2 Strips", checked: false },
-      ];
-      newBlock = { id: newId(), type: "checklist", items };
-      extractedCount = items.length;
-    }
+      // 2) invoke edge function
+      const { data, error } = await supabase.functions.invoke(
+        "medinist-ai-notepad",
+        {
+          body: {
+            mode: "ocr",
+            category: block.category ?? "photo",
+            payload: { imageUrl: signed.signedUrl },
+          },
+        },
+      );
+      if (error) throw error;
+      const result: string = data?.result ?? "";
+      if (!result) throw new Error("empty AI response");
 
-    const cost = estimateBlockChars(newBlock);
-    if (cost > remaining) {
+      // 3) build block
+      let newBlock: NoteBlock;
+      let extractedCount = 0;
+      if (block.category === "invoice") {
+        if (!/<table/i.test(result)) throw new Error("invalid invoice html");
+        newBlock = { id: newId(), type: "text", html: result };
+        extractedCount = (result.match(/<tr/gi)?.length ?? 1) - 1;
+      } else {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(result);
+        } catch {
+          // tolerate single-line fallback
+          parsed = result
+            .split("\n")
+            .map((s) => s.replace(/^[-*\d.\s]+/, "").trim())
+            .filter(Boolean);
+        }
+        if (!Array.isArray(parsed)) throw new Error("invalid list response");
+        const items = (parsed as unknown[])
+          .map((x) => String(x).trim())
+          .filter(Boolean)
+          .map((text) => ({ id: newId(), text, checked: false }));
+        if (items.length === 0) throw new Error("no items extracted");
+        newBlock = { id: newId(), type: "checklist", items };
+        extractedCount = items.length;
+      }
+
+      // 4) char budget — truncate to fit
+      let cost = estimateBlockChars(newBlock);
+      if (cost > remaining) {
+        if (newBlock.type === "checklist") {
+          let acc = 0;
+          const trimmed: typeof newBlock.items = [];
+          for (const it of newBlock.items) {
+            if (acc + it.text.length > remaining) break;
+            acc += it.text.length;
+            trimmed.push(it);
+          }
+          newBlock = { ...newBlock, items: trimmed };
+        } else if (newBlock.type === "text") {
+          // crude truncate by character budget on raw html
+          newBlock = { ...newBlock, html: newBlock.html.slice(0, Math.max(0, remaining * 2)) };
+        }
+        cost = estimateBlockChars(newBlock);
+        if (cost === 0) {
+          toast.warning("Note trimmed due to the global 2000-character limit.");
+          return;
+        }
+        toast.warning("Note trimmed due to the global 2000-character limit.");
+      }
+
+      // 5) insert
+      insertBlockAfter(block.id, newBlock);
+
+      // 6) fire-and-forget ocr_text meta sync
+      const persistId = noteIdRef.current;
+      if (persistId) {
+        const ocrText =
+          newBlock.type === "checklist"
+            ? newBlock.items.map((i) => i.text).join("\n")
+            : stripHtml((newBlock as Extract<NoteBlock, { type: "text" }>).html);
+        const prevMeta =
+          (existing?.image_metadata as Record<string, unknown> | null) ?? {};
+        const prevOcr = Array.isArray((prevMeta as { ocr_text?: unknown }).ocr_text)
+          ? ((prevMeta as { ocr_text: unknown[] }).ocr_text as unknown[])
+          : [];
+        void supabase
+          .from("notes")
+          .update({
+            image_metadata: {
+              ...prevMeta,
+              ocr_text: [
+                ...prevOcr,
+                { block_id: block.id, text: ocrText, at: new Date().toISOString() },
+              ],
+            } as never,
+          })
+          .eq("id", persistId);
+      }
+
+      toast.success(
+        `MediNist AI extracted ${extractedCount} item${extractedCount === 1 ? "" : "s"}`,
+      );
+    } catch (err) {
+      console.error("[medinist-ai-notepad] ocr failed:", err);
+      toast.error("MediNist AI Engine is currently busy. Please try again.");
+    } finally {
       setScanningBlockId(null);
-      toast.warning("Not enough space — approaching 2000 character limit");
-      return;
     }
-
-    insertBlockAfter(block.id, newBlock);
-    setScanningBlockId(null);
-    toast.success(`MediNist AI extracted ${extractedCount} item${extractedCount > 1 ? "s" : ""}`);
   };
 
-  // ---- AI Text Assistant (mock) ----
-  const stripHtml = (h: string) => h.replace(/<[^>]*>/g, "").trim();
-
-  const banglaDict: Array<[RegExp, string]> = [
-    [/রফিক ভাই/g, "Rofik Bhai"],
-    [/ভাই/g, "Bhai"],
-    [/সকালে/g, "in the morning"],
-    [/কালকে/g, "tomorrow"],
-    [/এসে/g, "will come and"],
-    [/দেবে/g, "pay"],
-    [/দিবে/g, "will give"],
-    [/নিবে/g, "will take"],
-    [/আনবে/g, "will bring"],
-    [/নিছে/g, "took"],
-    [/টাকা দেয় নাই/g, "has not paid"],
-    [/টাকা/g, "money"],
-    [/নাপা/g, "Napa"],
-    [/সার্জেল/g, "Sergel"],
-    [/পিস/g, "pcs"],
-    [/বক্স/g, "box"],
-    [/স্ট্রিপ/g, "strip"],
-  ];
-
-  const banglaDigits = (s: string) =>
-    s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
-
-  const translateBangla = (text: string) =>
-    text
-      .split("\n")
-      .map((line) => {
-        let out = banglaDigits(line);
-        let touched = false;
-        for (const [re, rep] of banglaDict) {
-          if (re.test(out)) {
-            touched = true;
-            out = out.replace(re, rep);
-          }
-        }
-        return touched || !/[\u0980-\u09FF]/.test(line) ? out : `[EN] ${line}`;
-      })
-      .join("\n");
-
+  // ---- AI Text Assistant (live) ----
   const handleAIAction = async (action: AIAction) => {
     setAiSheetOpen(false);
     const latest = draftRef.current;
@@ -476,65 +508,87 @@ const NoteEditor = () => {
       .join("\n");
 
     if (!allText) {
-      toast.info("Add some text first for the AI to work on");
+      toast.error("Please type something first before using the AI Assistant.");
       return;
     }
 
     setAiProcessing(true);
-    await new Promise((r) => setTimeout(r, 1400));
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "medinist-ai-notepad",
+        { body: { mode: "assistant", payload: { text: allText, actionId: action } } },
+      );
+      if (error) throw error;
+      const result: string = data?.result ?? "";
+      if (!result) throw new Error("empty AI response");
 
-    if (action === "smart_clean") {
-      const isBanglaShopNote =
-        /[\u0980-\u09FF]/.test(allText) || /rofik|napa|taka/i.test(allText);
-      const html = isBanglaShopNote
-        ? '<p><strong>Customer:</strong> Rofik Bhai</p>' +
-          '<p><strong>Medicine:</strong> Napa - 10 Pcs</p>' +
-          '<p><strong>Status:</strong> ❌ Unpaid (Will pay tomorrow)</p>'
-        : (() => {
-            const lines = allText.split("\n").filter(Boolean);
-            const summary = lines[0] ?? "";
-            const details = lines.slice(1).join(" · ");
-            return (
-              `<p><strong>Summary:</strong> ${summary}</p>` +
-              (details ? `<p><strong>Details:</strong> ${details}</p>` : "") +
-              `<p><strong>Status:</strong> ✅ Logged</p>`
-            );
-          })();
-      replaceFirstTextBlock(firstTextIdx, html);
-    } else if (action === "translate_en") {
-      const translated = translateBangla(allText);
-      const html = translated
-        .split("\n")
-        .map((l) => `<p>${l || "<br>"}</p>`)
-        .join("");
-      replaceFirstTextBlock(firstTextIdx, html);
-    } else if (action === "extract_actions") {
-      const verbRe = /\b(call|order|pay|deliver|check|follow up|buy|send|return)\b|নিবে|দিবে|আনবে|দেবে/i;
-      const sentences = allText
-        .split(/[\n.।!?]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && verbRe.test(s));
-      const items =
-        sentences.length > 0
-          ? sentences.slice(0, 8).map((s) => ({ id: newId(), text: s, checked: false }))
-          : [
-              { id: newId(), text: "Follow up with customer", checked: false },
-              { id: newId(), text: "Check stock for pending order", checked: false },
-            ];
-      const block: NoteBlock = { id: newId(), type: "checklist", items };
-      const cost = estimateBlockChars(block);
-      if (cost > remaining) {
-        setAiProcessing(false);
-        toast.warning("Approaching 2000 character limit");
-        return;
+      if (action === "smart_clean" || action === "translate_en") {
+        // measure the would-be replacement cost: total - currentFirstText + newPlain
+        const currentFirstLen =
+          firstTextIdx >= 0 && latest.content[firstTextIdx].type === "text"
+            ? stripHtml(
+                (latest.content[firstTextIdx] as Extract<NoteBlock, { type: "text" }>).html,
+              ).length
+            : 0;
+        const newPlainLen = stripHtml(result).length;
+        const projected = totalChars - currentFirstLen + newPlainLen;
+        let html = result;
+        if (projected > MAX_CHARS) {
+          const allowed = Math.max(0, MAX_CHARS - (totalChars - currentFirstLen));
+          html = result.slice(0, Math.max(0, allowed * 2));
+          toast.warning("Note trimmed due to the global 2000-character limit.");
+        }
+        replaceFirstTextBlock(firstTextIdx, html);
+      } else if (action === "extract_actions") {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(result);
+        } catch {
+          parsed = result
+            .split("\n")
+            .map((s) => s.replace(/^[-*\d.\s]+/, "").trim())
+            .filter(Boolean);
+        }
+        if (!Array.isArray(parsed)) throw new Error("invalid actions response");
+        let items = (parsed as unknown[])
+          .map((x) => String(x).trim())
+          .filter(Boolean)
+          .map((text) => ({ id: newId(), text, checked: false }));
+        if (items.length === 0) {
+          toast.info("MediNist AI didn't find any action items");
+          return;
+        }
+        let block: NoteBlock = { id: newId(), type: "checklist", items };
+        if (estimateBlockChars(block) > remaining) {
+          let acc = 0;
+          const trimmed: typeof items = [];
+          for (const it of items) {
+            if (acc + it.text.length > remaining) break;
+            acc += it.text.length;
+            trimmed.push(it);
+          }
+          if (trimmed.length === 0) {
+            toast.warning("Note trimmed due to the global 2000-character limit.");
+            return;
+          }
+          items = trimmed;
+          block = { id: newId(), type: "checklist", items };
+          toast.warning("Note trimmed due to the global 2000-character limit.");
+        }
+        const lastTextId = [...latest.content]
+          .reverse()
+          .find((b) => b.type === "text")?.id;
+        if (lastTextId) insertBlockAfter(lastTextId, block);
+        else addBlockWithCursor(block);
       }
-      const lastTextId = [...latest.content].reverse().find((b) => b.type === "text")?.id;
-      if (lastTextId) insertBlockAfter(lastTextId, block);
-      else addBlockWithCursor(block);
-    }
 
-    setAiProcessing(false);
-    toast.success("Note optimized by MediNist AI");
+      toast.success("Note optimized by MediNist AI");
+    } catch (err) {
+      console.error("[medinist-ai-notepad] assistant failed:", err);
+      toast.error("MediNist AI Engine is currently busy. Please try again.");
+    } finally {
+      setAiProcessing(false);
+    }
   };
 
   const replaceFirstTextBlock = (idx: number, html: string) => {
