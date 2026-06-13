@@ -19,6 +19,8 @@ import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/Block
 import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
 import NoteKeyboardToolbar from "@/components/notes/NoteKeyboardToolbar";
+import AIActionSheet, { type AIAction } from "@/components/notes/AIActionSheet";
+import AIProgressPill from "@/components/notes/AIProgressPill";
 import { cn } from "@/lib/utils";
 
 const MAX_CHARS = 2000;
@@ -64,6 +66,9 @@ const NoteEditor = () => {
   const [draft, setDraft] = useState<DraftState>(makeEmpty);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [scanningBlockId, setScanningBlockId] = useState<string | null>(null);
+  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+  const [aiProcessing, setAiProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
   // Map of text-block id -> handle, so we can focus any text block by id
@@ -136,6 +141,31 @@ const NoteEditor = () => {
       ],
     }));
     focusBlockIdRef.current = trailingTextId;
+  };
+
+  /** Insert a block immediately after the given block id, plus a trailing
+   *  empty text block to keep the cursor flow consistent. */
+  const insertBlockAfter = (afterId: string, block: NoteBlock) => {
+    const trailingTextId = newId();
+    setDraft((d) => {
+      const idx = d.content.findIndex((b) => b.id === afterId);
+      if (idx === -1) {
+        return {
+          ...d,
+          content: [...d.content, block, { id: trailingTextId, type: "text", html: "" }],
+        };
+      }
+      const next = [...d.content];
+      next.splice(idx + 1, 0, block, { id: trailingTextId, type: "text", html: "" });
+      return { ...d, content: next };
+    });
+    focusBlockIdRef.current = trailingTextId;
+  };
+
+  const estimateBlockChars = (block: NoteBlock): number => {
+    if (block.type === "text") return block.html.replace(/<[^>]*>/g, "").length;
+    if (block.type === "checklist") return block.items.reduce((s, it) => s + it.text.length, 0);
+    return 0;
   };
 
   // After render, focus the queued text block (set by addBlockWithCursor).
