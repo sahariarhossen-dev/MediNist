@@ -1,16 +1,34 @@
-## Update Monthly Subscription Price from ৳2,000 to ৳500
+# Fix Strip/Pack Logic for Liquid/Single-Unit Products
 
-### Files to modify
+## Problem
+On the Add/Edit Product page (`src/pages/AddProduct.tsx`), the "Strip & Pack Details" section (Pcs per Strip × Strips per Box) is shown for every product type. This lets a Syrup or Suspension end up with values like 12 × 15 = 180 pcs, corrupting inventory.
 
-1. **src/pages/SubscriptionCheckout.tsx**
-   - Change `const PLAN_PRICE = 2000;` to `const PLAN_PRICE = 500;`
-   - This updates the order summary display (`৳{PLAN_PRICE}`), the total line (`৳{PLAN_PRICE.toLocaleString(...)}`), and the sticky pay button label (`Pay ৳{PLAN_PRICE.toLocaleString(...)}`).
-   - This also updates the `_amount` parameter passed to `supabase.rpc("extend_subscription", ...)` so the gateway records the correct amount.
+## Solution
+Make the strip/pack inputs strictly conditional on the standardized product type being **Tablet** or **Capsule**. Everything else (Syrup, Suspension, Injection, Cream, Ointment, Drop, Inhaler, etc.) is treated as a single unit (1 × 1 = 1 pc).
 
-2. **src/pages/Subscription.tsx**
-   - Change the confirmation dialog text from `2000 BDT` to `500 BDT` in the "Plan Price" row.
+## Changes in `src/pages/AddProduct.tsx`
 
-### Not changed
+1. **Derive a flag** from the existing `standardizedType`:
+   ```ts
+   const usesStripPack = standardizedType === "Tablet" || standardizedType === "Capsule";
+   ```
 
-- `src/lib/subscriptionMock.ts` — the `extendPlans` array (৳499 / ৳1,299 / ৳2,399) is for **add-on top-up plans**, not the base monthly subscription, so it is left untouched.
-- **Database** — the `extend_subscription` RPC accepts `_amount` as a parameter and only validates `>= 0`, so no migration is needed.
+2. **Auto-clear values when the type switches to single-unit.** Add an effect:
+   ```ts
+   useEffect(() => {
+     if (!usesStripPack) {
+       setPcsPerStrip("");
+       setStripPerBox("");
+     }
+   }, [usesStripPack]);
+   ```
+
+3. **Conditionally render the "Strip & Pack Details" block** — only when `usesStripPack` is true. For non-Tablet/Capsule types, hide the entire section (cleanest UI; matches the user's "HIDE … completely" preference).
+
+4. **Save payload** (`handleSave`): when `!usesStripPack`, force `pcs_per_strip` and `strip_per_pack` to `1` regardless of any stale state, so the DB always reflects "1 unit = 1 pc" for single-unit products.
+
+5. The existing edit-prefill effect already populates these values from `location.state`. The new auto-clear effect runs after prefill (because `productType` is set in the same effect) and will correctly wipe them if the loaded product is single-unit — desired behavior to repair legacy bad data on next save.
+
+## Out of scope
+- `src/lib/stockUtils.ts`, inventory display logic, catalog importer — untouched. Only the Add/Edit Product form is changing.
+- No DB migration; existing rows are corrected when re-saved through the form.

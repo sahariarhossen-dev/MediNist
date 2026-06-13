@@ -76,6 +76,7 @@ const AddProduct = () => {
   const [stripPerBox, setStripPerBox] = useState("");
 
   const standardizedType = getStandardizedType(productType);
+  const usesStripPack = standardizedType === "Tablet" || standardizedType === "Capsule";
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -96,6 +97,14 @@ const AddProduct = () => {
       cancelled = true;
     };
   }, [profile?.pharmacy_id]);
+
+  // Auto-clear strip/pack fields when product is single-unit (Syrup, Injection, etc.)
+  useEffect(() => {
+    if (!usesStripPack) {
+      setPcsPerStrip("");
+      setStripPerBox("");
+    }
+  }, [usesStripPack]);
 
   useEffect(() => {
     const s = location.state;
@@ -184,8 +193,12 @@ const AddProduct = () => {
       // Persist whatever pack data the user entered (>0). Visibility of the
       // strip/box UI is no longer tied to product_type — it follows the
       // actual packaging numbers, matching the master JSON catalog shape.
-      pcs_per_strip: pcsPerStrip && Number(pcsPerStrip) > 0 ? Number(pcsPerStrip) : null,
-      strip_per_pack: stripPerBox && Number(stripPerBox) > 0 ? Number(stripPerBox) : null,
+      pcs_per_strip: usesStripPack
+        ? (pcsPerStrip && Number(pcsPerStrip) > 0 ? Number(pcsPerStrip) : null)
+        : 1,
+      strip_per_pack: usesStripPack
+        ? (stripPerBox && Number(stripPerBox) > 0 ? Number(stripPerBox) : null)
+        : 1,
     };
 
     let error;
