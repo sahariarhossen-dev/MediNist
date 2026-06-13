@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 const PLAN_DAYS = 30;
-const PLAN_PRICE = 2000;
+const PLAN_PRICE = 500;
 
 type Gateway = {
   id: string;
