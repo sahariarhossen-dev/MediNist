@@ -172,9 +172,32 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
-  const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+  let offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
   const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2500", 10));
+  const auto = url.searchParams.get("auto") === "1";
+
+  // Auto mode: read next_offset from progress tracker, skip if finished.
+  if (auto) {
+    const { data: prog } = await sb
+      .from("spider_sync_progress")
+      .select("next_offset, total_rows, finished_at")
+      .eq("id", 1)
+      .maybeSingle();
+    if (!prog) {
+      return new Response(JSON.stringify({ error: "no_progress_row" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (prog.finished_at || prog.next_offset >= prog.total_rows) {
+      return new Response(
+        JSON.stringify({ done: true, offset: prog.next_offset, total: prog.total_rows }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    offset = prog.next_offset;
+  }
 
   const { data: rows, error: selErr } = await sb
     .from("master_medicines")
@@ -247,12 +270,13 @@ Deno.serve(async (req) => {
     JSON.stringify(
       {
         dry,
+        offset,
         scanned: rows.length,
         scraped: samples.length,
         updated_master: updatedMaster,
         updated_medicines: updatedMedicines,
         unmatched,
-        samples,
+        samples: auto ? samples.slice(0, 3) : samples,
       },
       null,
       2,

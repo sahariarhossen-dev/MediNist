@@ -125,6 +125,123 @@ export type Database = {
         }
         Relationships: []
       }
+      _backup_spider_full_20260613: {
+        Row: {
+          box_size: string | null
+          brand_name: string | null
+          company: string | null
+          created_at: string | null
+          format: string | null
+          generic_name: string | null
+          id: string | null
+          pack_size: string | null
+          pcs_per_strip: number | null
+          search_vector: unknown
+          strength: string | null
+          strip_per_pack: number | null
+          unit_price: number | null
+        }
+        Insert: {
+          box_size?: string | null
+          brand_name?: string | null
+          company?: string | null
+          created_at?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string | null
+          pack_size?: string | null
+          pcs_per_strip?: number | null
+          search_vector?: unknown
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_price?: number | null
+        }
+        Update: {
+          box_size?: string | null
+          brand_name?: string | null
+          company?: string | null
+          created_at?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string | null
+          pack_size?: string | null
+          pcs_per_strip?: number | null
+          search_vector?: unknown
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_price?: number | null
+        }
+        Relationships: []
+      }
+      _backup_spider_medicines_20260613: {
+        Row: {
+          box_size: string | null
+          company_name: string | null
+          created_at: string | null
+          expiry_date: string | null
+          format: string | null
+          generic_name: string | null
+          id: string | null
+          name: string | null
+          pack_size: string | null
+          packaging_type: string | null
+          pcs_per_strip: number | null
+          pharmacy_id: string | null
+          price: number | null
+          product_size: string | null
+          product_type: string | null
+          stock_alert: number | null
+          stock_quantity: number | null
+          strength: string | null
+          strip_per_pack: number | null
+          unit_format: string | null
+        }
+        Insert: {
+          box_size?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string | null
+          name?: string | null
+          pack_size?: string | null
+          packaging_type?: string | null
+          pcs_per_strip?: number | null
+          pharmacy_id?: string | null
+          price?: number | null
+          product_size?: string | null
+          product_type?: string | null
+          stock_alert?: number | null
+          stock_quantity?: number | null
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_format?: string | null
+        }
+        Update: {
+          box_size?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          format?: string | null
+          generic_name?: string | null
+          id?: string | null
+          name?: string | null
+          pack_size?: string | null
+          packaging_type?: string | null
+          pcs_per_strip?: number | null
+          pharmacy_id?: string | null
+          price?: number | null
+          product_size?: string | null
+          product_type?: string | null
+          stock_alert?: number | null
+          stock_quantity?: number | null
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_format?: string | null
+        }
+        Relationships: []
+      }
       _stg_medicines_new: {
         Row: {
           box_size: string | null
@@ -1185,6 +1302,39 @@ export type Database = {
           status?: string
           token?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      spider_sync_progress: {
+        Row: {
+          finished_at: string | null
+          id: number
+          last_run_at: string | null
+          matched_total: number
+          next_offset: number
+          started_at: string
+          total_rows: number
+          unmatched_total: number
+        }
+        Insert: {
+          finished_at?: string | null
+          id?: number
+          last_run_at?: string | null
+          matched_total?: number
+          next_offset?: number
+          started_at?: string
+          total_rows?: number
+          unmatched_total?: number
+        }
+        Update: {
+          finished_at?: string | null
+          id?: number
+          last_run_at?: string | null
+          matched_total?: number
+          next_offset?: number
+          started_at?: string
+          total_rows?: number
+          unmatched_total?: number
         }
         Relationships: []
       }
