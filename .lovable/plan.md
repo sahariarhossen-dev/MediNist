@@ -1,30 +1,33 @@
-# Spider.cloud catalog sync — confirmed rules + execution
+# Stratified 60-row dry-run, then full write
 
-## Confirmed decisions
-1. **Price column** = per-piece **Unit Price** scraped from MedEx (saved into `master_medicines.unit_price`).
-2. **Pharmacy `medicines.price`** = **NOT overwritten**. Custom shop prices are protected. We only refresh `pcs_per_strip` / `strip_per_pack` on the pharmacy rows.
-3. **Search query** includes `strength` when present (e.g. "Napa 500 mg") so MedEx returns the exact variant, not a fuzzy first match.
+## Stratified dry-run
+Invoke the existing `spider-catalog-sync` function three times with `dry=1`, `limit=20`, `delay=500`:
+1. `offset=0` (alphabetical head)
+2. `offset=10000` (middle of catalog)
+3. `offset=20000` (tail)
 
-## API key
-You pasted `sk-0315549c-c9c1-4d4e-87cf-c4dc23279af6`. The project already has `SPIDER_API_KEY` in secrets — I'll rotate it to this value via `update_secret` so the edge function picks it up automatically. No code change needed for the key itself.
+Aggregate match rates per zone, plus a per-zone diff table (brand · before pack/price · after pack/price · MedEx URL · status). Spot-check a couple of well-known brands (e.g. Napa, Seclo) against medex.com.bd in the browser fetch to confirm the parser output matches reality.
 
-## Code changes to `spider-catalog-sync/index.ts`
-1. **Search URL** — build as `https://medex.com.bd/search?search=<brand> <strength>` (URL-encoded, strength appended only when not null/empty). Brand-only fallback if the strength-qualified search returns zero hits.
-2. **Pharmacy update** — drop `price` from the `medicines` update payload. Only `pcs_per_strip` and `strip_per_pack` get written there.
-3. Keep the existing parser (Unit Price + pack-size-info), Spider `/crawl` call, 1 req/sec pacing, dry-run flag, snapshot tables.
+Decision rule:
+- If matched-rate in the middle and tail zones is **≥70 %** AND every spot-check is correct → auto-proceed to write.
+- If lower or any spot-check is off → halt and tune (parser, slug-match strictness, or fallback search) before any write.
 
-## Execution sequence (build mode)
-1. **Backup** — `CREATE TABLE _backup_spider_full_<ts> AS SELECT … FROM master_medicines` and the same for pharmacy `medicines` rows that will be touched. Done via migration before any write.
-2. **Rotate** `SPIDER_API_KEY` secret to the new value.
-3. **Deploy** updated `spider-catalog-sync`.
-4. **Dry-run batch of 20** — `POST /spider-catalog-sync?limit=20&dry=1`. I paste the full diff table here (brand · strength · before pack/price · scraped pack/price · scraped MedEx URL · status).
-5. **Halt for your eyeball** — if even one row looks wrong, we stop and tune the parser. Otherwise:
-6. **Full write** — process all ~21,168 master rows in chunks of 200 with `dry=0`, offset stepping. Each chunk returns counts + samples; I report progress every 5 chunks. At 1 req/sec + 2 Spider calls per row (search + brand page) this is ~12 hours of wall time, so I'll run it in the background via a loop and surface a final summary.
-7. **Final report** — total updated, unmatched list (CSV at `/mnt/documents/spider_unmatched.csv`), and per-pharmacy `medicines` rows refreshed.
+## Full write (only if dry-run passes)
+1. Snapshot via migration: `_backup_spider_full_<ts>` for `master_medicines` (full copy) + a copy of `medicines` rows whose `(name, company_name)` overlap the master set.
+2. Background loop in the sandbox:
+   - Total rows ≈ 21,168.
+   - Chunk size: 50 rows per function call (delay=2000 ms → ~110 s per chunk, well inside the 150 s edge-function ceiling).
+   - Between chunks: sleep 5 s.
+   - Wall time estimate: ~424 chunks × 115 s ≈ 13.5 h. Runs in the background; I report progress every ~30 chunks.
+3. Per chunk, the function (already correct):
+   - Updates `master_medicines.pack_size`, `unit_price`, `pcs_per_strip`, `strip_per_pack` only when a slug-validated MedEx match is found.
+   - Mirrors `pcs_per_strip` + `strip_per_pack` (NOT `price`) to matching pharmacy `medicines` rows.
+   - Skips unmatched rows; logs them to an accumulated CSV at `/mnt/documents/spider_unmatched.csv`.
+4. Final report: total matched, total unmatched, sample diffs, link to the unmatched CSV.
 
-## Safety net
-- All snapshots stay until you tell me to drop them (`DROP TABLE _backup_spider_full_<ts>`).
-- Unmatched rows (no MedEx hit) are logged, not touched.
-- Pharmacy stock, expiry, custom prices: untouched.
+## Safety
+- Snapshots stay until you say drop them.
+- Any chunk that errors is retried once, then logged and skipped — never blocks the loop.
+- Custom shop prices, stock, expiry: never touched.
 
-Ready to switch to build mode and run.
+Ready to switch to build mode.
