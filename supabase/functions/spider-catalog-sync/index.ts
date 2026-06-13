@@ -106,13 +106,21 @@ async function processOne(row: {
   id: string;
   brand_name: string;
   company: string | null;
+  strength?: string | null;
 }) {
-  const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(
-    row.brand_name,
-  )}`;
-  const searchHtml = await spiderFetch(searchUrl);
+  const q = row.strength && row.strength.trim()
+    ? `${row.brand_name} ${row.strength}`
+    : row.brand_name;
+  const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(q)}`;
+  let searchHtml = await spiderFetch(searchUrl);
   if (!searchHtml) return { row, error: "spider_search_failed" as const };
-  const brandUrl = findFirstBrandUrl(searchHtml);
+  let brandUrl = findFirstBrandUrl(searchHtml);
+  if (!brandUrl && row.strength) {
+    // Fallback: brand-only search
+    const fbUrl = `https://medex.com.bd/search?search=${encodeURIComponent(row.brand_name)}`;
+    searchHtml = await spiderFetch(fbUrl);
+    if (searchHtml) brandUrl = findFirstBrandUrl(searchHtml);
+  }
   if (!brandUrl) return { row, error: "no_search_results" as const };
   const brandHtml = await spiderFetch(brandUrl);
   if (!brandHtml) return { row, error: "spider_brand_failed" as const };
@@ -133,7 +141,7 @@ Deno.serve(async (req) => {
 
   const { data: rows, error: selErr } = await sb
     .from("master_medicines")
-    .select("id, brand_name, company, pack_size, unit_price, pcs_per_strip, strip_per_pack")
+    .select("id, brand_name, company, strength, pack_size, unit_price, pcs_per_strip, strip_per_pack")
     .order("brand_name", { ascending: true })
     .range(offset, offset + limit - 1);
 
@@ -188,7 +196,6 @@ Deno.serve(async (req) => {
         .update({
           pcs_per_strip: after.pcs_per_strip,
           strip_per_pack: after.strip_per_pack,
-          price: after.unit_price,
         })
         .eq("name", r.brand_name)
         .eq("company_name", r.company ?? "")
