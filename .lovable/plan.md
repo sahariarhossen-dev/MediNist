@@ -1,34 +1,34 @@
-## Fix: AddCompany screen should pull from master_medicines catalog
+# Remove "Sell as" toggle from Sales / Billing
 
-### Problem
-The "Select Your Company" screen (`/add-company`) currently queries the local per-pharmacy `companies` table and lets users manually create new company entries. This produces duplicate/variant company names across pharmacies and breaks multi-tenant consistency.
+Drop the per-item Box / Strip / Pcs toggle on the cart card in `src/pages/CreateSale.tsx`. Quantities entered with `+ / − / input` will represent individual pieces directly, so prices and totals are computed at the piece level with no unit conversion.
 
-### Solution Overview
-Replace the local `companies` query with a distinct lookup against the canonical `master_medicines` catalog, remove manual creation entirely, and keep the existing selection UX.
+## Scope
 
-### Changes
+Single file: `src/pages/CreateSale.tsx`. No DB or other component changes — the `sales_items.quantity` column already stores pieces (we already write `getItemPieces(c)` on checkout).
 
-#### 1. Database — new helper function
-Create `public.get_master_companies(_search text DEFAULT NULL)`:
-- Returns distinct, non-null company names from `master_medicines`
-- Optional case-insensitive search via `ILIKE`
-- Ordered alphabetically
-- Exposed to authenticated users (no extra RLS needed; `master_medicines` already allows authenticated SELECT)
+## Changes
 
-#### 2. Frontend — rewrite `src/pages/AddCompany.tsx`
-- **Data fetching**: replace `supabase.from('companies')...` with `supabase.rpc('get_master_companies', { _search: searchTerm })`
-- **Search**: wire the existing "Search companies..." input to call the RPC on change (with debounce)
-- **Remove manual creation**: delete all states/logic/JSX for `showInlineAdd`, `newName`, `adding`, `handleSaveNew`, duplicate-checking, inline form, and the "+ Add New Company" button
-- **Selection behavior**: keep `handleSelect` exactly as-is (passes `companyName` back to `/add-product` via navigation state)
-- **Loading & empty states**: adapt existing skeleton and empty-state copy to reference the master catalog
+1. **Remove unit concept from `CartItem`**
+   - Drop the `unit: SaleUnit` field from the `CartItem` type.
+   - Delete `SaleUnit`, `getAvailableUnits`, `getDefaultUnit`, `piecesPerUnit`, and `updateItemUnit`.
+   - Simplify `getItemPieces(item) → item.quantity`. (Inline it or keep the helper as a one-liner so callers don't change.)
+   - All `addToCart` / prescription-add paths stop setting `unit`.
 
-### Why this approach
-- `master_medicines` has ~21k rows but only ~81 distinct companies; a DB-side `DISTINCT` avoids bandwidth waste and the 1000-row PostgREST limit
-- Removing manual creation enforces the canonical company list, preventing future duplicates
-- No changes required to `AddProduct.tsx` or any other screen — the navigation contract stays identical
+2. **Remove the toggle UI** (lines ~755–778)
+   - Delete the entire `{showUnitPicker && …}` "Sell as" block.
+   - Remove `availableUnits`, `showUnitPicker`, and the `unitLabel` map inside the cart `.map`.
 
-### Acceptance criteria
-- [ ] Typing "square" in the search box shows "Square Pharmaceuticals Ltd." (or similar) from the master catalog
-- [ ] No "+ Add New Company" button is visible
-- [ ] Selecting a company navigates back to Add Product with the correct company name filled in
-- [ ] Empty search shows all ~81 distinct companies alphabetically
+3. **Clean up collapsed-card and expanded-card text**
+   - Collapsed row: replace `{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}` with plain `{item.quantity}` (no unit suffix). Same for the wholesale variant.
+   - Expanded row calculation already uses `pieces` — unchanged once `getItemPieces` returns `quantity`.
+
+4. **Layout polish after toggle removal**
+   - Add a touch more vertical breathing room to the expanded card (e.g. `space-y-2.5` wrapper or `mt-3` on the wholesale calc strip) so the card doesn't feel top-heavy now that the third row is gone.
+   - No other visual changes.
+
+## Acceptance
+
+- No "Box / Strip / Pcs" buttons appear on any cart card, including multi-unit products (tablets/capsules with strip+box packaging).
+- `+`, `−`, and the quantity input change pieces directly; line total = `quantity × MRP` (minus discount in wholesale).
+- Checkout still writes `quantity` (= pieces) into `sales_items` and decrements `stock_quantity` by the same amount.
+- Expanded card looks balanced with the toggle row gone — no awkward empty gap.
