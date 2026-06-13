@@ -42,18 +42,8 @@ interface MasterMedicine {
   box_size: string | null;
 }
 
-// Build a Postgres tsquery from raw user input. Strips punctuation,
-// splits on whitespace, appends `:*` to each token for prefix matching,
-// and AND-joins so all typed tokens must match. Returns "" for empty.
-const toTsQuery = (raw: string): string =>
-  raw
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((t) => `${t}:*`)
-    .join(" & ");
+// Catalog search is hyphen- and space-insensitive via the
+// `search_master_medicines` RPC (normalizes both sides to [a-z0-9]).
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
   if (looksSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType })) {
@@ -218,24 +208,12 @@ const Inventory = () => {
 
     const run = async () => {
       setCatalogLoading(true);
-      let q = supabase
-        .from("master_medicines")
-        .select("*")
-        .order("brand_name", { ascending: true })
-        .range(0, 4999);
-
-      if (selectedCompanies.size > 0) {
-        q = q.in("company", Array.from(selectedCompanies));
-      }
-      const tsq = toTsQuery(debouncedSearch);
-      if (tsq) {
-        // GIN-indexed full-text search on the generated `search_vector`
-        // column. `simple` config + prefix tokens (`amox:*`) gives us
-        // instant autocomplete across brand/generic/company.
-        q = q.textSearch("search_vector", tsq, { config: "simple" });
-      }
-
-      const { data, error } = await q;
+      // Hyphen/space-insensitive search via RPC (e.g. "afenac" matches "A-Fenac").
+      const { data, error } = await supabase.rpc("search_master_medicines", {
+        _query: debouncedSearch || "",
+        _companies: selectedCompanies.size ? Array.from(selectedCompanies) : null,
+        _limit: 500,
+      });
       if (cancelled || (window as any).__catalogReqId !== reqId) return;
       if (!error) setCatalog(data || []);
       setCatalogLoading(false);
