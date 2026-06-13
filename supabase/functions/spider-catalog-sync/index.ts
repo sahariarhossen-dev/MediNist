@@ -266,6 +266,27 @@ Deno.serve(async (req) => {
     await new Promise((r) => setTimeout(r, delayMs));
   }
 
+  // Auto-mode: advance progress tracker after each chunk.
+  if (auto && !dry) {
+    const newOffset = offset + rows.length;
+    const { data: prog } = await sb
+      .from("spider_sync_progress")
+      .select("matched_total, unmatched_total, total_rows")
+      .eq("id", 1)
+      .maybeSingle();
+    const totalRows = prog?.total_rows ?? 0;
+    await sb
+      .from("spider_sync_progress")
+      .update({
+        next_offset: newOffset,
+        matched_total: (prog?.matched_total ?? 0) + samples.length,
+        unmatched_total: (prog?.unmatched_total ?? 0) + unmatched.length,
+        last_run_at: new Date().toISOString(),
+        finished_at: newOffset >= totalRows ? new Date().toISOString() : null,
+      })
+      .eq("id", 1);
+  }
+
   return new Response(
     JSON.stringify(
       {
