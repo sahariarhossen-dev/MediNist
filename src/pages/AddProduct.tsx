@@ -332,8 +332,8 @@ const AddProduct = () => {
           </div>
         )}
 
-        {/* 3b. Strip & Pack Details — driven by data, not product type.
-            Leave both blank (or 1) for single-unit products. */}
+        {/* 3b. Strip & Pack Details — only for Tablet / Capsule. */}
+        {usesStripPack && (
         <div className="space-y-3">
             <Label className="text-sm font-medium text-foreground">Strip & Pack Details</Label>
             <p className="text-xs text-muted-foreground">
@@ -367,6 +367,7 @@ const AddProduct = () => {
               </p>
             )}
         </div>
+        )}
 
         {/* 4. Company Name */}
         <div className="space-y-2">
