@@ -58,7 +58,7 @@ const Notes = () => {
     (profile?.full_name?.trim().charAt(0) || user?.email?.charAt(0) || "U").toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-3xl mx-auto pb-32">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 w-full max-w-3xl mx-auto pb-32">
       <NotesMenu
         open={menuOpen}
         onOpenChange={setMenuOpen}
@@ -67,7 +67,7 @@ const Notes = () => {
       />
 
       {/* Header — Google Keep style */}
-      <header className="sticky top-0 z-20 bg-[#F4F6FB]/95 backdrop-blur px-3 pt-4 pb-3">
+      <header className="sticky top-0 z-20 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md px-3 pt-4 pb-3 border-b border-slate-100/60 dark:border-slate-800/40">
         <NoteSearchBar
           value={search}
           onChange={setSearch}

@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
 import type { MentionTriggerState } from "@/components/notes/blocks/BlockText";
@@ -144,23 +143,28 @@ const BlockChecklist = forwardRef<BlockChecklistHandle, BlockChecklistProps>(
   }));
 
   return (
-    <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2 mb-0 mt-0 pt-[8px] pb-[8px]">
+    <div className="space-y-1 mb-1">
       {items.map((it, i) => (
-        <div key={it.id ?? `idx-${i}`} className="flex items-center gap-2">
+        <div
+          key={it.id ?? `idx-${i}`}
+          className="group flex items-center gap-3 border-b border-slate-100 focus-within:border-indigo-500/50 py-2.5 transition-all duration-200"
+        >
           <Checkbox
             checked={it.checked}
             onCheckedChange={(v) => update(i, { checked: !!v })}
             disabled={readOnly}
+            className="rounded-[4px] border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 data-[state=checked]:text-white focus-visible:ring-indigo-500/30"
           />
           {readOnly ? (
             <span
-              className={`flex-1 text-sm ${it.checked ? "line-through text-gray-400" : "text-gray-800"}`}
+              className={`flex-1 text-sm ${it.checked ? "line-through text-slate-400" : "text-slate-800"}`}
             >
-              {it.text || <span className="text-gray-400">Empty item</span>}
+              {it.text || <span className="text-slate-300">Empty item</span>}
             </span>
           ) : (
-            <Input
+            <input
               ref={(el) => (inputsRef.current[i] = el)}
+              type="text"
               value={it.text}
               onChange={(e) => {
                 update(i, { text: e.target.value });
@@ -171,14 +175,14 @@ const BlockChecklist = forwardRef<BlockChecklistHandle, BlockChecklistProps>(
               onBlur={() => onMentionChange?.(null)}
               onKeyDown={(e) => handleKeyDown(e, i)}
               placeholder="List item"
-              className={`h-8 flex-1 ${it.checked ? "line-through text-gray-400" : ""}`}
+              className={`flex-1 bg-transparent border-0 outline-none focus:ring-0 text-sm text-slate-800 placeholder:text-slate-300 ${it.checked ? "line-through text-slate-400" : ""}`}
             />
           )}
           {!readOnly && (
             <button
               type="button"
               onClick={() => remove(i)}
-              className="p-1 text-gray-400 hover:text-red-500"
+              className="p-1 text-slate-300 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-rose-500 transition-opacity"
               aria-label="Remove item"
             >
               <X size={14} />
@@ -192,7 +196,7 @@ const BlockChecklist = forwardRef<BlockChecklistHandle, BlockChecklistProps>(
           variant="ghost"
           size="sm"
           onClick={add}
-          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-8"
+          className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50/60 h-8 mt-1 px-2"
         >
           <Plus size={14} className="mr-1" /> Add item
         </Button>
