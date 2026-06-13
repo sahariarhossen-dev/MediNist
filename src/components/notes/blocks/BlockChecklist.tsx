@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
+import type { MentionTriggerState } from "@/components/notes/blocks/BlockText";
 
 interface ChecklistItem {
   id?: string;
@@ -16,6 +17,14 @@ interface BlockChecklistProps {
   onChange?: (items: ChecklistItem[]) => void;
   /** Max additional characters permitted across all items. */
   maxRemaining?: number;
+  onMentionChange?: (
+    state: (MentionTriggerState & { itemIndex: number }) | null,
+  ) => void;
+  onItemFocus?: (itemIndex: number) => void;
+}
+
+export interface BlockChecklistHandle {
+  insertMention: (itemIndex: number, name: string) => void;
 }
 
 const newItemId = () =>
@@ -23,7 +32,8 @@ const newItemId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 
-const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockChecklistProps) => {
+const BlockChecklist = forwardRef<BlockChecklistHandle, BlockChecklistProps>(
+  ({ items, readOnly, onChange, maxRemaining, onMentionChange, onItemFocus }, ref) => {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const focusIndexRef = useRef<number | null>(null);
 
@@ -89,6 +99,50 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
     }
   };
 
+  const detectMention = (i: number) => {
+    if (!onMentionChange) return;
+    const input = inputsRef.current[i];
+    if (!input) return onMentionChange(null);
+    const caret = input.selectionStart ?? input.value.length;
+    const text = input.value;
+    let j = caret - 1;
+    while (j >= 0 && !/\s/.test(text[j]) && text[j] !== "@") j--;
+    if (j < 0 || text[j] !== "@") return onMentionChange(null);
+    if (j > 0 && !/\s/.test(text[j - 1])) return onMentionChange(null);
+    const query = text.slice(j + 1, caret);
+    if (query.length > 30) return onMentionChange(null);
+    const rect = input.getBoundingClientRect();
+    // approximate caret x using a measured char width
+    const charW = 7;
+    const left = rect.left + 8 + caret * charW;
+    onMentionChange({
+      query,
+      position: { top: rect.top, left: Math.min(left, rect.right) },
+      itemIndex: i,
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    insertMention: (itemIndex, name) => {
+      const input = inputsRef.current[itemIndex];
+      if (!input) return;
+      const text = input.value;
+      const caret = input.selectionStart ?? text.length;
+      let j = caret - 1;
+      while (j >= 0 && !/\s/.test(text[j]) && text[j] !== "@") j--;
+      if (j < 0 || text[j] !== "@") return;
+      const insert = `@${name} `;
+      const nextText = text.slice(0, j) + insert + text.slice(caret);
+      update(itemIndex, { text: nextText });
+      const newCaret = j + insert.length;
+      requestAnimationFrame(() => {
+        input.focus();
+        input.setSelectionRange(newCaret, newCaret);
+      });
+      onMentionChange?.(null);
+    },
+  }));
+
   return (
     <div className="space-y-1 bg-white/70 rounded-md border border-gray-200 px-2 py-2 mb-0 mt-0 pt-[8px] pb-[8px]">
       {items.map((it, i) => (
@@ -108,7 +162,13 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
             <Input
               ref={(el) => (inputsRef.current[i] = el)}
               value={it.text}
-              onChange={(e) => update(i, { text: e.target.value })}
+              onChange={(e) => {
+                update(i, { text: e.target.value });
+                requestAnimationFrame(() => detectMention(i));
+              }}
+              onKeyUp={() => detectMention(i)}
+              onFocus={() => onItemFocus?.(i)}
+              onBlur={() => onMentionChange?.(null)}
               onKeyDown={(e) => handleKeyDown(e, i)}
               placeholder="List item"
               className={`h-8 flex-1 ${it.checked ? "line-through text-gray-400" : ""}`}
@@ -139,6 +199,8 @@ const BlockChecklist = ({ items, readOnly, onChange, maxRemaining }: BlockCheckl
       )}
     </div>
   );
-};
+  },
+);
+BlockChecklist.displayName = "BlockChecklist";
 
 export default BlockChecklist;
