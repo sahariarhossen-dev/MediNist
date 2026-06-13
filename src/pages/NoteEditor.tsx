@@ -13,6 +13,7 @@ import {
 } from "@/hooks/useNotes";
 import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
 import { colorHex } from "@/components/notes/ColorPicker";
 import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/BlockText";
