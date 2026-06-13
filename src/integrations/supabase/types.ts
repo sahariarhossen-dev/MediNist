@@ -1505,6 +1505,12 @@ export type Database = {
           status: string
         }[]
       }
+      get_master_companies: {
+        Args: { _search?: string }
+        Returns: {
+          name: string
+        }[]
+      }
       get_my_pharmacy_public: {
         Args: never
         Returns: {
