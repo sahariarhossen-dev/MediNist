@@ -39,9 +39,50 @@ async function medexFetch(url: string): Promise<string | null> {
   }
 }
 
-function findFirstBrandUrl(searchHtml: string): string | null {
-  const m = searchHtml.match(/href="(https:\/\/medex\.com\.bd\/brands\/[^"]+)"/);
-  return m ? m[1].replace(/&amp;/g, "&") : null;
+function findBrandUrls(searchHtml: string): string[] {
+  const out: string[] = [];
+  const re = /href="(https:\/\/medex\.com\.bd\/brands\/\d+\/[^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(searchHtml)) !== null) {
+    out.push(m[1].replace(/&amp;/g, "&"));
+  }
+  return out;
+}
+
+const FORMAT_WORDS = new Set([
+  "tablet","capsule","syrup","suspension","injection","cream","ointment",
+  "gel","drops","drop","inhaler","inhalation","spray","solution","lotion",
+  "powder","sachet","vial","ampoule","suppository","lozenge","granules",
+  "liquid","mouthwash","shampoo","soap","wash","paste","oil","emulsion",
+  "bolus","pessary","film","patch","wafer","mdi","mdpi","dpi","nebuliser",
+  "nebulizer","eye","ear","nasal","oral","iv","im","sc","pfs",
+]);
+
+function brandCoreToken(name: string): string {
+  const cleaned = name
+    .toLowerCase()
+    .split(/[\s/]+/)
+    .filter((t) => t && !FORMAT_WORDS.has(t.replace(/[^a-z]/g, "")))
+    .join("");
+  return cleaned.replace(/[^a-z0-9]/g, "");
+}
+
+function slugCore(brandUrl: string): string {
+  const slug = brandUrl.split("/").pop() ?? "";
+  return slug.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function pickMatchingBrandUrl(
+  searchHtml: string,
+  brandName: string,
+): string | null {
+  const core = brandCoreToken(brandName);
+  if (!core) return null;
+  const urls = findBrandUrls(searchHtml);
+  for (const u of urls) {
+    if (slugCore(u).startsWith(core)) return u;
+  }
+  return null;
 }
 
 interface Parsed {
@@ -110,11 +151,11 @@ async function processOne(row: {
   const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(q)}`;
   let searchHtml = await medexFetch(searchUrl);
   if (!searchHtml) return { row, error: "search_failed" as const };
-  let brandUrl = findFirstBrandUrl(searchHtml);
+  let brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name);
   if (!brandUrl && row.strength) {
     const fbUrl = `https://medex.com.bd/search?search=${encodeURIComponent(row.brand_name)}`;
     searchHtml = await medexFetch(fbUrl);
-    if (searchHtml) brandUrl = findFirstBrandUrl(searchHtml);
+    if (searchHtml) brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name);
   }
   if (!brandUrl) return { row, error: "no_search_results" as const };
   const brandHtml = await medexFetch(brandUrl);
