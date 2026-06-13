@@ -7,21 +7,26 @@ import {
   useCreateNote,
   useUpdateNote,
   useDeleteNote,
+  usePharmacyMembers,
   type Note,
   type NoteBlock,
   type NoteColor,
+  type PharmacyMember,
 } from "@/hooks/useNotes";
 import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
 import { colorHex } from "@/components/notes/ColorPicker";
-import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/BlockText";
-import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
+import BlockText, { type BlockTextHandle, type MentionTriggerState } from "@/components/notes/blocks/BlockText";
+import BlockChecklist, { type BlockChecklistHandle } from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
 import NoteKeyboardToolbar from "@/components/notes/NoteKeyboardToolbar";
 import AIActionSheet, { type AIAction } from "@/components/notes/AIActionSheet";
 import AIProgressPill from "@/components/notes/AIProgressPill";
+import MentionPopover, { filterMembers } from "@/components/notes/MentionPopover";
+import ReminderDrawer from "@/components/notes/ReminderDrawer";
+import ReminderBadge from "@/components/notes/ReminderBadge";
 import { cn } from "@/lib/utils";
 
 const MAX_CHARS = 2000;
@@ -41,6 +46,8 @@ interface DraftState {
   contact_numbers: string[];
   tags: string[];
   is_pinned: boolean;
+  /** ISO timestamp; persisted in a future migration. */
+  reminder_at: string | null;
 }
 
 const makeEmpty = (): DraftState => ({
@@ -51,6 +58,7 @@ const makeEmpty = (): DraftState => ({
   contact_numbers: [],
   tags: [],
   is_pinned: false,
+  reminder_at: null,
 });
 
 const NoteEditor = () => {
@@ -70,6 +78,18 @@ const NoteEditor = () => {
   const [scanningBlockId, setScanningBlockId] = useState<string | null>(null);
   const [aiSheetOpen, setAiSheetOpen] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+
+  // ---- mention state ----
+  const { data: members = [] } = usePharmacyMembers();
+  type MentionCtx =
+    | { kind: "text"; blockId: string }
+    | { kind: "checklist"; blockId: string; itemIndex: number };
+  const [mention, setMention] = useState<
+    (MentionTriggerState & { ctx: MentionCtx }) | null
+  >(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const checklistRefs = useRef<Map<string, BlockChecklistHandle>>(new Map());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
   // Map of text-block id -> handle, so we can focus any text block by id
@@ -101,6 +121,8 @@ const NoteEditor = () => {
         contact_numbers: existing.contact_numbers ?? [],
         tags: existing.tags ?? [],
         is_pinned: existing.is_pinned,
+        reminder_at:
+          (existing as unknown as { reminder_at?: string | null })?.reminder_at ?? null,
       });
     }
   }, [existing]);
@@ -198,8 +220,59 @@ const NoteEditor = () => {
         categories: images.map((i) => i.category ?? "photo"),
         ocr_text: null,
       },
+      // TODO(phase-4): include `reminder_at` once the column lands.
     };
   };
+
+  // ---- mention helpers ----
+  const filteredMembers = useMemo(
+    () => (mention ? filterMembers(members, mention.query) : []),
+    [members, mention],
+  );
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mention?.query, mention?.ctx]);
+
+  const handlePickMention = useCallback(
+    (m: PharmacyMember) => {
+      if (!mention) return;
+      const name = m.full_name ?? "Unnamed";
+      if (mention.ctx.kind === "text") {
+        const handle = blockRefs.current.get(mention.ctx.blockId);
+        handle?.insertMention({ user_id: m.user_id, name });
+      } else {
+        const handle = checklistRefs.current.get(mention.ctx.blockId);
+        handle?.insertMention(mention.ctx.itemIndex, name);
+      }
+      setMention(null);
+    },
+    [mention],
+  );
+
+  // Global keyboard handler while popover is open
+  useEffect(() => {
+    if (!mention) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (filteredMembers.length === 0 && e.key !== "Escape") return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % Math.max(1, filteredMembers.length));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + filteredMembers.length) % filteredMembers.length);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const pick = filteredMembers[mentionIndex];
+        if (pick) handlePickMention(pick);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setMention(null);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [mention, mentionIndex, filteredMembers, handlePickMention]);
 
   // ---- character counter ----
   const totalChars = useMemo(() => {
@@ -696,6 +769,13 @@ const NoteEditor = () => {
           className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-2"
         />
 
+        {draft.reminder_at && (
+          <ReminderBadge
+            iso={draft.reminder_at}
+            onClear={() => setDraft((d) => ({ ...d, reminder_at: null }))}
+          />
+        )}
+
         {/* Document flow — every block (text, image, checklist) sits in
             a single ordered column with a tight 4 px gap. */}
         {draft.content.map((block, idx) => (
@@ -711,14 +791,34 @@ const NoteEditor = () => {
                 placeholder={idx === 0 ? "Note" : ""}
                 maxRemaining={remaining}
                 onChange={(html) => updateBlock(block.id, { html })}
+                onMentionChange={(s) =>
+                  setMention(
+                    s ? { ...s, ctx: { kind: "text", blockId: block.id } } : null,
+                  )
+                }
               />
             )}
             {block.type === "checklist" && (
               <BlockChecklist
+                ref={(h) => {
+                  if (h) checklistRefs.current.set(block.id, h);
+                  else checklistRefs.current.delete(block.id);
+                }}
                 items={block.items}
                 readOnly={readOnly}
                 maxRemaining={remaining}
                 onChange={(items) => updateBlock(block.id, { items })}
+                onMentionChange={(s) =>
+                  setMention(
+                    s
+                      ? {
+                          query: s.query,
+                          position: s.position,
+                          ctx: { kind: "checklist", blockId: block.id, itemIndex: s.itemIndex },
+                        }
+                      : null,
+                  )
+                }
               />
             )}
             {block.type === "image" && (
@@ -776,11 +876,38 @@ const NoteEditor = () => {
           exec={exec}
           canDelete={!!noteId}
           onOpenAI={() => setAiSheetOpen(true)}
+          onOpenReminder={() => setReminderOpen(true)}
         />
       )}
 
       <AIActionSheet open={aiSheetOpen} onOpenChange={setAiSheetOpen} onAction={handleAIAction} />
       <AIProgressPill show={aiProcessing} />
+
+      <ReminderDrawer
+        open={reminderOpen}
+        onOpenChange={setReminderOpen}
+        currentIso={draft.reminder_at}
+        onSave={(iso) => {
+          setDraft((d) => ({ ...d, reminder_at: iso }));
+          setReminderOpen(false);
+          toast.success("Reminder set");
+        }}
+        onClear={() => {
+          setDraft((d) => ({ ...d, reminder_at: null }));
+          setReminderOpen(false);
+          toast.success("Reminder cleared");
+        }}
+      />
+
+      <MentionPopover
+        query={mention?.query ?? ""}
+        members={members}
+        position={mention?.position ?? null}
+        activeIndex={mentionIndex}
+        onActiveChange={setMentionIndex}
+        onPick={handlePickMention}
+        onClose={() => setMention(null)}
+      />
     </div>
   );
 };
