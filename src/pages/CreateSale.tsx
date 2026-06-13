@@ -654,15 +654,15 @@ const CreateSale = () => {
                     </div>
 
                     {/* Row 2: [Trash | STK | calc/discount] .......... [Qty stepper] */}
-                    <div className="flex flex-row justify-between items-center w-full mt-2 gap-2">
-                      <div className="flex items-center gap-x-1.5 gap-y-1 min-w-0 flex-1 flex-wrap">
+                    <div className="flex flex-row justify-between items-center w-full mt-2 gap-2 flex-nowrap">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-nowrap overflow-hidden">
                         <button
                           onClick={() => removeFromCart(item.medicine.id)}
                           className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono text-secondary-foreground break-all">
+                        <span className="text-[10px] font-mono text-secondary-foreground whitespace-nowrap truncate min-w-0">
                           {(() => {
                             const total = item.medicine.stock_quantity ?? 0;
                             if (looksSingleUnit(item.medicine)) return `stk ${total}`;
@@ -692,7 +692,7 @@ const CreateSale = () => {
 
                         {/* Retail: show calculation */}
                         {!isWholesale && (
-                          <span className="text-[10px] font-semibold text-emerald-700 break-all">
+                          <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap truncate min-w-0">
                             {pieces}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
                           </span>
                         )}
