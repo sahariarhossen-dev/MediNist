@@ -653,16 +653,16 @@ const CreateSale = () => {
                       )}
                     </div>
 
-                    {/* Row 2: Trash | STK | Discount% (wholesale) | Qty controller */}
-                    <div className="flex items-center gap-1.5 mt-2 flex-nowrap">
-                      <div className="flex items-center gap-1 min-w-0 flex-shrink-0">
+                    {/* Row 2: [Trash | STK | calc/discount] .......... [Qty stepper] */}
+                    <div className="flex flex-row justify-between items-center w-full mt-2 gap-2">
+                      <div className="flex items-center gap-x-1.5 gap-y-1 min-w-0 flex-1 flex-wrap">
                         <button
                           onClick={() => removeFromCart(item.medicine.id)}
                           className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">
+                        <span className="text-[10px] font-mono text-secondary-foreground break-all">
                           {(() => {
                             const total = item.medicine.stock_quantity ?? 0;
                             if (looksSingleUnit(item.medicine)) return `stk ${total}`;
@@ -674,29 +674,29 @@ const CreateSale = () => {
                             return `stk ${tri} / ${total}`;
                           })()}
                         </span>
+
+                        {/* Wholesale: item discount input */}
+                        {isWholesale && (
+                          <div className="flex items-center border border-blue-300 rounded-lg overflow-hidden flex-shrink-0">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={item.discountPercent}
+                              onChange={(e) => updateItemDiscount(item.medicine.id, parseFloat(e.target.value) || 0)}
+                              className="w-10 text-xs text-center font-bold text-blue-700 outline-none bg-blue-50 py-1.5 appearance-none"
+                            />
+                            <span className="px-1.5 text-xs font-bold text-blue-600 bg-blue-50 border-l border-blue-300">%</span>
+                          </div>
+                        )}
+
+                        {/* Retail: show calculation */}
+                        {!isWholesale && (
+                          <span className="text-[10px] font-semibold text-emerald-700 break-all">
+                            {pieces}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
+                          </span>
+                        )}
                       </div>
-
-                      {/* Wholesale: item discount input */}
-                      {isWholesale && (
-                        <div className="flex items-center border border-blue-300 rounded-lg overflow-hidden flex-shrink-0">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={item.discountPercent}
-                            onChange={(e) => updateItemDiscount(item.medicine.id, parseFloat(e.target.value) || 0)}
-                            className="w-10 text-xs text-center font-bold text-blue-700 outline-none bg-blue-50 py-1.5 appearance-none"
-                          />
-                          <span className="px-1.5 text-xs font-bold text-blue-600 bg-blue-50 border-l border-blue-300">%</span>
-                        </div>
-                      )}
-
-                      {/* Retail: show calculation */}
-                      {!isWholesale && (
-                        <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0 ml-auto">
-                          {pieces}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
-                        </span>
-                      )}
 
                       <div className="flex items-center border-gray-900 rounded-xl overflow-hidden flex-shrink-0 border-solid border">
                         <button
