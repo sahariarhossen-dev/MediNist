@@ -17,7 +17,6 @@ import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
-import { colorHex } from "@/components/notes/ColorPicker";
 import BlockText, { type BlockTextHandle, type MentionTriggerState } from "@/components/notes/blocks/BlockText";
 import BlockChecklist, { type BlockChecklistHandle } from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
@@ -715,29 +714,25 @@ const NoteEditor = () => {
   };
 
   return (
-    <div
-      className={cn("min-h-screen w-full max-w-3xl mx-auto")}
-      style={{ backgroundColor: colorHex(draft.color) }}
-    >
-      {/* Top bar */}
+    <div className={cn("min-h-screen w-full bg-white")}>
+      {/* Top bar — glassmorphic */}
       <header
-        className="sticky top-0 z-20 backdrop-blur border-b border-gray-100 px-3 py-2 flex items-center gap-2"
-        style={{ backgroundColor: `${colorHex(draft.color)}cc` }}
+        className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100/80 px-3 py-2.5 flex items-center gap-2"
       >
         <button
           type="button"
           onClick={handleBack}
           aria-label="Back"
-          className="p-2 rounded-full hover:bg-gray-100"
+          className="p-2 rounded-full hover:bg-slate-100 text-slate-600"
         >
-          <ArrowLeft size={20} className="text-gray-700" />
+          <ArrowLeft size={20} />
         </button>
         {/* Silent background sync — no status text */}
         <div className="flex-1" />
         {readOnly && (
-          <span className="text-xs text-gray-500">Read only</span>
+          <span className="text-xs text-slate-500">Read only</span>
         )}
-        {uploading && <Loader2 size={16} className="animate-spin text-gray-400" />}
+        {uploading && <Loader2 size={16} className="animate-spin text-slate-400" />}
       </header>
 
       <input
@@ -750,9 +745,10 @@ const NoteEditor = () => {
       />
 
       <KeyboardAvoidingScroll
-        className="min-h-screen overflow-y-auto px-4 pt-4 flex flex-col gap-1"
+        className="min-h-screen overflow-y-auto"
         bottomPadding={120}
       >
+        <div className="max-w-2xl mx-auto px-4 pt-6 pb-32 flex flex-col gap-1">
         {/* Title */}
         <input
           type="text"
@@ -766,7 +762,7 @@ const NoteEditor = () => {
           }}
           placeholder="Title"
           readOnly={readOnly}
-          className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-2"
+          className="w-full text-2xl font-bold tracking-tight bg-transparent border-none outline-none focus:ring-0 placeholder:text-slate-300 text-slate-900 px-0 pb-4"
         />
 
         {draft.reminder_at && (
@@ -846,22 +842,28 @@ const NoteEditor = () => {
           </div>
         ))}
 
-        {/* Safe-zone counter sits after content, before the infinite spacer. */}
-        {!readOnly && (
-          <div className="pointer-events-none flex justify-end pt-2">
-            <span
-              className={cn(
-                "text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-white/60 backdrop-blur-sm",
-                totalChars >= NEAR_LIMIT ? "text-red-500" : "text-gray-400",
-              )}
-            >
-              {totalChars}/{MAX_CHARS}
-            </span>
-          </div>
-        )}
-
         <div aria-hidden="true" className="h-[50vh] shrink-0" />
+        </div>
       </KeyboardAvoidingScroll>
+
+      {/* Floating character counter — fixed above the keyboard toolbar */}
+      {!readOnly && (
+        <div
+          aria-live="polite"
+          className="fixed right-4 bottom-[88px] z-30 pointer-events-none"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <span
+            className={cn(
+              "text-[10px] font-mono font-medium tracking-wider",
+              "bg-slate-50/80 backdrop-blur px-2 py-0.5 rounded-md border border-slate-100",
+              totalChars >= NEAR_LIMIT ? "text-rose-500" : "text-slate-400",
+            )}
+          >
+            {totalChars}/{MAX_CHARS}
+          </span>
+        </div>
+      )}
 
       {!readOnly && (
         <NoteKeyboardToolbar

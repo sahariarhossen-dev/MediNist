@@ -2,26 +2,33 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteColor } from "@/hooks/useNotes";
 
-// Theme-based subtle shades — soft, professional, easy on the eyes.
-// We map each NoteColor key to an explicit hex so the palette stays
-// consistent regardless of Tailwind's default scale.
+// Premium adaptive tints — crisp white base with ultra-subtle 5-10% color washes.
+// Used as Tailwind classes (so dark-mode variants Just Work) on note cards and
+// the editor canvas. The legacy `colorHex` helper now returns a near-white
+// swatch for the picker chips only — no longer used for card backgrounds.
 export const NOTE_COLORS: {
   key: NoteColor;
-  hex: string;
+  hex: string; // swatch color for the picker UI only
+  tint: string; // Tailwind classes applied to cards / editor surface
   ring: string;
   label: string;
 }[] = [
-  { key: "default", hex: "#ffffff", ring: "ring-gray-300", label: "Default" },
-  { key: "green", hex: "#e8f5e9", ring: "ring-emerald-300", label: "Soft Mint" },
-  { key: "blue", hex: "#e3f2fd", ring: "ring-sky-300", label: "Pale Blue" },
-  { key: "purple", hex: "#f3e5f5", ring: "ring-violet-300", label: "Lavender" },
-  { key: "yellow", hex: "#fff8e1", ring: "ring-amber-300", label: "Light Sand" },
-  { key: "pink", hex: "#fce4ec", ring: "ring-pink-300", label: "Blush" },
-  { key: "red", hex: "#ffebee", ring: "ring-red-300", label: "Soft Coral" },
+  { key: "default", hex: "#ffffff", tint: "bg-white dark:bg-slate-900", ring: "ring-slate-300", label: "Default" },
+  { key: "green",   hex: "#ecfdf5", tint: "bg-emerald-50/40 dark:bg-emerald-950/20", ring: "ring-emerald-300", label: "Mint" },
+  { key: "blue",    hex: "#eef2ff", tint: "bg-indigo-50/40 dark:bg-indigo-950/20",  ring: "ring-indigo-300", label: "Indigo" },
+  { key: "purple",  hex: "#faf5ff", tint: "bg-purple-50/40 dark:bg-purple-950/20",  ring: "ring-purple-300", label: "Lavender" },
+  { key: "yellow",  hex: "#fffbeb", tint: "bg-amber-50/40 dark:bg-amber-950/20",    ring: "ring-amber-300",  label: "Sand" },
+  { key: "pink",    hex: "#fff1f2", tint: "bg-rose-50/40 dark:bg-rose-950/20",      ring: "ring-rose-300",   label: "Blush" },
+  { key: "red",     hex: "#fff1f2", tint: "bg-rose-50/40 dark:bg-rose-950/20",      ring: "ring-rose-300",   label: "Coral" },
 ];
 
 export function colorHex(color: NoteColor): string {
   return NOTE_COLORS.find((c) => c.key === color)?.hex ?? "#ffffff";
+}
+
+/** Returns the Tailwind classes for the premium tinted surface. */
+export function colorClasses(color: NoteColor): string {
+  return NOTE_COLORS.find((c) => c.key === color)?.tint ?? "bg-white dark:bg-slate-900";
 }
 
 /** @deprecated kept for backwards compatibility — returns empty string. */
