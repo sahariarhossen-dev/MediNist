@@ -1,34 +1,34 @@
-# Remove "Sell as" toggle from Sales / Billing
+## Restore tri-unit + total pieces stock label on cart card
 
-Drop the per-item Box / Strip / Pcs toggle on the cart card in `src/pages/CreateSale.tsx`. Quantities entered with `+ / − / input` will represent individual pieces directly, so prices and totals are computed at the piece level with no unit conversion.
+Single, surgical edit in `src/pages/CreateSale.tsx` at line 665 — the stock `<span>` in the cart item's "Row 2" beside the trash icon.
 
-## Scope
+### Change
 
-Single file: `src/pages/CreateSale.tsx`. No DB or other component changes — the `sales_items.quantity` column already stores pieces (we already write `getItemPieces(c)` on checkout).
+Update the label to show both the B:S:P breakdown and the total pieces, separated by `/`:
 
-## Changes
+- Multi-unit product (Tablet/Capsule with strip/box): `stk 1:2:5 / 55`
+- Single-unit product (Syrup, Drop, Cream, etc., where B:S:P is meaningless): keep `stk 55` (no slash, no zero-zero noise).
 
-1. **Remove unit concept from `CartItem`**
-   - Drop the `unit: SaleUnit` field from the `CartItem` type.
-   - Delete `SaleUnit`, `getAvailableUnits`, `getDefaultUnit`, `piecesPerUnit`, and `updateItemUnit`.
-   - Simplify `getItemPieces(item) → item.quantity`. (Inline it or keep the helper as a one-liner so callers don't change.)
-   - All `addToCart` / prescription-add paths stop setting `unit`.
+### Implementation
 
-2. **Remove the toggle UI** (lines ~755–778)
-   - Delete the entire `{showUnitPicker && …}` "Sell as" block.
-   - Remove `availableUnits`, `showUnitPicker`, and the `unitLabel` map inside the cart `.map`.
+Replace the current ternary with:
 
-3. **Clean up collapsed-card and expanded-card text**
-   - Collapsed row: replace `{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}` with plain `{item.quantity}` (no unit suffix). Same for the wholesale variant.
-   - Expanded row calculation already uses `pieces` — unchanged once `getItemPieces` returns `quantity`.
+```tsx
+{(() => {
+  const total = item.medicine.stock_quantity ?? 0;
+  if (looksSingleUnit(item.medicine)) return `stk ${total}`;
+  const tri = totalPiecesToTriUnit(
+    total,
+    item.medicine.strip_per_pack,
+    item.medicine.pcs_per_strip,
+  );
+  return `stk ${tri} / ${total}`;
+})()}
+```
 
-4. **Layout polish after toggle removal**
-   - Add a touch more vertical breathing room to the expanded card (e.g. `space-y-2.5` wrapper or `mt-3` on the wholesale calc strip) so the card doesn't feel top-heavy now that the third row is gone.
-   - No other visual changes.
+`totalPiecesToTriUnit` already returns the `B : S : P` string from `src/lib/stockUtils.ts`, so no new helper is needed. The format string lands as `stk 1 : 2 : 5 / 55` (with the existing spaced colons that match the rest of the app).
 
-## Acceptance
+### Out of scope
 
-- No "Box / Strip / Pcs" buttons appear on any cart card, including multi-unit products (tablets/capsules with strip+box packaging).
-- `+`, `−`, and the quantity input change pieces directly; line total = `quantity × MRP` (minus discount in wholesale).
-- Checkout still writes `quantity` (= pieces) into `sales_items` and decrements `stock_quantity` by the same amount.
-- Expanded card looks balanced with the toggle row gone — no awkward empty gap.
+- No changes to calculation logic, types, or other components.
+- The Box/Pcs toggle removal stays as-is.

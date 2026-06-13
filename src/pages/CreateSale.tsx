@@ -662,7 +662,18 @@ const CreateSale = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </button>
-                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">stk {looksSingleUnit(item.medicine) ? `${item.medicine.stock_quantity ?? 0}` : totalPiecesToTriUnit(item.medicine.stock_quantity ?? 0, item.medicine.strip_per_pack, item.medicine.pcs_per_strip)}</span>
+                        <span className="text-[10px] font-mono whitespace-nowrap text-secondary-foreground">
+                          {(() => {
+                            const total = item.medicine.stock_quantity ?? 0;
+                            if (looksSingleUnit(item.medicine)) return `stk ${total}`;
+                            const tri = totalPiecesToTriUnit(
+                              total,
+                              item.medicine.strip_per_pack,
+                              item.medicine.pcs_per_strip,
+                            );
+                            return `stk ${tri} / ${total}`;
+                          })()}
+                        </span>
                       </div>
 
                       {/* Wholesale: item discount input */}
