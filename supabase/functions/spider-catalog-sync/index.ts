@@ -9,38 +9,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-const SPIDER_KEY = Deno.env.get("SPIDER_API_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-async function spiderFetch(url: string): Promise<string | null> {
-  // Spider.cloud /crawl with smart mode, return raw HTML for a single URL.
-  const res = await fetch("https://api.spider.cloud/crawl", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${SPIDER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      limit: 1,
-      return_format: "html",
-      request: "http",
-      depth: 0,
-    }),
-  });
-  if (!res.ok) {
-    console.error("spider error", res.status, await res.text());
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+async function medexFetch(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": UA,
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (!res.ok) {
+      console.error("medex http", res.status, url);
+      await res.body?.cancel();
+      return null;
+    }
+    return await res.text();
+  } catch (e) {
+    console.error("medex fetch error", url, String(e));
     return null;
   }
-  const data = await res.json();
-  // /crawl returns an array of {url, content, ...}
-  if (Array.isArray(data) && data[0]?.content) return data[0].content as string;
-  if (typeof data?.content === "string") return data.content;
-  return null;
 }
 
 function findFirstBrandUrl(searchHtml: string): string | null {
@@ -112,18 +108,17 @@ async function processOne(row: {
     ? `${row.brand_name} ${row.strength}`
     : row.brand_name;
   const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(q)}`;
-  let searchHtml = await spiderFetch(searchUrl);
-  if (!searchHtml) return { row, error: "spider_search_failed" as const };
+  let searchHtml = await medexFetch(searchUrl);
+  if (!searchHtml) return { row, error: "search_failed" as const };
   let brandUrl = findFirstBrandUrl(searchHtml);
   if (!brandUrl && row.strength) {
-    // Fallback: brand-only search
     const fbUrl = `https://medex.com.bd/search?search=${encodeURIComponent(row.brand_name)}`;
-    searchHtml = await spiderFetch(fbUrl);
+    searchHtml = await medexFetch(fbUrl);
     if (searchHtml) brandUrl = findFirstBrandUrl(searchHtml);
   }
   if (!brandUrl) return { row, error: "no_search_results" as const };
-  const brandHtml = await spiderFetch(brandUrl);
-  if (!brandHtml) return { row, error: "spider_brand_failed" as const };
+  const brandHtml = await medexFetch(brandUrl);
+  if (!brandHtml) return { row, error: "brand_failed" as const };
   const parsed = parseBrandPage(brandHtml);
   return { row, brandUrl, parsed };
 }
@@ -202,8 +197,8 @@ Deno.serve(async (req) => {
         .select("id");
       updatedMedicines += medRows?.length ?? 0;
     }
-    // 1 req/sec polite delay
-    await new Promise((r) => setTimeout(r, 1100));
+    // 2.5s polite delay to avoid MedEx rate-limiting
+    await new Promise((r) => setTimeout(r, 2500));
   }
 
   return new Response(
