@@ -19,6 +19,8 @@ import BlockText, { type BlockTextHandle } from "@/components/notes/blocks/Block
 import BlockChecklist from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
 import NoteKeyboardToolbar from "@/components/notes/NoteKeyboardToolbar";
+import AIActionSheet, { type AIAction } from "@/components/notes/AIActionSheet";
+import AIProgressPill from "@/components/notes/AIProgressPill";
 import { cn } from "@/lib/utils";
 
 const MAX_CHARS = 2000;
@@ -64,6 +66,9 @@ const NoteEditor = () => {
   const [draft, setDraft] = useState<DraftState>(makeEmpty);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [scanningBlockId, setScanningBlockId] = useState<string | null>(null);
+  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+  const [aiProcessing, setAiProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileCategoryRef = useRef<"invoice" | "prescription" | "photo">("photo");
   // Map of text-block id -> handle, so we can focus any text block by id
@@ -136,6 +141,31 @@ const NoteEditor = () => {
       ],
     }));
     focusBlockIdRef.current = trailingTextId;
+  };
+
+  /** Insert a block immediately after the given block id, plus a trailing
+   *  empty text block to keep the cursor flow consistent. */
+  const insertBlockAfter = (afterId: string, block: NoteBlock) => {
+    const trailingTextId = newId();
+    setDraft((d) => {
+      const idx = d.content.findIndex((b) => b.id === afterId);
+      if (idx === -1) {
+        return {
+          ...d,
+          content: [...d.content, block, { id: trailingTextId, type: "text", html: "" }],
+        };
+      }
+      const next = [...d.content];
+      next.splice(idx + 1, 0, block, { id: trailingTextId, type: "text", html: "" });
+      return { ...d, content: next };
+    });
+    focusBlockIdRef.current = trailingTextId;
+  };
+
+  const estimateBlockChars = (block: NoteBlock): number => {
+    if (block.type === "text") return block.html.replace(/<[^>]*>/g, "").length;
+    if (block.type === "checklist") return block.items.reduce((s, it) => s + it.text.length, 0);
+    return 0;
   };
 
   // After render, focus the queued text block (set by addBlockWithCursor).
@@ -343,6 +373,193 @@ const NoteEditor = () => {
     });
   };
 
+  // ---- AI OCR (mock) ----
+  const handleScanImage = async (
+    block: Extract<NoteBlock, { type: "image" }>,
+  ) => {
+    if (scanningBlockId) return;
+    setScanningBlockId(block.id);
+    await new Promise((r) => setTimeout(r, 2000));
+
+    let newBlock: NoteBlock;
+    let extractedCount = 0;
+    if (block.category === "invoice") {
+      newBlock = {
+        id: newId(),
+        type: "text",
+        html:
+          '<p><strong>Supplier:</strong> ACME Pharma Ltd.</p>' +
+          '<p><strong>Invoice #:</strong> INV-2026-00481 · <strong>Date:</strong> 13 Jun 2026</p>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:6px 0">' +
+          '<thead><tr><th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px">Item</th><th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px">Qty</th><th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px">Amount</th></tr></thead>' +
+          '<tbody>' +
+          '<tr><td style="padding:4px">Napa Extend 650mg</td><td style="text-align:right;padding:4px">2</td><td style="text-align:right;padding:4px">৳ 240</td></tr>' +
+          '<tr><td style="padding:4px">Sergel 20mg</td><td style="text-align:right;padding:4px">5</td><td style="text-align:right;padding:4px">৳ 600</td></tr>' +
+          '<tr><td style="padding:4px">Seclo 20mg</td><td style="text-align:right;padding:4px">3</td><td style="text-align:right;padding:4px">৳ 400</td></tr>' +
+          '</tbody></table>' +
+          '<p><strong>Total:</strong> ৳ 1,240</p>',
+      };
+      extractedCount = 3;
+    } else {
+      const items = [
+        { id: newId(), text: "Napa Extend 665mg — 2 Boxes", checked: false },
+        { id: newId(), text: "Sergel 20mg — 1 Strip", checked: false },
+        { id: newId(), text: "Monas 10mg — 1 Box", checked: false },
+        { id: newId(), text: "Seclo 20mg — 2 Strips", checked: false },
+      ];
+      newBlock = { id: newId(), type: "checklist", items };
+      extractedCount = items.length;
+    }
+
+    const cost = estimateBlockChars(newBlock);
+    if (cost > remaining) {
+      setScanningBlockId(null);
+      toast.warning("Not enough space — approaching 2000 character limit");
+      return;
+    }
+
+    insertBlockAfter(block.id, newBlock);
+    setScanningBlockId(null);
+    toast.success(`MediNist AI extracted ${extractedCount} item${extractedCount > 1 ? "s" : ""}`);
+  };
+
+  // ---- AI Text Assistant (mock) ----
+  const stripHtml = (h: string) => h.replace(/<[^>]*>/g, "").trim();
+
+  const banglaDict: Array<[RegExp, string]> = [
+    [/রফিক ভাই/g, "Rofik Bhai"],
+    [/ভাই/g, "Bhai"],
+    [/সকালে/g, "in the morning"],
+    [/কালকে/g, "tomorrow"],
+    [/এসে/g, "will come and"],
+    [/দেবে/g, "pay"],
+    [/দিবে/g, "will give"],
+    [/নিবে/g, "will take"],
+    [/আনবে/g, "will bring"],
+    [/নিছে/g, "took"],
+    [/টাকা দেয় নাই/g, "has not paid"],
+    [/টাকা/g, "money"],
+    [/নাপা/g, "Napa"],
+    [/সার্জেল/g, "Sergel"],
+    [/পিস/g, "pcs"],
+    [/বক্স/g, "box"],
+    [/স্ট্রিপ/g, "strip"],
+  ];
+
+  const banglaDigits = (s: string) =>
+    s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
+
+  const translateBangla = (text: string) =>
+    text
+      .split("\n")
+      .map((line) => {
+        let out = banglaDigits(line);
+        let touched = false;
+        for (const [re, rep] of banglaDict) {
+          if (re.test(out)) {
+            touched = true;
+            out = out.replace(re, rep);
+          }
+        }
+        return touched || !/[\u0980-\u09FF]/.test(line) ? out : `[EN] ${line}`;
+      })
+      .join("\n");
+
+  const handleAIAction = async (action: AIAction) => {
+    setAiSheetOpen(false);
+    const latest = draftRef.current;
+    const firstTextIdx = latest.content.findIndex((b) => b.type === "text");
+    const allText = latest.content
+      .filter((b): b is Extract<NoteBlock, { type: "text" }> => b.type === "text")
+      .map((b) => stripHtml(b.html))
+      .filter(Boolean)
+      .join("\n");
+
+    if (!allText) {
+      toast.info("Add some text first for the AI to work on");
+      return;
+    }
+
+    setAiProcessing(true);
+    await new Promise((r) => setTimeout(r, 1400));
+
+    if (action === "smart_clean") {
+      const isBanglaShopNote =
+        /[\u0980-\u09FF]/.test(allText) || /rofik|napa|taka/i.test(allText);
+      const html = isBanglaShopNote
+        ? '<p><strong>Customer:</strong> Rofik Bhai</p>' +
+          '<p><strong>Medicine:</strong> Napa - 10 Pcs</p>' +
+          '<p><strong>Status:</strong> ❌ Unpaid (Will pay tomorrow)</p>'
+        : (() => {
+            const lines = allText.split("\n").filter(Boolean);
+            const summary = lines[0] ?? "";
+            const details = lines.slice(1).join(" · ");
+            return (
+              `<p><strong>Summary:</strong> ${summary}</p>` +
+              (details ? `<p><strong>Details:</strong> ${details}</p>` : "") +
+              `<p><strong>Status:</strong> ✅ Logged</p>`
+            );
+          })();
+      replaceFirstTextBlock(firstTextIdx, html);
+    } else if (action === "translate_en") {
+      const translated = translateBangla(allText);
+      const html = translated
+        .split("\n")
+        .map((l) => `<p>${l || "<br>"}</p>`)
+        .join("");
+      replaceFirstTextBlock(firstTextIdx, html);
+    } else if (action === "extract_actions") {
+      const verbRe = /\b(call|order|pay|deliver|check|follow up|buy|send|return)\b|নিবে|দিবে|আনবে|দেবে/i;
+      const sentences = allText
+        .split(/[\n.।!?]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && verbRe.test(s));
+      const items =
+        sentences.length > 0
+          ? sentences.slice(0, 8).map((s) => ({ id: newId(), text: s, checked: false }))
+          : [
+              { id: newId(), text: "Follow up with customer", checked: false },
+              { id: newId(), text: "Check stock for pending order", checked: false },
+            ];
+      const block: NoteBlock = { id: newId(), type: "checklist", items };
+      const cost = estimateBlockChars(block);
+      if (cost > remaining) {
+        setAiProcessing(false);
+        toast.warning("Approaching 2000 character limit");
+        return;
+      }
+      const lastTextId = [...latest.content].reverse().find((b) => b.type === "text")?.id;
+      if (lastTextId) insertBlockAfter(lastTextId, block);
+      else addBlockWithCursor(block);
+    }
+
+    setAiProcessing(false);
+    toast.success("Note optimized by MediNist AI");
+  };
+
+  const replaceFirstTextBlock = (idx: number, html: string) => {
+    setDraft((d) => {
+      const next = [...d.content];
+      if (idx === -1) {
+        next.unshift({ id: newId(), type: "text", html });
+      } else {
+        const existing = next[idx];
+        if (existing.type === "text") next[idx] = { ...existing, html };
+      }
+      // Enforce ceiling
+      let total = d.title.length;
+      for (const b of next) {
+        if (b.type === "text") total += b.html.replace(/<[^>]*>/g, "").length;
+        else if (b.type === "checklist")
+          total += b.items.reduce((s, it) => s + it.text.length, 0);
+      }
+      if (total > MAX_CHARS) {
+        toast.warning("Approaching 2000 character limit");
+      }
+      return { ...d, content: next };
+    });
+  };
+
   // ---- text editing exec ----
   const exec = (cmd: string, value?: string) => {
     // Apply formatting to whichever text block currently has focus; fall
@@ -458,6 +675,8 @@ const NoteEditor = () => {
                 category={block.category}
                 readOnly={readOnly}
                 onChange={(p) => updateBlock(block.id, p)}
+                onScan={() => handleScanImage(block)}
+                scanning={scanningBlockId === block.id}
               />
             )}
             {!readOnly && block.type !== "text" && (
@@ -502,8 +721,12 @@ const NoteEditor = () => {
           onDuplicate={handleDuplicate}
           exec={exec}
           canDelete={!!noteId}
+          onOpenAI={() => setAiSheetOpen(true)}
         />
       )}
+
+      <AIActionSheet open={aiSheetOpen} onOpenChange={setAiSheetOpen} onAction={handleAIAction} />
+      <AIProgressPill show={aiProcessing} />
     </div>
   );
 };

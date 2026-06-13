@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Palette, Type, Undo2, Redo2, MoreVertical, Trash2, Copy } from "lucide-react";
+import { Plus, Palette, Type, Undo2, Redo2, MoreVertical, Trash2, Copy, Wand2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ interface Props {
   onDuplicate: () => void;
   exec: (cmd: string, value?: string) => void;
   canDelete: boolean;
+  onOpenAI: () => void;
 }
 
 const NoteKeyboardToolbar = ({
@@ -39,6 +40,7 @@ const NoteKeyboardToolbar = ({
   onDuplicate,
   exec,
   canDelete,
+  onOpenAI,
 }: Props) => {
   const inset = useKeyboardInset();
   const [addOpen, setAddOpen] = useState(false);
@@ -101,6 +103,17 @@ const NoteKeyboardToolbar = ({
               <TextFormatPopover exec={exec} />
             </PopoverContent>
             </Popover>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onOpenAI}
+              aria-label="MediNist AI Assistant"
+              className="h-10 px-2.5 inline-flex items-center gap-1 rounded-full text-indigo-700 bg-gradient-to-br from-indigo-50 to-violet-50 hover:from-indigo-100 hover:to-violet-100 active:from-indigo-200 active:to-violet-200 transition-colors"
+            >
+              <Wand2 size={16} />
+              <span className="text-[11px] font-semibold">AI</span>
+            </button>
           </div>
 
           {/* Elegant breathing space */}
