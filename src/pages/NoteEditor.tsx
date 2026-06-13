@@ -675,6 +675,8 @@ const NoteEditor = () => {
                 category={block.category}
                 readOnly={readOnly}
                 onChange={(p) => updateBlock(block.id, p)}
+                onScan={() => handleScanImage(block)}
+                scanning={scanningBlockId === block.id}
               />
             )}
             {!readOnly && block.type !== "text" && (
@@ -719,8 +721,12 @@ const NoteEditor = () => {
           onDuplicate={handleDuplicate}
           exec={exec}
           canDelete={!!noteId}
+          onOpenAI={() => setAiSheetOpen(true)}
         />
       )}
+
+      <AIActionSheet open={aiSheetOpen} onOpenChange={setAiSheetOpen} onAction={handleAIAction} />
+      <AIProgressPill show={aiProcessing} />
     </div>
   );
 };
