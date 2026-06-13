@@ -208,24 +208,12 @@ const Inventory = () => {
 
     const run = async () => {
       setCatalogLoading(true);
-      let q = supabase
-        .from("master_medicines")
-        .select("*")
-        .order("brand_name", { ascending: true })
-        .range(0, 4999);
-
-      if (selectedCompanies.size > 0) {
-        q = q.in("company", Array.from(selectedCompanies));
-      }
-      const tsq = toTsQuery(debouncedSearch);
-      if (tsq) {
-        // GIN-indexed full-text search on the generated `search_vector`
-        // column. `simple` config + prefix tokens (`amox:*`) gives us
-        // instant autocomplete across brand/generic/company.
-        q = q.textSearch("search_vector", tsq, { config: "simple" });
-      }
-
-      const { data, error } = await q;
+      // Hyphen/space-insensitive search via RPC (e.g. "afenac" matches "A-Fenac").
+      const { data, error } = await supabase.rpc("search_master_medicines", {
+        _query: debouncedSearch || "",
+        _companies: selectedCompanies.size ? Array.from(selectedCompanies) : null,
+        _limit: 500,
+      });
       if (cancelled || (window as any).__catalogReqId !== reqId) return;
       if (!error) setCatalog(data || []);
       setCatalogLoading(false);
