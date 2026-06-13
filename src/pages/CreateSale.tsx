@@ -629,9 +629,6 @@ const CreateSale = () => {
               const grossTotal = pieces * unitPrice;
               const lineTotal = getLineTotal(item);
               const isExpanded = expandedId === item.medicine.id;
-              const availableUnits = getAvailableUnits(item.medicine);
-              const showUnitPicker = availableUnits.length > 1;
-              const unitLabel: Record<SaleUnit, string> = { box: "Box", strip: "Strip", pcs: "Pcs" };
 
               if (isExpanded) {
                 return (
