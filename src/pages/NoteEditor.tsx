@@ -769,6 +769,13 @@ const NoteEditor = () => {
           className="w-full text-2xl font-semibold bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 mb-2"
         />
 
+        {draft.reminder_at && (
+          <ReminderBadge
+            iso={draft.reminder_at}
+            onClear={() => setDraft((d) => ({ ...d, reminder_at: null }))}
+          />
+        )}
+
         {/* Document flow — every block (text, image, checklist) sits in
             a single ordered column with a tight 4 px gap. */}
         {draft.content.map((block, idx) => (
@@ -784,14 +791,34 @@ const NoteEditor = () => {
                 placeholder={idx === 0 ? "Note" : ""}
                 maxRemaining={remaining}
                 onChange={(html) => updateBlock(block.id, { html })}
+                onMentionChange={(s) =>
+                  setMention(
+                    s ? { ...s, ctx: { kind: "text", blockId: block.id } } : null,
+                  )
+                }
               />
             )}
             {block.type === "checklist" && (
               <BlockChecklist
+                ref={(h) => {
+                  if (h) checklistRefs.current.set(block.id, h);
+                  else checklistRefs.current.delete(block.id);
+                }}
                 items={block.items}
                 readOnly={readOnly}
                 maxRemaining={remaining}
                 onChange={(items) => updateBlock(block.id, { items })}
+                onMentionChange={(s) =>
+                  setMention(
+                    s
+                      ? {
+                          query: s.query,
+                          position: s.position,
+                          ctx: { kind: "checklist", blockId: block.id, itemIndex: s.itemIndex },
+                        }
+                      : null,
+                  )
+                }
               />
             )}
             {block.type === "image" && (
