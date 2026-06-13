@@ -28,35 +28,7 @@ interface CartItem {
   medicine: Medicine;
   quantity: number;
   discountPercent: number;
-  unit: SaleUnit;
 }
-
-type SaleUnit = "box" | "strip" | "pcs";
-
-const getAvailableUnits = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit[] => {
-  if (looksSingleUnit(med)) return ["pcs"];
-  const pps = Number(med.pcs_per_strip || 0);
-  const spp = Number(med.strip_per_pack || 0);
-  const units: SaleUnit[] = [];
-  if (spp > 1 && pps > 1) units.push("box");
-  if (pps > 1) units.push("strip");
-  // box-of-pieces (spp > 1, pps <= 1) → expose box as a multi-piece unit
-  if (spp > 1 && pps <= 1) units.push("box");
-  units.push("pcs");
-  return units;
-};
-
-const getDefaultUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit => {
-  return getAvailableUnits(med)[0];
-};
-
-const piecesPerUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack">, unit: SaleUnit): number => {
-  const pps = Number(med.pcs_per_strip || 1) || 1;
-  const spp = Number(med.strip_per_pack || 1) || 1;
-  if (unit === "box") return Math.max(1, pps * spp);
-  if (unit === "strip") return Math.max(1, pps);
-  return 1;
-};
 
 const CreateSale = () => {
   const navigate = useNavigate();
@@ -162,7 +134,6 @@ const CreateSale = () => {
             medicine: resolvedMed,
             quantity: it.quantity, // drafts stored quantity in pieces
             discountPercent: (it as any).discount_percent ?? 0,
-            unit: "pcs" as SaleUnit,
           };
         });
 
@@ -253,7 +224,7 @@ const CreateSale = () => {
     }
     setCartItems((prev) => {
       if (prev.find((c) => c.medicine.id === med!.id)) return prev;
-      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(med!) }, ...prev];
+      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(med.id);
   }, [profile?.pharmacy_id, saleType, defaultDiscount]);
@@ -285,7 +256,7 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(medicine) }, ...prev];
+      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(medicine.id);
     setSearchQuery("");
@@ -310,12 +281,6 @@ const CreateSale = () => {
     );
   }, []);
 
-  const updateItemUnit = useCallback((id: string, unit: SaleUnit) => {
-    setCartItems((prev) =>
-      prev.map((c) => (c.medicine.id === id ? { ...c, unit } : c))
-    );
-  }, []);
-
   // When switching modes, reset item discounts
   const handleSaleTypeChange = useCallback((type: "retail" | "wholesale") => {
     setSaleType(type);
@@ -325,10 +290,8 @@ const CreateSale = () => {
     );
   }, [defaultDiscount]);
 
-  // Convert the user-entered quantity (in selected unit) to total pieces.
-  const getItemPieces = useCallback((item: CartItem) => {
-    return item.quantity * piecesPerUnit(item.medicine, item.unit);
-  }, []);
+  // Quantity is always stored as total pieces directly.
+  const getItemPieces = useCallback((item: CartItem) => item.quantity, []);
 
   // Calculate line total for an item (after item-wise discount in wholesale)
   const getLineTotal = useCallback((item: CartItem) => {
