@@ -545,7 +545,7 @@ const Pricing = () => {
               </>
             ) : (
               <>
-                <span className="text-4xl font-extrabold text-slate-900">৳2,000</span>
+                <span className="text-4xl font-extrabold text-slate-900">৳500</span>
                 <span className="text-sm font-medium text-slate-500">/ month</span>
               </>
             )}
