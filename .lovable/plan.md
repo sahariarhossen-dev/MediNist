@@ -1,34 +1,30 @@
-## Restore tri-unit + total pieces stock label on cart card
+## Fix expanded cart item Row 2 — lock the qty stepper, let the left data shrink
 
-Single, surgical edit in `src/pages/CreateSale.tsx` at line 665 — the stock `<span>` in the cart item's "Row 2" beside the trash icon.
+Single, scoped edit in `src/pages/CreateSale.tsx` (lines ~656–724). Row 1 (brand/strength/badge/MRP) and Row 3 (wholesale calc) are not changed.
 
-### Change
+### Problem
 
-Update the label to show both the B:S:P breakdown and the total pieces, separated by `/`:
+Row 2 currently puts trash + stk label + retail calc + qty stepper into one flex row with `flex-nowrap` and `whitespace-nowrap` on the calc string. With the new `stk 0:1:0 / 10` label, the retail calc (`10*25.00=250.00৳`) keeps its full width and the qty stepper (`- 10 +`) gets pushed past the right edge on narrow phones.
 
-- Multi-unit product (Tablet/Capsule with strip/box): `stk 1:2:5 / 55`
-- Single-unit product (Syrup, Drop, Cream, etc., where B:S:P is meaningless): keep `stk 55` (no slash, no zero-zero noise).
+### New structure
 
-### Implementation
+Row 2 becomes a strict two-child flex:
 
-Replace the current ternary with:
-
-```tsx
-{(() => {
-  const total = item.medicine.stock_quantity ?? 0;
-  if (looksSingleUnit(item.medicine)) return `stk ${total}`;
-  const tri = totalPiecesToTriUnit(
-    total,
-    item.medicine.strip_per_pack,
-    item.medicine.pcs_per_strip,
-  );
-  return `stk ${tri} / ${total}`;
-})()}
+```text
+[ left group: shrinkable ............................ ] [ stepper: locked ]
 ```
 
-`totalPiecesToTriUnit` already returns the `B : S : P` string from `src/lib/stockUtils.ts`, so no new helper is needed. The format string lands as `stk 1 : 2 : 5 / 55` (with the existing spaced colons that match the rest of the app).
+- Outer: `flex flex-row justify-between items-center w-full mt-2 gap-2`
+- Left group: `flex items-center gap-1.5 min-w-0 flex-1 flex-wrap` containing
+  - Trash button (`flex-shrink-0`)
+  - `stk …` label — drop `whitespace-nowrap`, keep `font-mono text-[10px]`, add `truncate` is wrong here (we want wrap), so allow natural wrap by removing nowrap only.
+  - Retail calc string (when `!isWholesale`) — same: remove `whitespace-nowrap` and `ml-auto`, allow it to wrap to a second line under the stk label when space is tight.
+  - Wholesale discount input stays in the left group with `flex-shrink-0`.
+- Right group (stepper): unchanged markup, but wrapped/classed as `flex-shrink-0` (already has it) and the parent's `justify-between` keeps it pinned to the right edge.
+
+Net effect: on narrow viewports the left side wraps (stk on line 1, calc on line 2) while the stepper stays fully visible and right-aligned. On wider phones everything fits on one line as before.
 
 ### Out of scope
 
-- No changes to calculation logic, types, or other components.
-- The Box/Pcs toggle removal stays as-is.
+- Row 1 layout, Row 3 wholesale calc strip, collapsed card, and all calculation logic remain untouched.
+- No changes to types, hooks, or other components.
