@@ -17,7 +17,6 @@ import { uploadNoteAttachment } from "@/lib/notesStorage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import KeyboardAvoidingScroll from "@/components/ui/keyboard-avoiding-scroll";
-import { colorHex } from "@/components/notes/ColorPicker";
 import BlockText, { type BlockTextHandle, type MentionTriggerState } from "@/components/notes/blocks/BlockText";
 import BlockChecklist, { type BlockChecklistHandle } from "@/components/notes/blocks/BlockChecklist";
 import BlockImage from "@/components/notes/blocks/BlockImage";
