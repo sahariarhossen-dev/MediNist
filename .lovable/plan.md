@@ -1,96 +1,101 @@
-## Phase 2: Live `medinist-ai-notepad` Edge Function Integration
+# Phase 3 — Collaboration & Reminders (Frontend)
 
-Wire `NoteEditor.tsx` AI handlers to a real Lovable AI–powered Supabase Edge Function. Preserve all existing UI states (laser scan overlay, `AIProgressPill`, char ceiling, save-on-exit).
+Frontend-only build. No DB/edge changes yet. State stays in `DraftState`/`draftRef` so the existing save-on-exit pipeline will sync once we add columns later.
 
----
+## 1. New components
 
-### A. New Edge Function: `supabase/functions/medinist-ai-notepad/index.ts`
+### `src/components/notes/MentionPopover.tsx`
+- Floating list anchored above the caret (absolute-positioned div at `{top, left}` from `Selection.getRangeAt(0).getBoundingClientRect()`).
+- Props: `query: string`, `members: PharmacyMember[]`, `position: {top,left} | null`, `activeIndex`, `onPick(member)`, `onClose()`.
+- Renders max 6 filtered members (case-insensitive `full_name` startsWith → includes fallback), each row: avatar circle (initial), name, role hint.
+- Selected row has indigo-50 bg. Keyboard hint footer ("↑↓ Enter ⎋").
+- Empty state: "No staff matching '@xxx'".
+- Pure presentational — caller owns state.
 
-Single function, two `mode`s — keeps the frontend contract simple.
+### `src/components/notes/ReminderDrawer.tsx`
+- Uses `Drawer` (vaul) from `@/components/ui/drawer`.
+- Title: "Set Note Reminder".
+- 3 preset tiles (rounded-2xl, soft gradient, icon left, label + computed timestamp right):
+  1. 🌇 Later Today → today 17:00
+  2. 🌅 Tomorrow Morning → tomorrow 09:00
+  3. 📅 Pick Custom → reveals inline `<input type="datetime-local">` + "Set Reminder" primary button.
+- Disables "Later Today" preset if 17:00 already passed.
+- `onSave(iso: string)` closes drawer. `onClear()` option visible if a reminder already exists.
+- Safe-area pb via `env(safe-area-inset-bottom)`.
 
-Request body shape:
-```ts
-// OCR
-{ mode: "ocr", category: "invoice" | "prescription" | "photo",
-  payload: { imageUrl: string } }
+### `src/components/notes/ReminderBadge.tsx`
+- Amber chip: `bg-amber-50 text-amber-800 border border-amber-200` rounded-full, clock icon left, formatted label center, `X` button right.
+- Formatter: same-day → "Today, 5:00 PM"; tomorrow → "Tomorrow, 9:00 AM"; else → "15 Jun, 09:00 AM".
+- Props: `iso`, `onClear`.
 
-// Assistant
-{ mode: "assistant",
-  payload: { text: string, actionId: "smart_clean" | "translate_en" | "extract_actions" } }
+## 2. Mention engine — shared hook `src/hooks/useMentionTrigger.ts`
+Encapsulates detection so both BlockText and BlockChecklist can use it:
+- Exposes `{ query, position, open, onKeyDown, reset, attach }`.
+- `attach(el)`: listens to `input`/`keyup`/`selectionchange` on the element.
+- Detects `@` token by walking back from caret offset until whitespace/start; opens popover when token starts with `@` and has 0-30 chars after.
+- Computes popover position from caret rect (with viewport clamp).
+- `onKeyDown` handles ArrowUp/Down (rotates `activeIndex` via callback), Enter (calls `onPick`), Escape (resets).
+
+NoteEditor owns the singleton `MentionPopover` instance + the `usePharmacyMembers()` fetch (cached by React Query). It passes a shared `onMentionInsert(blockId, member)` callback down to each block; the active block id is tracked on focus.
+
+### Insertion format
+Inline span injected at caret, replacing the `@query` token:
+```html
+<span class="mention" data-user-id="UUID" contenteditable="false">@Rahman</span>&nbsp;
 ```
+Tailwind class `.mention` added to `src/index.css`:
+```
+.mention { @apply inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-indigo-50 text-indigo-700 text-sm font-medium align-baseline; }
+```
+- BlockText: uses Range API to delete the `@query` text and insert the chip node, then fires `onChange(innerHTML)` so it flows into `draft.content` via existing path.
+- BlockChecklist: since rows use plain `<Input>`, replace the `@query` substring with `@Rahman ` plain text and stash `mentions: [{user_id, name}]` in a parallel item field (extends NoteBlock checklist item with optional `mentions` later; for now we store inline-text + emit a `data-mentions` JSON on the row when rendered). To keep this PR small and avoid touching `NoteBlock` typing, we keep checklist mentions as plain text `@Name` for now; document this limitation. The rich-chip experience lives in BlockText.
 
-Response: `{ result: string }` (string is HTML table, plain markdown/HTML, or a JSON-encoded array of strings).
+State integrity: edits go through existing `updateBlock` → `setDraft` → `draftRef`. No new top-level state for mention text.
 
-Implementation:
-- CORS preflight + `corsHeaders` on every response.
-- JWT validated via `supabase.auth.getClaims(token)` (no `verify_jwt` config change needed).
-- Zod validation of body; reject unknown modes/actions with 400.
-- Lovable AI Gateway via `@ai-sdk/openai-compatible` + `LOVABLE_API_KEY` header, model `google/gemini-3-flash-preview` (multimodal for OCR via `image_url` content block).
-- Prompts:
-  - **ocr/invoice** → "Return ONLY a valid HTML `<table>` (no markdown fence) with columns Item, Qty, Amount; include supplier/date/total as `<p>` tags above the table."
-  - **ocr/prescription|photo** → "Return ONLY a JSON array of strings like `[\"Napa 500mg — 2 strips\", ...]`. No prose."
-  - **assistant/smart_clean** → "Reformat the shop note into clean HTML using `<p><strong>Label:</strong> value</p>`."
-  - **assistant/translate_en** → "Translate Bangla → English, preserve structure, return HTML paragraphs."
-  - **assistant/extract_actions** → "Return JSON array of imperative action strings only."
-- Map 429/402 from gateway to same-status JSON errors so the client can show specific toasts.
+## 3. Reminder state
+Extend `DraftState` with `reminder_at: string | null` (ISO). Initialise from `existing.reminder_at` if present (currently undefined — guarded with `??`). NOT added to `buildPayload` yet (schema doesn't have the column). A TODO comment marks the line where it should be added once the column is created.
 
-### B. Frontend rewrite in `src/pages/NoteEditor.tsx`
+- `NoteEditor` holds `reminderDrawerOpen` state.
+- Toolbar Bell click → `setReminderDrawerOpen(true)`.
+- On save → `setDraft(d => ({...d, reminder_at: iso}))` and toast.success("Reminder set").
+- Badge renders under the title only when `draft.reminder_at` truthy.
 
-Replace **only** the two mock handler bodies; keep `insertBlockAfter`, `estimateBlockChars`, `replaceFirstTextBlock`, `stripHtml`, `scanningBlockId`, `aiProcessing`, `AIProgressPill`, and char-budget logic.
+## 4. Toolbar update — `src/components/notes/NoteKeyboardToolbar.tsx`
+Add new prop `onOpenReminder: () => void` and insert a Bell button **immediately after** the AI wand button (same pill style, amber tint):
+```
+className="h-10 px-2.5 inline-flex items-center gap-1 rounded-full text-amber-700 bg-gradient-to-br from-amber-50 to-orange-50 hover:from-amber-100 ..."
+```
+Icon: `Bell` from lucide-react, label "Remind".
 
-**`handleScanImage(block)`**
-1. Guard: `if (scanningBlockId) return;` → `setScanningBlockId(block.id)` inside `try`.
-2. Fetch fresh signed URL: `supabase.storage.from('note-attachments').createSignedUrl(block.path, 300)`. Throw on error.
-3. `const { data, error } = await supabase.functions.invoke('medinist-ai-notepad', { body: { mode: 'ocr', category: block.category, payload: { imageUrl: signedUrl } } })`. Throw on error.
-4. Build `newBlock`:
-   - `invoice` → validate `data.result` contains `<table`, wrap in `BlockText { html: data.result }`.
-   - `prescription | photo` → `JSON.parse(data.result)` → `string[]` → map to `{ id: newId(), text, checked: false }` → `BlockChecklist`.
-5. Char budget: `if (estimateBlockChars(newBlock) > remaining)` → trim items / truncate HTML to fit, then `toast.warning("Note trimmed due to the global 2000-character limit.")`.
-6. `insertBlockAfter(block.id, newBlock)` (this goes through `setDraft` → save-on-exit handles persistence).
-7. **Background meta sync** (fire-and-forget, no await blocking UI):
-   ```ts
-   if (noteId && noteId !== "new") {
-     const ocrText = newBlock.type === "checklist"
-       ? newBlock.items.map(i => i.text).join("\n")
-       : stripHtml(newBlock.html);
-     supabase.from("notes").update({
-       image_metadata: { ...(latest.image_metadata ?? {}),
-         ocr_text: [...(latest.image_metadata?.ocr_text ?? []), { block_id: block.id, text: ocrText, at: new Date().toISOString() }] }
-     }).eq("id", noteId);
-   }
-   ```
-8. `finally { setScanningBlockId(null); }`. On catch → `toast.error("MediNist AI Engine is currently busy. Please try again.")`.
+## 5. NoteEditor wiring (`src/pages/NoteEditor.tsx`)
+- Import new components + `usePharmacyMembers`, `Bell`.
+- Add `reminderDrawerOpen` state, `activeTextBlockIdRef` updated via `onFocus` on each BlockText.
+- Render `<ReminderBadge>` between the Title input and the blocks loop.
+- Render `<ReminderDrawer>` and `<MentionPopover>` near the existing `<AIActionSheet>`.
+- Pass `onOpenReminder` to the toolbar.
 
-**`handleAIAction(actionId)`**
-1. Close sheet. Compile text: same `stripHtml + join("\n")` over text blocks. If empty → `toast.error("Please type something first before using the AI Assistant.")` and abort.
-2. `setAiProcessing(true)` inside `try`.
-3. `supabase.functions.invoke('medinist-ai-notepad', { body: { mode: 'assistant', payload: { text, actionId } } })`. Throw on error.
-4. Branch on `actionId`:
-   - `smart_clean` / `translate_en` — take `data.result` (HTML string), char-budget check vs current first-text-block size: if over → truncate + warning toast. Then `replaceFirstTextBlock(firstTextIdx, html)`.
-   - `extract_actions` — `JSON.parse(data.result)` → string[] → checklist block. Char-budget trim if needed. Insert after the last text block (or `addBlockWithCursor` if none).
-5. `finally { setAiProcessing(false); }`. On catch → same busy toast.
+## 6. Responsiveness / safe area
+- Drawer already handles safe-area; we add `pb-[env(safe-area-inset-bottom)]` to its footer.
+- MentionPopover uses `max-w-[min(280px,calc(100vw-32px))]` and viewport-clamped position.
+- Reminder badge wraps via `flex-wrap`.
 
-### C. Error / status handling matrix
+## Technical notes
+- No type changes to `NoteBlock`. Mention chips live inside the existing `html` field of text blocks — re-rendering via `DOMPurify` already allows `<span>` + `data-*` attrs (verify: `USE_PROFILES.html` keeps them; we'll add `ADD_ATTR: ['data-user-id']` to the sanitize call in BlockText).
+- Char-budget counter unchanged: text-block mention chips contribute their visible `@Name` characters via the existing `replace(/<[^>]*>/g, "")` strip.
+- No new dependencies.
 
-| Failure | UX |
-|---|---|
-| Network / 5xx / generic | `toast.error("MediNist AI Engine is currently busy. Please try again.")` |
-| Empty editor (assistant) | `toast.error("Please type something first…")` |
-| Response > 2000 chars | Truncate safely + `toast.warning("Note trimmed due to the global 2000-character limit.")` |
-| Invalid JSON / missing `<table>` | Treat as parse failure → busy toast |
+## Files touched
+- create `src/components/notes/MentionPopover.tsx`
+- create `src/components/notes/ReminderDrawer.tsx`
+- create `src/components/notes/ReminderBadge.tsx`
+- create `src/hooks/useMentionTrigger.ts`
+- edit `src/components/notes/blocks/BlockText.tsx` (attach mention trigger, sanitize allowlist)
+- edit `src/components/notes/blocks/BlockChecklist.tsx` (attach mention trigger, plain-text insert)
+- edit `src/components/notes/NoteKeyboardToolbar.tsx` (Bell button + prop)
+- edit `src/pages/NoteEditor.tsx` (state, render badge/drawer/popover, pass handlers)
+- edit `src/index.css` (`.mention` utility)
 
-All state mutations route through `setDraft` so the existing save-on-exit + realtime path persists results to `public.notes` without new code.
-
-### D. What is NOT changing
-- `BlockImage.tsx`, `AIActionSheet.tsx`, `AIProgressPill.tsx`, `NoteKeyboardToolbar.tsx`, `tailwind.config.ts` — untouched.
-- DB schema — no migration. `image_metadata` is already `jsonb` on `notes`.
-- No new secrets — `LOVABLE_API_KEY` already configured.
-
----
-
-### Open question before I build
-
-The plan assumes the edge function `medinist-ai-notepad` should be **created in this same step** (it doesn't exist yet under `supabase/functions/`). Your prompt only described the frontend wiring. Confirm one:
-
-1. **Build both** the edge function (with Lovable AI Gemini) + frontend rewrite together — recommended so the live integration actually works end-to-end.
-2. **Frontend rewrite only** — leave the edge function for a later phase (calls will fail until you create it).
+## Out of scope (Phase 4)
+- Persisting `reminder_at` and `mentions[]` to `public.notes`.
+- Push/inbox notifications to mentioned users.
+- Cron/edge function for reminder firing.
