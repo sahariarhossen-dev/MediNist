@@ -1,102 +1,64 @@
-## Reality check on the request
+## Heads-up on the API key
 
-A couple of numbers don't line up with the request, so calling them out before we touch data:
+You pasted the placeholder `[আপনার_API_Key_এখানে_বসান]`, not a real key. No problem — `SPIDER_API_KEY` is already configured in this project's secrets (see Supabase secrets list), so the edge function can read it directly via `Deno.env.get('SPIDER_API_KEY')`. If that stored key is stale, rotate it via Project Settings → Secrets before we run; otherwise we'll use what's already there.
 
-- The uploaded `medicines.json` has **21,168 rows** — that's the public drug catalog, which already lives in `public.master_medicines` (also 21,168 rows). It is NOT the per-pharmacy `public.medicines` table.
-- `public.medicines` only has **519 rows** across 2 pharmacies. That's stock the shops actually carry. So "update all 21,000+ rows in `medicines`" isn't a thing — there aren't 21k rows there.
+## Scope of this run
 
-The fix only makes sense in two stages:
+A **test batch of 20 medicines only** from `master_medicines`, ordered by `brand_name`. No bulk run until you confirm the 20-row results look correct. Nothing else in the DB is touched.
 
-1. Rebuild the catalog (`master_medicines`) from the JSON — single source of truth.
-2. Re-sync the 519 `medicines` rows from the matching catalog row.
+## What gets scraped per medicine
 
-## Parsing rule (applied per JSON row)
+For each of the 20 rows we:
 
-Input fields used: `format`, `pack_size`, `box_size`.
+1. Build a MedEx URL. Preferred: the cached URL in `public.medex_cache` if present (keyed by brand). Fallback: `https://medex.com.bd/search?search=<brand_name>` → follow first `/brands/...` result.
+2. POST to Spider.cloud `/crawl` with `{ url, limit: 1, return_format: "html", request: "smart" }` and `Authorization: Bearer ${SPIDER_API_KEY}`.
+3. Parse the returned HTML with `deno-dom` and extract:
+   - **Pack text** — the "Pack Size" / "Unit Price" row on MedEx brand pages (e.g. "10 x 10: ৳ 12.00", "3 x 10's pack: ৳ 360.00", "Each 5 ml: ৳ 50.00").
+   - **MRP** — the "Unit Price" or "Pack Price" Taka value on the same row. We prefer **pack price** when both are shown, because that's what the shop actually charges per strip/box; fall back to unit price × pack count when only unit is shown.
 
-- `pack_n` = leading integer in `pack_size` (e.g. "10s strip" → 10, "3 x 10" → 3, "Each sachet" → null).
-- `pack_n2` = second integer in `pack_size` if present (e.g. "3 x 10" → 10).
-- `box_n` = leading integer in `box_size` (e.g. "100s" → 100, "1" → 1).
+## Derivation rules (same as before, applied to scraped text, not DB text)
 
-Decision:
+Input: the literal pack string scraped from MedEx.
 
+| Pattern                            | pcs_per_strip | strip_per_pack |
+| ---------------------------------- | ------------- | -------------- |
+| `N x M` (e.g. "3 x 10")            | M             | N              |
+| `Ns pack` / `N's pack` (tablet)    | N             | 1              |
+| Bottle / Tube / Inhaler / Sachet   | null          | null           |
+| Vial / Ampoule `N`s box            | 1             | N              |
 
-| Case                                                                                              | pcs_per_strip | strip_per_pack               |
-| ------------------------------------------------------------------------------------------------- | ------------- | ---------------------------- |
-| `pack_size` contains "x" (e.g. "3 x 10")                                                          | `pack_n2`     | `pack_n`                     |
-| Tablet/Capsule-like format, `pack_n` ≥ 2 strip, `box_n` > `pack_n`                                | `pack_n`      | `box_n / pack_n`             |
-| Tablet/Capsule, `pack_n` ≥ 2, `box_n` ≤ `pack_n`                                                  | `pack_n`      | 1                            |
-| Tablet/Capsule, no usable `pack_n`, `box_n` > 1                                                   | 1             | `box_n` (flat box of pieces) |
-| Injection/Vial/Ampoule, `box_n` > 1                                                               | 1             | `box_n`                      |
-| Syrup / Drop / Cream / Ointment / Gel / Inhaler / Spray / Solution / Powder / Sachet / Suspension | null          | null (single unit)           |
-| Anything else falling through                                                                     | null          | null                         |
+MRP parsing: regex `৳\s*([\d,]+(?:\.\d+)?)`, take the **last** match on the pack row (that's the pack/unit price column). Store as numeric, rounded to 2 dp.
 
+## What gets written
 
-This is the same rule already in `classifyCatalogPack`, extended to handle the "N x M" pack_size pattern (which is what triggered Alanil 120: pack_size "3 x 10" → strips=3, pcs=10).
+Per matched row, **overwrite**:
 
-## Stage 1 — Refresh catalog
+- `master_medicines.pcs_per_strip`, `strip_per_pack`, `unit_price`, and `pack_size` (set to the scraped pack text so the source-of-truth is updated).
+- `medicines.pcs_per_strip`, `strip_per_pack`, `price` — only for the 519 pharmacy rows whose `(name, company_name)` matches one of the 20 scraped brands. Custom shop products stay untouched.
 
-Run a Node/TS script (executed in sandbox, not in the app bundle) that:
+NOT touched on `medicines`: `stock_quantity`, `stock_alert`, `expiry_date`, `pharmacy_id`, `product_type`, `unit_format`, `product_size`, `packaging_type`. So shop stock and custom settings are safe.
 
-- Reads `/mnt/user-uploads/medicines.json`.
-- Computes the three fields above for each row.
-- Connects to Supabase using the service-role key (already a secret).
-- For each row: `UPDATE public.master_medicines SET pack_size=$1, box_size=$2, format=$3, pcs_per_strip=$4, strip_per_pack=$5, unit_price=$6, company=$7, generic_name=$8, strength=$9 WHERE brand_name = $10` — matched on `brand_name` (the catalog's natural key).
-- Batched in chunks of 500 via a single SQL statement per chunk using `UPDATE … FROM (VALUES …)` so the whole job is ~42 round-trips, not 21k.
-- Reports: matched, unmatched (logged to `/tmp/unmatched.json`), changed.
+## Safety
 
-Only `pcs_per_strip`, `strip_per_pack`, `pack_size`, `box_size`, `format` are guaranteed to be overwritten. The other columns are refreshed too because they come from the same authoritative JSON; nothing in `master_medicines` is user-edited.
+- Snapshot the affected 20 master rows + matching pharmacy rows into `_backup_spider_test_<timestamp>` before any write.
+- Dry-run mode (`?dry=1`) returns a JSON diff of `before → after` for all 20 without writing. We'll run dry-run first, you eyeball it, then we flip to write mode.
+- Spider.cloud calls are rate-limited to 1/sec with a 30 s timeout each, so a 20-row batch finishes in well under a minute.
 
-## Stage 2 — Re-sync per-pharmacy stock rows
+## Deliverables
 
-A single SQL `UPDATE` (no script needed — 519 rows):
+1. New edge function `supabase/functions/spider-catalog-sync/index.ts`:
+   - Auth: `x-cron-secret` header must equal `CRON_SECRET`.
+   - Params: `limit` (default 20), `dry` (default `1`), `offset` (default 0).
+   - Response: `{ scraped, matched, updated_master, updated_medicines, samples: [...], unmatched: [...] }`.
+2. Invocation flow:
+   - **Step A** — dry-run on first 20, return diff samples for your review.
+   - **Step B** — after your OK, re-invoke with `dry=0` to actually write.
+3. Function is left deployed (not deleted) so we can re-run for the next batch (`offset=20&limit=20`, etc.) after the test passes.
 
-```sql
-UPDATE public.medicines m
-SET pcs_per_strip  = mm.pcs_per_strip,
-    strip_per_pack = mm.strip_per_pack,
-    format         = COALESCE(m.format, mm.format),
-    pack_size      = COALESCE(m.pack_size, mm.pack_size),
-    box_size       = COALESCE(m.box_size, mm.box_size),
-    strength       = COALESCE(m.strength, mm.strength),
-    generic_name   = COALESCE(m.generic_name, mm.generic_name)
-FROM public.master_medicines mm
-WHERE lower(m.name) = lower(mm.brand_name)
-  AND lower(coalesce(m.company_name,'')) = lower(coalesce(mm.company,''));
-```
+## Open questions before I build
 
-Explicitly NOT touched on `medicines`: `price`, `stock_quantity`, `stock_alert`, `expiry_date`, `pharmacy_id`, `product_type`, `unit_format`, `product_size`, `packaging_type`, `created_at`, `id`. So custom prices and stock counts are safe.
+1. **Pack vs unit price**: confirm we should save the **pack price** (what one strip/box costs at retail) into `unit_price`, not the per-piece price. Your current data mixes both — this is the moment to pin it down.
+2. **Pharmacy `medicines.price`**: some shops may have set custom prices. Confirm it's OK to overwrite those with the scraped MRP for the test 20. (If not, we'll skip the pharmacy-side price update and only refresh `master_medicines.unit_price`.)
+3. **No-match behaviour**: if MedEx search returns zero results for a brand (typo, discontinued), log it to the response `unmatched` array and leave that row alone — confirm.
 
-Rows with no catalog match (e.g. shop-created custom products) are left untouched. Their names get logged for review.
-
-## Safety / rollback
-
-- Before stage 1, snapshot the two affected columns to a temp table:
-  ```sql
-  CREATE TABLE _backup_master_pack_20260612 AS
-  SELECT id, pcs_per_strip, strip_per_pack, pack_size, box_size, format FROM public.master_medicines;
-  CREATE TABLE _backup_medicines_pack_20260612 AS
-  SELECT id, pcs_per_strip, strip_per_pack, pack_size, box_size, format FROM public.medicines;
-  ```
-  Kept for 7 days, then dropped manually.
-- Dry-run first: parse the JSON locally, print 20 sample rows + summary counts ("X rows would change pcs_per_strip, Y would change strip_per_pack, Z unmatched"). Show output, get confirmation, then run for real.
-
-## What I need from you before building
-
-1. Confirm: **catalog rewrite is OK** — `master_medicines.unit_price`, `generic_name`, `strength`, `company`, `format` will be overwritten from the JSON. (Recommended; otherwise we leave stale data.) If not, I'll restrict the catalog update to just the 5 pack-related columns.
-2. Confirm: the "3 x 10" pack_size pattern means `strip_per_pack=3, pcs_per_strip=10` (your Alanil 120 example confirms this). Some catalogs use it the other way around.
-3. For unmatched `medicines` rows (custom shop products), confirm we should leave them alone rather than clearing their pack fields.
-
-Once you confirm, I'll run the dry-run, show the diff summary, then execute both stages.
-
-&nbsp;
-
-Excellent reality check! Your 2-stage plan and the parsing table are 100% accurate and professional. Here are the confirmations you need to proceed:
-
-1. CONFIRMATION 1 (Catalog Rewrite): Yes, it is fully OK to overwrite the other columns (unit_price, generic_name, strength, company, format) from the JSON to make 'master_medicines' the absolute single source of truth. Let's refresh the full data cleanly.
-
-2. CONFIRMATION 2 ("3 x 10" Pattern): Yes, I confirm that the "3 x 10" pattern means strip_per_pack = 3 (3 strips) and pcs_per_strip = 10 (10 pieces per strip). This matches our Alanil 120 structure.
-
-3. CONFIRMATION 3 (Unmatched Rows): Yes, leave the unmatched 'medicines' rows (custom shop products) completely alone. Do not clear or touch their fields.
-
-Your safety/rollback backup strategy is excellent. Please proceed with the dry-run now, show me the sample diff summary, and once verified, execute both stages for real!
+Once you confirm those three, I'll build the function, run the dry-run on the first 20, and paste the diff back here for your review before writing anything.
