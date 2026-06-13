@@ -1,30 +1,36 @@
-## Fix expanded cart item Row 2 — lock the qty stepper, let the left data shrink
+## Force the expanded cart item Row 2 onto a single, fluid line
 
-Single, scoped edit in `src/pages/CreateSale.tsx` (lines ~656–724). Row 1 (brand/strength/badge/MRP) and Row 3 (wholesale calc) are not changed.
+Single scoped edit in `src/pages/CreateSale.tsx` (lines ~656–724). Row 1, Row 3, the collapsed card, and all calculation logic stay untouched.
 
-### Problem
+### Current problem
 
-Row 2 currently puts trash + stk label + retail calc + qty stepper into one flex row with `flex-nowrap` and `whitespace-nowrap` on the calc string. With the new `stk 0:1:0 / 10` label, the retail calc (`10*25.00=250.00৳`) keeps its full width and the qty stepper (`- 10 +`) gets pushed past the right edge on narrow phones.
+The left group uses `flex-wrap` plus `break-all` on the stock/calc strings, so on narrow phones the stock and calc text wrap onto a second line instead of shrinking. The user wants the look from `image_fc855e.png`: trash · stk · calc · — N + all on one line, with the text auto-shrinking before the stepper ever gets pushed.
 
-### New structure
-
-Row 2 becomes a strict two-child flex:
+### New Row 2 structure
 
 ```text
-[ left group: shrinkable ............................ ] [ stepper: locked ]
+[ trash | stk … | calc … ] ........................ [ - N + ]
+   fixed   shrinks 1:1     shrinks 2:1            locked (flex-shrink-0)
 ```
 
-- Outer: `flex flex-row justify-between items-center w-full mt-2 gap-2`
-- Left group: `flex items-center gap-1.5 min-w-0 flex-1 flex-wrap` containing
-  - Trash button (`flex-shrink-0`)
-  - `stk …` label — drop `whitespace-nowrap`, keep `font-mono text-[10px]`, add `truncate` is wrong here (we want wrap), so allow natural wrap by removing nowrap only.
-  - Retail calc string (when `!isWholesale`) — same: remove `whitespace-nowrap` and `ml-auto`, allow it to wrap to a second line under the stk label when space is tight.
-  - Wholesale discount input stays in the left group with `flex-shrink-0`.
-- Right group (stepper): unchanged markup, but wrapped/classed as `flex-shrink-0` (already has it) and the parent's `justify-between` keeps it pinned to the right edge.
+- Outer wrapper: `flex flex-row items-center justify-between w-full mt-2 gap-2 flex-nowrap`
+- Left group: `flex items-center gap-1.5 min-w-0 flex-1 flex-nowrap overflow-hidden`
+  - Trash button — keep `flex-shrink-0`, unchanged.
+  - `stk …` label — `text-[10px] font-mono text-secondary-foreground whitespace-nowrap truncate min-w-0 flex-shrink`. Remove `break-all`. Add `truncate` so any overflow ellipsizes instead of wrapping.
+  - Wholesale discount input (when `isWholesale`) — unchanged, stays `flex-shrink-0`.
+  - Retail calc string (when `!isWholesale`) — `text-[10px] font-semibold text-emerald-700 whitespace-nowrap truncate min-w-0 flex-shrink`. Remove `break-all`. Allow it to shrink/ellipsize.
+- Right group (qty stepper): markup unchanged, keeps `flex-shrink-0`, pinned right by parent `justify-between`.
 
-Net effect: on narrow viewports the left side wraps (stk on line 1, calc on line 2) while the stepper stays fully visible and right-aligned. On wider phones everything fits on one line as before.
+### Fluid auto-shrink behavior
+
+Because both text spans use `min-w-0` + `truncate` + `whitespace-nowrap` inside a `flex-nowrap` parent, they will:
+- Stay on one line on wide phones (full text shown).
+- Truncate with ellipsis on narrow phones rather than wrap or push the stepper.
+
+Tailwind has no true `adjustsFontSizeToFit`; truncate-on-shrink is the standard web equivalent and matches the requested "never wrap, never push the stepper" rule. The stepper is locked at its intrinsic width via `flex-shrink-0`.
 
 ### Out of scope
 
-- Row 1 layout, Row 3 wholesale calc strip, collapsed card, and all calculation logic remain untouched.
-- No changes to types, hooks, or other components.
+- Row 1 header, Row 3 wholesale summary, collapsed card.
+- All pricing, stock, and discount calculation logic.
+- No other components or hooks are touched.
