@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Palette, Type, Undo2, Redo2, MoreVertical, Trash2, Copy, Wand2 } from "lucide-react";
+import { Plus, Palette, Type, Undo2, Redo2, MoreVertical, Trash2, Copy, Wand2, Bell } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ interface Props {
   exec: (cmd: string, value?: string) => void;
   canDelete: boolean;
   onOpenAI: () => void;
+  onOpenReminder: () => void;
 }
 
 const NoteKeyboardToolbar = ({
@@ -41,6 +42,7 @@ const NoteKeyboardToolbar = ({
   exec,
   canDelete,
   onOpenAI,
+  onOpenReminder,
 }: Props) => {
   const inset = useKeyboardInset();
   const [addOpen, setAddOpen] = useState(false);
@@ -113,6 +115,17 @@ const NoteKeyboardToolbar = ({
             >
               <Wand2 size={16} />
               <span className="text-[11px] font-semibold">AI</span>
+            </button>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onOpenReminder}
+              aria-label="Set reminder"
+              className="h-10 px-2.5 inline-flex items-center gap-1 rounded-full text-amber-700 bg-gradient-to-br from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 active:from-amber-200 active:to-orange-200 transition-colors"
+            >
+              <Bell size={16} />
+              <span className="text-[11px] font-semibold">Remind</span>
             </button>
           </div>
 
