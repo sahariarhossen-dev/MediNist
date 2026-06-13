@@ -444,19 +444,21 @@ const NoteEditor = () => {
     [/পিস/g, "pcs"],
     [/বক্স/g, "box"],
     [/স্ট্রিপ/g, "strip"],
-    [/[০-৯]/g, (d: string) => String("০১২৩৪৫৬৭৮৯".indexOf(d))],
   ];
+
+  const banglaDigits = (s: string) =>
+    s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
 
   const translateBangla = (text: string) =>
     text
       .split("\n")
       .map((line) => {
-        let out = line;
+        let out = banglaDigits(line);
         let touched = false;
         for (const [re, rep] of banglaDict) {
           if (re.test(out)) {
             touched = true;
-            out = out.replace(re, rep as string);
+            out = out.replace(re, rep);
           }
         }
         return touched || !/[\u0980-\u09FF]/.test(line) ? out : `[EN] ${line}`;
