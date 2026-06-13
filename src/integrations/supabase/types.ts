@@ -1606,6 +1606,30 @@ export type Database = {
       }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
+      search_master_medicines: {
+        Args: { _companies?: string[]; _limit?: number; _query: string }
+        Returns: {
+          box_size: string | null
+          brand_name: string
+          company: string | null
+          created_at: string | null
+          format: string | null
+          generic_name: string | null
+          id: string
+          pack_size: string | null
+          pcs_per_strip: number | null
+          search_vector: unknown
+          strength: string | null
+          strip_per_pack: number | null
+          unit_price: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "master_medicines"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       search_medicines: {
         Args: { _pharmacy_id: string; _query: string }
         Returns: {

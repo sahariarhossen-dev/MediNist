@@ -42,18 +42,8 @@ interface MasterMedicine {
   box_size: string | null;
 }
 
-// Build a Postgres tsquery from raw user input. Strips punctuation,
-// splits on whitespace, appends `:*` to each token for prefix matching,
-// and AND-joins so all typed tokens must match. Returns "" for empty.
-const toTsQuery = (raw: string): string =>
-  raw
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((t) => `${t}:*`)
-    .join(" & ");
+// Catalog search is hyphen- and space-insensitive via the
+// `search_master_medicines` RPC (normalizes both sides to [a-z0-9]).
 
 const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
   if (looksSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType })) {
