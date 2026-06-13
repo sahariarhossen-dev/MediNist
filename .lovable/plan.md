@@ -1,33 +1,34 @@
-# Stratified 60-row dry-run, then full write
+## Fix: AddCompany screen should pull from master_medicines catalog
 
-## Stratified dry-run
-Invoke the existing `spider-catalog-sync` function three times with `dry=1`, `limit=20`, `delay=500`:
-1. `offset=0` (alphabetical head)
-2. `offset=10000` (middle of catalog)
-3. `offset=20000` (tail)
+### Problem
+The "Select Your Company" screen (`/add-company`) currently queries the local per-pharmacy `companies` table and lets users manually create new company entries. This produces duplicate/variant company names across pharmacies and breaks multi-tenant consistency.
 
-Aggregate match rates per zone, plus a per-zone diff table (brand · before pack/price · after pack/price · MedEx URL · status). Spot-check a couple of well-known brands (e.g. Napa, Seclo) against medex.com.bd in the browser fetch to confirm the parser output matches reality.
+### Solution Overview
+Replace the local `companies` query with a distinct lookup against the canonical `master_medicines` catalog, remove manual creation entirely, and keep the existing selection UX.
 
-Decision rule:
-- If matched-rate in the middle and tail zones is **≥70 %** AND every spot-check is correct → auto-proceed to write.
-- If lower or any spot-check is off → halt and tune (parser, slug-match strictness, or fallback search) before any write.
+### Changes
 
-## Full write (only if dry-run passes)
-1. Snapshot via migration: `_backup_spider_full_<ts>` for `master_medicines` (full copy) + a copy of `medicines` rows whose `(name, company_name)` overlap the master set.
-2. Background loop in the sandbox:
-   - Total rows ≈ 21,168.
-   - Chunk size: 50 rows per function call (delay=2000 ms → ~110 s per chunk, well inside the 150 s edge-function ceiling).
-   - Between chunks: sleep 5 s.
-   - Wall time estimate: ~424 chunks × 115 s ≈ 13.5 h. Runs in the background; I report progress every ~30 chunks.
-3. Per chunk, the function (already correct):
-   - Updates `master_medicines.pack_size`, `unit_price`, `pcs_per_strip`, `strip_per_pack` only when a slug-validated MedEx match is found.
-   - Mirrors `pcs_per_strip` + `strip_per_pack` (NOT `price`) to matching pharmacy `medicines` rows.
-   - Skips unmatched rows; logs them to an accumulated CSV at `/mnt/documents/spider_unmatched.csv`.
-4. Final report: total matched, total unmatched, sample diffs, link to the unmatched CSV.
+#### 1. Database — new helper function
+Create `public.get_master_companies(_search text DEFAULT NULL)`:
+- Returns distinct, non-null company names from `master_medicines`
+- Optional case-insensitive search via `ILIKE`
+- Ordered alphabetically
+- Exposed to authenticated users (no extra RLS needed; `master_medicines` already allows authenticated SELECT)
 
-## Safety
-- Snapshots stay until you say drop them.
-- Any chunk that errors is retried once, then logged and skipped — never blocks the loop.
-- Custom shop prices, stock, expiry: never touched.
+#### 2. Frontend — rewrite `src/pages/AddCompany.tsx`
+- **Data fetching**: replace `supabase.from('companies')...` with `supabase.rpc('get_master_companies', { _search: searchTerm })`
+- **Search**: wire the existing "Search companies..." input to call the RPC on change (with debounce)
+- **Remove manual creation**: delete all states/logic/JSX for `showInlineAdd`, `newName`, `adding`, `handleSaveNew`, duplicate-checking, inline form, and the "+ Add New Company" button
+- **Selection behavior**: keep `handleSelect` exactly as-is (passes `companyName` back to `/add-product` via navigation state)
+- **Loading & empty states**: adapt existing skeleton and empty-state copy to reference the master catalog
 
-Ready to switch to build mode.
+### Why this approach
+- `master_medicines` has ~21k rows but only ~81 distinct companies; a DB-side `DISTINCT` avoids bandwidth waste and the 1000-row PostgREST limit
+- Removing manual creation enforces the canonical company list, preventing future duplicates
+- No changes required to `AddProduct.tsx` or any other screen — the navigation contract stays identical
+
+### Acceptance criteria
+- [ ] Typing "square" in the search box shows "Square Pharmaceuticals Ltd." (or similar) from the master catalog
+- [ ] No "+ Add New Company" button is visible
+- [ ] Selecting a company navigates back to Add Product with the correct company name filled in
+- [ ] Empty search shows all ~81 distinct companies alphabetically
