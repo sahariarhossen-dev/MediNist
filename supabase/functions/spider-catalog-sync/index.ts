@@ -133,6 +133,7 @@ Deno.serve(async (req) => {
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
   const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
+  const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2500", 10));
 
   const { data: rows, error: selErr } = await sb
     .from("master_medicines")
@@ -197,8 +198,8 @@ Deno.serve(async (req) => {
         .select("id");
       updatedMedicines += medRows?.length ?? 0;
     }
-    // 2.5s polite delay to avoid MedEx rate-limiting
-    await new Promise((r) => setTimeout(r, 2500));
+    // polite delay between rows to avoid MedEx rate-limiting
+    await new Promise((r) => setTimeout(r, delayMs));
   }
 
   return new Response(
