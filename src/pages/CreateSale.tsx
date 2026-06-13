@@ -28,35 +28,7 @@ interface CartItem {
   medicine: Medicine;
   quantity: number;
   discountPercent: number;
-  unit: SaleUnit;
 }
-
-type SaleUnit = "box" | "strip" | "pcs";
-
-const getAvailableUnits = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit[] => {
-  if (looksSingleUnit(med)) return ["pcs"];
-  const pps = Number(med.pcs_per_strip || 0);
-  const spp = Number(med.strip_per_pack || 0);
-  const units: SaleUnit[] = [];
-  if (spp > 1 && pps > 1) units.push("box");
-  if (pps > 1) units.push("strip");
-  // box-of-pieces (spp > 1, pps <= 1) → expose box as a multi-piece unit
-  if (spp > 1 && pps <= 1) units.push("box");
-  units.push("pcs");
-  return units;
-};
-
-const getDefaultUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack"> & { product_type?: string | null; unit_format?: string | null; format?: string | null }): SaleUnit => {
-  return getAvailableUnits(med)[0];
-};
-
-const piecesPerUnit = (med: Pick<Medicine, "pcs_per_strip" | "strip_per_pack">, unit: SaleUnit): number => {
-  const pps = Number(med.pcs_per_strip || 1) || 1;
-  const spp = Number(med.strip_per_pack || 1) || 1;
-  if (unit === "box") return Math.max(1, pps * spp);
-  if (unit === "strip") return Math.max(1, pps);
-  return 1;
-};
 
 const CreateSale = () => {
   const navigate = useNavigate();
@@ -162,7 +134,6 @@ const CreateSale = () => {
             medicine: resolvedMed,
             quantity: it.quantity, // drafts stored quantity in pieces
             discountPercent: (it as any).discount_percent ?? 0,
-            unit: "pcs" as SaleUnit,
           };
         });
 
@@ -253,7 +224,7 @@ const CreateSale = () => {
     }
     setCartItems((prev) => {
       if (prev.find((c) => c.medicine.id === med!.id)) return prev;
-      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(med!) }, ...prev];
+      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(med.id);
   }, [profile?.pharmacy_id, saleType, defaultDiscount]);
@@ -285,7 +256,7 @@ const CreateSale = () => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
       if (existing) return prev;
-      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0, unit: getDefaultUnit(medicine) }, ...prev];
+      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(medicine.id);
     setSearchQuery("");
@@ -310,12 +281,6 @@ const CreateSale = () => {
     );
   }, []);
 
-  const updateItemUnit = useCallback((id: string, unit: SaleUnit) => {
-    setCartItems((prev) =>
-      prev.map((c) => (c.medicine.id === id ? { ...c, unit } : c))
-    );
-  }, []);
-
   // When switching modes, reset item discounts
   const handleSaleTypeChange = useCallback((type: "retail" | "wholesale") => {
     setSaleType(type);
@@ -325,10 +290,8 @@ const CreateSale = () => {
     );
   }, [defaultDiscount]);
 
-  // Convert the user-entered quantity (in selected unit) to total pieces.
-  const getItemPieces = useCallback((item: CartItem) => {
-    return item.quantity * piecesPerUnit(item.medicine, item.unit);
-  }, []);
+  // Quantity is always stored as total pieces directly.
+  const getItemPieces = useCallback((item: CartItem) => item.quantity, []);
 
   // Calculate line total for an item (after item-wise discount in wholesale)
   const getLineTotal = useCallback((item: CartItem) => {
@@ -666,9 +629,6 @@ const CreateSale = () => {
               const grossTotal = pieces * unitPrice;
               const lineTotal = getLineTotal(item);
               const isExpanded = expandedId === item.medicine.id;
-              const availableUnits = getAvailableUnits(item.medicine);
-              const showUnitPicker = availableUnits.length > 1;
-              const unitLabel: Record<SaleUnit, string> = { box: "Box", strip: "Strip", pcs: "Pcs" };
 
               if (isExpanded) {
                 return (
@@ -752,34 +712,9 @@ const CreateSale = () => {
                       </div>
                     </div>
 
-                    {/* Sale unit selector — only for multi-unit products */}
-                    {showUnitPicker && (
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-gray-500 font-medium">Sell as</span>
-                        <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-                          {availableUnits.map((u) => (
-                            <button
-                              key={u}
-                              type="button"
-                              onClick={() => updateItemUnit(item.medicine.id, u)}
-                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition ${
-                                item.unit === u
-                                  ? "bg-white shadow-sm text-emerald-700"
-                                  : "text-gray-500 hover:text-gray-700"
-                              }`}
-                            >
-                              {unitLabel[u]}
-                              <span className="ml-1 text-[9px] font-mono text-gray-400">×{piecesPerUnit(item.medicine, u)}</span>
-                            </button>
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-gray-500 font-mono">= {pieces} pcs</span>
-                      </div>
-                    )}
-
                     {/* Row 3: Wholesale calculation string */}
                     {isWholesale && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
+                      <div className="mt-3 pt-2 border-t border-gray-100">
                         <p className="text-xs font-mono text-gray-500 text-center">
                           {formatMoney(unitPrice)} × {pieces} pcs = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
                         </p>
@@ -812,12 +747,12 @@ const CreateSale = () => {
                     </p>
                     {isWholesale ? (
                       <>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
                         <span className="text-xs font-bold text-blue-700">{formatMoney(lineTotal)} ৳</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-[10px] text-secondary">{item.quantity}{showUnitPicker ? unitLabel[item.unit][0].toLowerCase() : ""}×{formatMoney(unitPrice)}</span>
+                        <span className="text-[10px] text-secondary">{item.quantity}×{formatMoney(unitPrice)}</span>
                         <span className="text-xs font-bold text-emerald-600">{formatMoney(grossTotal)} ৳</span>
                       </>
                     )}
