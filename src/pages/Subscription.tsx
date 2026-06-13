@@ -95,7 +95,7 @@ export default function Subscription() {
           <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 space-y-1">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Plan Price</span>
-              <span className="font-semibold text-gray-900">2000 BDT</span>
+              <span className="font-semibold text-gray-900">500 BDT</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Validity</span>
