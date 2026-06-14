@@ -1,46 +1,73 @@
-## Plan: definitive MedEx pack-size repair
+## Backend sync state
 
-### What I found
-- `A-Meb Tablet` in the live database is still wrong: `pack_size = "10s strip"`, `box_size = "100s"`, `strip_per_pack = 10`, `pcs_per_strip = 10`.
-- The previous NxM backfill could not fix A-Meb because its saved `pack_size` text no longer contains MedEx’s real `(5 x 10)` value.
-- Fresh add flows currently recompute from `pack_size + box_size`; when `pack_size` is stale (`10s strip`), the app derives `100 / 10 = 10 strips`, so the wrong value keeps coming back.
+- `spider-catalog-sync-tick` is scheduled and active every 2 minutes.
+- It is currently a no-op because `spider_sync_progress.next_offset = 21168`, `total_rows = 21168`, and `finished_at` is set.
+- The sync is not actively re-scraping rows right now.
+- Clonipres/Diatrol are wrong because the scraper can match the right brand but the wrong strength variant, then writes that variant's pack numbers back into the row.
 
-### Fix approach
-1. **Restore authoritative MedEx package text in `master_medicines`**
-   - Add a guarded Edge Function routine to rescrape MedEx brand pages for every master row in chunks.
-   - For each matched page, parse the visible package text like `(5 x 10: ৳ 300.50)`.
-   - Force-overwrite `pack_size`, `unit_price`, `strip_per_pack`, and `pcs_per_strip` in `master_medicines` from the page result.
-   - For NxM, first number always becomes `strip_per_pack`; second number always becomes `pcs_per_strip`.
+## Implementation plan
 
-2. **Force-sync every pharmacy inventory row**
-   - After each corrected master row, update matching rows in `medicines` by normalized name/company/strength.
-   - Overwrite `pack_size`, `price`, `strip_per_pack`, and `pcs_per_strip`; do not preserve legacy calculated values.
-   - This repairs already-added tenant medicines such as the existing A-Meb row.
+### 1. Harden MedEx brand-page matching by strength
 
-3. **Immediate A-Meb repair**
-   - Run a direct data update for `A-Meb Tablet` now using MedEx’s verified values:
-     - `pack_size = "5 x 10: ৳ 300.50"`
-     - `unit_price / price = 6.01`
-     - `strip_per_pack = 5`
-     - `pcs_per_strip = 10`
-   - Apply it to both `master_medicines` and matching `medicines` rows so the user sees the fix instantly.
+Update `supabase/functions/spider-catalog-sync/index.ts` so every scraped result must pass both checks before writing pack data:
 
-4. **Harden add/edit retrieval**
-   - Update catalog add flows in `CatalogSearch.tsx` and `Inventory.tsx` to prefer database columns `pcs_per_strip` and `strip_per_pack` when present.
-   - Only fall back to parsing `pack_size + box_size` if the DB columns are missing.
-   - Include `pack_size`, `box_size`, `generic_name`, `strength`, and `format` when inserting into local `medicines`, so future edit pages have full source context.
+- Brand check: URL/title/result brand must still match the requested `brand_name`.
+- Strength check: parsed MedEx strength must match the requested `master_medicines.strength` after normalization.
 
-5. **Edit-page self-healing**
-   - When opening Edit Product, fetch the matching master row by name/company/strength.
-   - If the master has corrected pack numbers, populate the form from those values instead of stale local values.
-   - On save, preserve those corrected values.
+Normalization rules:
 
-6. **Verification queries**
-   - Confirm A-Meb in `master_medicines` is `5 / 10`.
-   - Confirm A-Meb in `medicines` is `5 / 10`.
-   - Confirm catalog search/add payload uses the corrected columns and no longer derives `10` from stale `100s / 10s` data.
+- Case-insensitive.
+- Normalize spaces and punctuation.
+- Normalize units like `mg`, `mcg`, `ml`, `%`.
+- Treat equivalent formatting as equal: `0.1mg`, `0.1 mg`, `0.10 mg`.
+- If a master row has a non-empty strength and the MedEx page strength is missing or different, mark the row unmatched instead of updating it.
 
-### Technical details
-- Data changes will use the Supabase data-change tool, not a schema migration.
-- Edge Function code can be updated afterward for ongoing batch repair/resync, using the existing `spider-catalog-sync` function and `CRON_SECRET` guard.
-- No manual shopkeeper edits will be required.
+### 2. Prevent wrong-strength overwrite during local edit self-healing
+
+Update `src/pages/AddProduct.tsx` edit-mode self-healing so it does not fetch pack numbers by brand/company alone.
+
+It will require:
+
+- Matching `brand_name` / `company`.
+- Matching exact normalized `strength` when the local product has strength.
+- If no exact strength match exists, do not overwrite the local product's `stripPerBox` / `pcsPerStrip`.
+
+This prevents a stale or different strength variant from silently replacing the current inventory row.
+
+### 3. Repair current Clonipres and Diatrol rows directly
+
+Apply targeted data updates for both master catalog and pharmacy inventory rows:
+
+- `Clonipres` with strength `0.1 mg`: `strip_per_pack = 6`, `pcs_per_strip = 10`, and matching `pack_size = '6 x 10'` price text where available.
+- `Diatrol` with strength `80 mg`: `strip_per_pack = 10`, `pcs_per_strip = 10`, and matching `pack_size = '10 x 10'` price text where available.
+
+Before updating, inspect the exact affected rows to avoid changing other strengths.
+
+### 4. Reset sync progress for a full strict re-scrape
+
+After the strict matching code is in place:
+
+- Set `spider_sync_progress.next_offset = 0`.
+- Set `finished_at = NULL`.
+- Reset `matched_total` / `unmatched_total` counters if needed so progress reflects the new sweep clearly.
+- Keep `total_rows = 21168` unless a fresh count differs.
+
+### 5. Start the sweep immediately
+
+Trigger `spider-catalog-sync?auto=1&dry=0&limit=50&delay=1500` once manually after reset.
+
+Then the existing `spider-catalog-sync-tick` cron will continue every 2 minutes until the sweep reaches `total_rows` again.
+
+### 6. Verification
+
+Verify and report:
+
+- Active cron job still exists.
+- `spider_sync_progress` restarted from offset 0 and begins advancing.
+- Clonipres 0.1 mg now shows `6 x 10` in both `master_medicines` and matching `medicines` rows.
+- Diatrol 80 mg now shows `10 x 10` in both `master_medicines` and matching `medicines` rows.
+- Wrong-strength variants are skipped/unmatched instead of overwriting pack data.
+
+## Expected result
+
+The root cause changes from “brand-only matching can poison pack data” to “only exact brand + strength matches may update pack data.” The full sweep can safely run for 10–15 hours without mixing strength variants again.
