@@ -72,15 +72,31 @@ function slugCore(brandUrl: string): string {
   return slug.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normToken(v: string | null | undefined): string {
+  return (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Strict match: the brand URL slug must start with the brand core token AND
+ * (when a strength is supplied) must contain the strength token.
+ * Example: "clonipres 0.1 mg" → core "clonipres", strength "01mg".
+ * Slug "clonipres-0-1-mg-tablet" → "clonipres01mgtablet" → starts with
+ * "clonipres" AND contains "01mg" ✓
+ */
 function pickMatchingBrandUrl(
   searchHtml: string,
   brandName: string,
+  strength?: string | null,
 ): string | null {
   const core = brandCoreToken(brandName);
   if (!core) return null;
   const urls = findBrandUrls(searchHtml);
+  const strengthTok = normToken(strength);
   for (const u of urls) {
-    if (slugCore(u).startsWith(core)) return u;
+    const slug = slugCore(u);
+    if (!slug.startsWith(core)) continue;
+    if (strengthTok && !slug.includes(strengthTok)) continue;
+    return u;
   }
   return null;
 }
@@ -90,6 +106,7 @@ interface Parsed {
   unit_price: number | null;
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
+  strength_text: string | null;
 }
 
 function parseBrandPage(html: string): Parsed {
@@ -98,7 +115,18 @@ function parseBrandPage(html: string): Parsed {
     unit_price: null,
     pcs_per_strip: null,
     strip_per_pack: null,
+    strength_text: null,
   };
+
+  // Strength shown on MedEx brand page, usually in <div class="dosage-form">
+  // or right after the brand title. Capture any "<number>(.<number>)? mg/mcg/ml/%"
+  // appearing near the top of the page.
+  const strengthMatch = html
+    .slice(0, 8000)
+    .match(/(\d+(?:\.\d+)?)\s*(mg|mcg|ml|%|iu|gm|g)\b/i);
+  if (strengthMatch) {
+    out.strength_text = `${strengthMatch[1]} ${strengthMatch[2].toLowerCase()}`;
+  }
 
   // Isolate the .package-container block
   const block = html.match(/<div class="package-container[\s\S]*?<\/div>\s*<\/div>/);
@@ -152,16 +180,26 @@ async function processOne(row: {
   const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(q)}`;
   let searchHtml = await medexFetch(searchUrl);
   if (!searchHtml) return { row, error: "search_failed" as const };
-  let brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name);
+  let brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name, row.strength);
   if (!brandUrl && row.strength) {
+    // Fall back to brand-only search but STILL require strength token in slug.
     const fbUrl = `https://medex.com.bd/search?search=${encodeURIComponent(row.brand_name)}`;
     searchHtml = await medexFetch(fbUrl);
-    if (searchHtml) brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name);
+    if (searchHtml) brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name, row.strength);
   }
-  if (!brandUrl) return { row, error: "no_search_results" as const };
+  if (!brandUrl) return { row, error: "no_strength_match" as const };
   const brandHtml = await medexFetch(brandUrl);
   if (!brandHtml) return { row, error: "brand_failed" as const };
   const parsed = parseBrandPage(brandHtml);
+
+  // Second-line defense: validate parsed strength against the requested
+  // strength. If the brand page advertises a different strength, refuse.
+  if (row.strength && parsed.strength_text) {
+    if (normToken(parsed.strength_text) !== normToken(row.strength)) {
+      return { row, error: "strength_mismatch" as const };
+    }
+  }
+
   return { row, brandUrl, parsed };
 }
 
