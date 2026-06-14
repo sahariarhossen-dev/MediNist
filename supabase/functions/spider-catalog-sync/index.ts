@@ -167,8 +167,14 @@ async function processOne(row: {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // One-shot internal tool; auth check intentionally omitted while running batches.
-  void CRON_SECRET;
+  // Require CRON_SECRET header — internal tool only.
+  const provided = req.headers.get("x-cron-secret") ?? "";
+  if (!CRON_SECRET || provided !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);

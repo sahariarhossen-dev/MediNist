@@ -164,6 +164,6 @@ Deno.serve(async (req) => {
     if (status === 429) return json(429, { error: "Rate limit exceeded" });
     if (status === 402) return json(402, { error: "AI credits exhausted" });
     console.error("medinist-ai-notepad error:", e);
-    return json(500, { error: (e as Error).message ?? "Internal error" });
+    return json(500, { error: "An internal error occurred. Please try again." });
   }
 });
