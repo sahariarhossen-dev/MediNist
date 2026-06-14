@@ -169,11 +169,37 @@ export interface CatalogPackClassification {
 }
 
 /**
+ * Parse a MedEx-style "NxM" pack string (e.g. "5 x 10", "20×10", "10 X 14")
+ * into `{ strip_per_pack, pcs_per_strip }`.
+ *
+ * MedEx convention: the FIRST number is the number of strips in a box, and
+ * the SECOND number is the pieces per strip. Never swap these.
+ * Returns null when the string does not contain an NxM pair.
+ */
+export const parseNxMPack = (
+  pack: string | null | undefined
+): { strip_per_pack: number; pcs_per_strip: number } | null => {
+  if (!pack) return null;
+  const m = String(pack).match(/(\d+)\s*[xX×]\s*(\d+)/);
+  if (!m) return null;
+  const spp = parseInt(m[1], 10);
+  const pps = parseInt(m[2], 10);
+  if (!Number.isFinite(spp) || !Number.isFinite(pps) || spp <= 0 || pps <= 0) {
+    return null;
+  }
+  return { strip_per_pack: spp, pcs_per_strip: pps };
+};
+
+/**
  * Centralized rule that decides whether a catalog medicine should be
  * persisted in `medicines` as a single whole unit (Syrup, Drop, Cream,
  * "30s pot" sold as one pack) or as a strip/box-divided product.
  *
  * Rules:
+ * - `pack_size` matches "NxM" → ALWAYS trust it: `strip_per_pack = N`,
+ *   `pcs_per_strip = M`. This is MedEx's authoritative format and must
+ *   never be re-derived from `box_size` (that historically caused the
+ *   strips/pcs values to swap).
  * - `box_size` ≤ 1 (or missing) → SINGLE, regardless of `pack_size`.
  *   A 30s pot of Allion Gold is one unit, not 30 strips.
  * - `box_size` > 1 and `pack_size` > 1 → FULL strip+box.
@@ -183,6 +209,24 @@ export interface CatalogPackClassification {
 export const classifyCatalogPack = (
   input: CatalogPackInput
 ): CatalogPackClassification => {
+  // 1. NxM is the source of truth when present.
+  const nxm = parseNxMPack(input.pack_size);
+  if (nxm) {
+    if (nxm.strip_per_pack > 1) {
+      return {
+        mode: "full",
+        pcs_per_strip: nxm.pcs_per_strip,
+        strip_per_pack: nxm.strip_per_pack,
+      };
+    }
+    // "1 x M" → single strip of M pieces
+    return {
+      mode: "strip",
+      pcs_per_strip: nxm.pcs_per_strip,
+      strip_per_pack: 1,
+    };
+  }
+
   const box = parsePackSize(input.box_size);
   const pack = parsePackSize(input.pack_size);
 

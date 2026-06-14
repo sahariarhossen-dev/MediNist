@@ -80,6 +80,34 @@ export default {
         "fluid-xl": "var(--fs-xl)",
         "fluid-2xl": "var(--fs-2xl)",
       },
+      fontFamily: {
+        // Always include "Noto Sans Bengali" so the Bengali Taka sign (U+09F3)
+        // resolves to a real glyph even when the primary font (Inter, mono
+        // stacks) does not contain it. Prevents the "৳" → ";" rendering bug.
+        sans: [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "Noto Sans Bengali",
+          "sans-serif",
+        ],
+        mono: [
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "Liberation Mono",
+          "Courier New",
+          "Noto Sans Bengali",
+          "monospace",
+        ],
+      },
       spacing: {
         page: "var(--pad-page)",
       },
