@@ -2,6 +2,9 @@ import { Check, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { colorForUserId } from "@/lib/chatColors";
 import type { ChatMessage, RoomMember } from "@/hooks/useChatRoom";
+import { parseCardPayload } from "@/lib/chatCards";
+import ChatMedicineCard from "./cards/ChatMedicineCard";
+import ChatInvoiceCard from "./cards/ChatInvoiceCard";
 
 const fmtTime = (iso: string) => {
   const d = new Date(iso);
@@ -26,6 +29,35 @@ const MessageItem = ({ message, isMine, showSenderName, senderName, members, myI
     others.every((m) => new Date(m.last_read_at).getTime() >= new Date(message.created_at).getTime());
 
   const isImage = message.attachment_type?.startsWith("image/");
+  const card = parseCardPayload(message.content);
+
+  if (card) {
+    return (
+      <div className={cn("flex w-full px-3", isMine ? "justify-end" : "justify-start")}>
+        <div className="flex flex-col max-w-[85%]">
+          {showSenderName && !isMine && (
+            <p className={cn("text-xs font-semibold mb-1 px-1", colorForUserId(message.sender_id))}>
+              {senderName || "Member"}
+            </p>
+          )}
+          {card.kind === "medicine" ? (
+            <ChatMedicineCard data={card.data} />
+          ) : (
+            <ChatInvoiceCard data={card.data} />
+          )}
+          <div className="flex items-center justify-end gap-1 mt-1 px-1">
+            <span className="text-[10px] text-gray-500">{fmtTime(message.created_at)}</span>
+            {isMine &&
+              (readByAll ? (
+                <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+              ) : (
+                <Check className="h-3.5 w-3.5 text-gray-500" />
+              ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex w-full px-3", isMine ? "justify-end" : "justify-start")}>
