@@ -1,81 +1,100 @@
-# Phase 3: Long-Press Message → MediNist Note Bridge
+## Goal
+Three connected bugs introduced by the recent spider sync:
+1. `pack_size` like "5 x 10" is being interpreted with strips/pcs reversed in the UI.
+2. Existing rows in `medicines` already contain swapped values and need to be corrected.
+3. The Taka symbol `৳` renders as `;` in some price cells because the active font (a `font-mono` / `tabular-nums` stack) does not contain the Bengali Taka glyph (U+09F3) and the browser falls back to a glyph that looks like a semicolon.
 
-Connect the chat room to the Notes module so users can long-press (or right-click) a message bubble, open a sleek context menu, and instantly convert the message text into a new actionable note with smart checklist parsing.
+---
 
-## 1. Long-press / context menu on message bubbles
+## 1. Parser: prefer NxM, fall back to division
 
-Edit `src/components/messaging/MessageItem.tsx`:
+File: `src/lib/stockUtils.ts` — `classifyCatalogPack`.
 
-- Wrap the outer bubble container with handlers:
-  - Desktop: `onContextMenu` (preventDefault → open menu).
-  - Mobile: touch-hold via `onTouchStart` / `onTouchEnd` / `onTouchMove` with a 450ms timer ref. Cancel on move or early release.
-- Local state `menuOpen: boolean` controls a shadcn `Sheet` (side="bottom") with `backdrop-blur-sm` overlay class override.
-- Sheet content (rounded-t-2xl, p-2, max-w-md mx-auto):
-  - Row 1 — **Copy Text** (`Copy` icon, neutral slate styling). Copies `message.content` (skips card sentinels — fall back to a readable summary like "Shared medicine card" when `parseCardPayload` returns non-null) via `navigator.clipboard.writeText`, then toasts "Copied".
-  - Row 2 — **✨ Convert to MediNist Note** (`FilePlus` icon, `text-indigo-600 dark:text-indigo-400 font-medium`, subtle indigo-50 hover). Disabled when the message has no usable text (pure image/attachment + no content).
-- Card-payload messages: still show the menu; "Convert" uses a textual rendering of the card (e.g. `Medicine: Napa Extend 665mg\nGeneric: Paracetamol\nStock: 24`) so the note has meaningful content.
+Current behavior treats `pack_size` as pcs-per-strip and divides `box_size` by it, so MedEx "5 x 10" (5 strips × 10 pcs, box of 50/100) ends up stored as `pcs_per_strip=5, strip_per_pack=20`.
 
-## 2. Bridge logic — create note from message
+New rule, in order:
+- If `pack_size` matches `^\s*(\d+)\s*[xX×]\s*(\d+)` → `strip_per_pack = first`, `pcs_per_strip = second`. Stop.
+- Else fall through to the existing `box_size ÷ pack_size` logic for single-number formats like `"10s pack"`.
+- Sanity guard: if both numbers are produced and `box_size` parses to a positive integer that doesn't equal `strips × pcs`, log a warning but trust NxM.
 
-New helper `src/lib/messageToNote.ts`:
+Add a tiny pure helper `parseNxMPack(pack_size: string | null)` returning `{ strip_per_pack, pcs_per_strip } | null` so it can be reused by the edge function and a unit test.
 
-```ts
-export function parseMessageToBlocks(text: string): NoteBlock[]
+Add a vitest in `src/test/` covering:
+- `"5 x 10"` → `{5, 10}`
+- `"20 x 10"` → `{20, 10}`
+- `"10's pack"` → falls through
+- `"10 X 14"` → `{10, 14}` (Maxpro case)
+
+## 2. Edge function: spider-catalog-sync
+
+File: `supabase/functions/spider-catalog-sync/index.ts` — `parseBrandPage`.
+
+Logic is already `strip_per_pack = nxm[1]; pcs_per_strip = nxm[2]`, which is correct. Keep as-is but:
+- Add a hardening comment referencing the rule.
+- When mirroring to `medicines`, also write `pack_size` text so the frontend's new NxM parser has the source string to recompute from on the fly.
+
+## 3. One-shot SQL backfill
+
+Migration to recompute legacy rows whose `pack_size` matches NxM:
+
+```sql
+WITH parsed AS (
+  SELECT id,
+         (regexp_match(pack_size, '(\d+)\s*[xX×]\s*(\d+)'))[1]::int AS spp,
+         (regexp_match(pack_size, '(\d+)\s*[xX×]\s*(\d+)'))[2]::int AS pps
+  FROM public.master_medicines
+  WHERE pack_size ~ '\d+\s*[xX×]\s*\d+'
+)
+UPDATE public.master_medicines m
+SET strip_per_pack = p.spp,
+    pcs_per_strip  = p.pps
+FROM parsed p
+WHERE m.id = p.id
+  AND (m.strip_per_pack IS DISTINCT FROM p.spp
+    OR m.pcs_per_strip  IS DISTINCT FROM p.pps);
 ```
 
-- Split by `\n`.
-- Detect list lines via regex `^\s*(?:[-*•]|\d+[.)])\s+(.*)$`.
-- If ≥2 consecutive list lines (or any list line) found, emit a single `checklist` block with each list item as `{ id, text, checked: false }`. Non-list lines between/after list items become preceding/following `text` blocks (HTML-escaped, joined with `<br/>`).
-- Otherwise return one `text` block with the message text converted to safe HTML (`<br/>` for newlines, escape `<>&`).
-- Each block gets a fresh `crypto.randomUUID()` id.
+Then mirror the corrected values into `public.medicines` by joining on `(lower(name), lower(company_name))`, matching the pattern already used by `admin_resync_medicines_pack_info`.
 
-In `MessageItem.tsx`, when "Convert to MediNist Note" is tapped:
+This is data-only, but because we're invoking schema/migration tooling for it, it goes through the migration tool.
 
-1. Call `useCreateNote()` mutation with:
-   - `title: \`Task from Chat: ${senderName || "Member"}\``
-   - `content: parseMessageToBlocks(plainTextForNote)`
-   - other fields default (no tags/contacts, color default, not pinned, not public).
-2. On success: close the sheet, fire toast (see §3), navigate happens only from the toast action.
-3. On error: `toast.error("Could not save to Notepad")`.
+## 4. On-save guard (defense in depth)
 
-`useCreateNote` already returns the created `Note` row → use `mutateAsync` to get `note.id` for the toast action.
+In `src/pages/AddProduct.tsx` (the place that writes to `medicines`), before insert/update:
+- If the user has typed a `pack_size` that matches NxM, recompute `strip_per_pack` and `pcs_per_strip` from it and overwrite whatever is currently in those fields. This guarantees future edits self-heal any remaining bad rows.
 
-The mutation needs `useAuth` context (pharmacy_id, user.id) which is already wired inside the hook — no changes to `useNotes.ts` required.
+## 5. Taka symbol fallback
 
-## 3. Confirmation toast with [Open Note] action
+Root cause: `font-mono` (ui-monospace, SFMono-Regular, Menlo, Monaco, …) and some `tabular-nums` mono fallbacks do not contain U+09F3. Browsers then pick a glyph from the next family in the cascade, occasionally rendering a `;`-looking shape.
 
-Use `sonner` (already in project, e.g. `NoteEditor.tsx` imports it):
+Fix:
+- Add a `font-taka` utility in `tailwind.config.ts` that prepends a font stack guaranteed to have `৳`: `'Noto Sans Bengali', 'Hind Siliguri', system-ui, sans-serif`.
+- In `src/index.css`, add a `@layer base` rule so any element using `.font-mono`, `.tabular-nums`, or a `.price` class still resolves U+09F3 via a CSS `unicode-range` `@font-face` override, or simpler: wrap every `৳` in a `<span className="font-taka">৳</span>` via a single tiny component `<Taka />` and replace the bare `৳` literals in price-rendering files.
+- Concrete approach (least intrusive): create `src/components/Taka.tsx` exporting `<Taka />` and a `formatTaka(n)` helper that returns JSX. Replace `৳{...}` usages in the files that combine the symbol with `font-mono` / `tabular-nums`:
+  - `src/pages/Invoice.tsx` (6 spots, all `font-mono`)
+  - `src/pages/Inventory.tsx` (2 spots, `tabular-nums`)
+  - `src/pages/DailyTransactions.tsx`, `src/pages/AllTransactions.tsx`, `src/pages/Sales.tsx`, `src/pages/PersonalReport.tsx`, `src/pages/Index.tsx`, `src/pages/CreateSale.tsx`, `src/pages/Customers.tsx`, `src/pages/CustomerProfile.tsx`, `src/pages/Profile.tsx`, `src/pages/ShopProfile.tsx`, `src/pages/ShortItems.tsx`, `src/pages/SubscriptionCheckout.tsx`, `src/hooks/useNotifications.ts`
+- Also link the Bengali font in `index.html`:
+  ```html
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+  ```
 
-```ts
-toast.success("📝 Message saved as an actionable task in Notepad!", {
-  action: {
-    label: "Open Note",
-    onClick: () => navigate(`/notes/${note.id}`),
-  },
-  duration: 5000,
-});
-```
+## 6. Verification
 
-Confirm the project's notes route is `/notes/:id` (matches `NoteEditor`). If the route differs, use the actual path from `App.tsx`.
+- Run the new vitest for `parseNxMPack`.
+- Open Inventory and confirm Amloten now shows `5 strips × 10 pcs` (B:S:P breakdown matches MedEx).
+- Open a chat medicine card and the invoice screen and confirm `৳` renders correctly in both `font-mono` and `tabular-nums` contexts.
+- Confirm no regression in the existing `looksSingleUnit` / single-unit Syrup/Drops handling — single-number `pack_size` strings still fall through to the unchanged branch.
 
-## 4. Files
+## Files
 
-**Create:**
-- `src/lib/messageToNote.ts` — parser + block builder.
+- Edit: `src/lib/stockUtils.ts`, `src/pages/AddProduct.tsx`, `tailwind.config.ts`, `src/index.css`, `index.html`, plus the price-rendering files listed above
+- Edit: `supabase/functions/spider-catalog-sync/index.ts` (comment + mirror `pack_size`)
+- Create: `src/components/Taka.tsx`, `src/test/parseNxMPack.test.ts`
+- Migration: one-shot backfill of `master_medicines` and `medicines`
 
-**Edit:**
-- `src/components/messaging/MessageItem.tsx` — long-press/context-menu handlers, bottom Sheet UI, copy + convert actions, sonner toast with Open Note action.
+## Out of scope
 
-**Not touched:** `useNotes.ts`, `NoteEditor.tsx`, `Notes.tsx`, `ChatRoom.tsx`, DB schema, edge functions.
-
-## 5. Technical notes
-
-- Long-press timer must clear on `onTouchEnd`, `onTouchMove` (>10px), `onTouchCancel`, and on unmount.
-- Prevent the menu from interfering with link/image taps inside the bubble: only attach handlers to the bubble wrapper, not the inner `<a>`/`<img>`.
-- Suppress the synthetic click that follows a long-press by setting a `suppressNextClickRef` and checking it in any future click handler (currently bubbles have none, but future-proof).
-- Accessibility: also wire `onKeyDown` for `Shift+F10` / `ContextMenu` key to open the same sheet.
-- Mobile-safe area: sheet content uses `pb-[env(safe-area-inset-bottom)]`.
-
-## 6. Out of scope
-
-- No backend changes, no realtime updates to Notes, no message-level "saved" indicator, no multi-select, no forward-to-existing-note.
+- Re-running the spider crawl over all brands.
+- Changing the storage format of `pack_size` (kept as the raw MedEx string).
+- Touching the tri-unit display math itself — once `strip_per_pack` / `pcs_per_strip` are right, the existing `totalPiecesToTriUnit*` helpers already render correctly.
