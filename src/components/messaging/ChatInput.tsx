@@ -3,6 +3,14 @@ import { Plus, Send, Smile } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import AttachmentSheet from "./AttachmentSheet";
+import MedicinePickerSheet from "./MedicinePickerSheet";
+import {
+  buildInvoiceCardContent,
+  buildMedicineCardContent,
+  MOCK_INVOICE,
+  type MedicineCardData,
+} from "@/lib/chatCards";
 
 interface Props {
   onSend: (content: string, attachment?: { url: string; type: string }) => Promise<void>;
@@ -18,6 +26,9 @@ const ChatInput = ({ onSend, onTyping, roomId }: Props) => {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fileAcceptRef = useRef<string>("image/*,application/pdf");
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [medOpen, setMedOpen] = useState(false);
 
   const handleSend = async () => {
     if (!text.trim()) return;
@@ -44,6 +55,21 @@ const ChatInput = ({ onSend, onTyping, roomId }: Props) => {
     }
   };
 
+  const openFilePicker = (accept: string) => {
+    if (!fileRef.current) return;
+    fileRef.current.accept = accept;
+    fileAcceptRef.current = accept;
+    fileRef.current.click();
+  };
+
+  const handleShareMedicine = async (med: MedicineCardData) => {
+    await onSend(buildMedicineCardContent(med));
+  };
+
+  const handleShareInvoice = async () => {
+    await onSend(buildInvoiceCardContent(MOCK_INVOICE));
+  };
+
   return (
     <div className="sticky bottom-0 bg-white border-t border-gray-200 px-3 py-2">
       {emojiOpen && (
@@ -61,14 +87,14 @@ const ChatInput = ({ onSend, onTyping, roomId }: Props) => {
       )}
       <div className="flex items-end gap-2">
         <button
-          onClick={() => fileRef.current?.click()}
+          onClick={() => setAttachOpen(true)}
           disabled={uploading}
           className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200"
           aria-label="Attach"
         >
           <Plus className="h-5 w-5" />
         </button>
-        <input ref={fileRef} type="file" hidden onChange={handleFile} accept="image/*,application/pdf" />
+        <input ref={fileRef} type="file" hidden onChange={handleFile} accept={fileAcceptRef.current} />
         <button
           onClick={() => setEmojiOpen((v) => !v)}
           className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -101,6 +127,20 @@ const ChatInput = ({ onSend, onTyping, roomId }: Props) => {
           <Send className="h-4 w-4" />
         </button>
       </div>
+
+      <AttachmentSheet
+        open={attachOpen}
+        onOpenChange={setAttachOpen}
+        onPickImage={() => openFilePicker("image/*")}
+        onPickDocument={() => openFilePicker("application/pdf")}
+        onShareDrugCard={() => setMedOpen(true)}
+        onShareInvoice={handleShareInvoice}
+      />
+      <MedicinePickerSheet
+        open={medOpen}
+        onOpenChange={setMedOpen}
+        onSelect={handleShareMedicine}
+      />
     </div>
   );
 };
