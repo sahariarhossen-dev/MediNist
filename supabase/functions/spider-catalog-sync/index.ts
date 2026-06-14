@@ -115,7 +115,8 @@ function parseBrandPage(html: string): Parsed {
   if (packMatch) {
     const raw = packMatch[1].replace(/\s+/g, " ").trim().replace(/^\(|\)$/g, "");
     out.pack_text = raw;
-    // Pattern A: "N x M" (strips x pcs)
+    // Pattern A: "N x M" — MedEx convention is N strips per BOX × M pcs per STRIP.
+    // ALWAYS map first number → strip_per_pack, second → pcs_per_strip. Do NOT swap.
     const nxm = raw.match(/(\d+)\s*[xX×]\s*(\d+)/);
     if (nxm) {
       out.strip_per_pack = parseInt(nxm[1], 10);
@@ -256,12 +257,14 @@ Deno.serve(async (req) => {
         .update(after)
         .eq("id", r.id);
       if (!upErr) updatedMaster++;
-      // Mirror to per-pharmacy medicines (only pack + price; safe fields)
+      // Mirror to per-pharmacy medicines (pack info + pack_size text so the
+      // frontend parser can re-derive strips/pcs from the source string).
       const { data: medRows } = await sb
         .from("medicines")
         .update({
           pcs_per_strip: after.pcs_per_strip,
           strip_per_pack: after.strip_per_pack,
+          pack_size: after.pack_size,
         })
         .eq("name", r.brand_name)
         .eq("company_name", r.company ?? "")
