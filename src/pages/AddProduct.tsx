@@ -136,6 +136,35 @@ const AddProduct = () => {
     if (s.stripPerBox) setStripPerBox(s.stripPerBox);
   }, []);
 
+  // Self-heal: when opening Edit for an existing product, look up the
+  // authoritative MedEx master row by (name, company) and overwrite the
+  // pack numbers with the master values. Prevents stale local pack data
+  // (e.g. swapped strips/pcs) from being re-saved on the next edit.
+  useEffect(() => {
+    const s = location.state;
+    if (!s?.editId || !s?.name) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("master_medicines")
+        .select("pcs_per_strip, strip_per_pack, unit_price")
+        .ilike("brand_name", s.name)
+        .ilike("company", s.companyName || "")
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      if (typeof data.strip_per_pack === "number" && data.strip_per_pack > 0) {
+        setStripPerBox(String(data.strip_per_pack));
+      }
+      if (typeof data.pcs_per_strip === "number" && data.pcs_per_strip > 0) {
+        setPcsPerStrip(String(data.pcs_per_strip));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const strengthConfig = getStrengthConfig(productType);
 
   const handleTypeChange = (v: string) => {
