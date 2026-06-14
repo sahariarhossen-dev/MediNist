@@ -40,6 +40,8 @@ interface MasterMedicine {
   format: string | null;
   pack_size: string | null;
   box_size: string | null;
+  pcs_per_strip: number | null;
+  strip_per_pack: number | null;
 }
 
 // Catalog search is hyphen- and space-insensitive via the
@@ -320,8 +322,11 @@ const Inventory = () => {
       return;
     }
     setAddingCatalog(true);
-    const { pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack } =
-      classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
+    const hasMasterInts =
+      typeof med.pcs_per_strip === "number" || typeof med.strip_per_pack === "number";
+    const { pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack } = hasMasterInts
+      ? { pcs_per_strip: med.pcs_per_strip, strip_per_pack: med.strip_per_pack }
+      : classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
     const rawQty = parseInt(catalogQty, 10) || 0;
     const functionalType = toFunctionalType(med.format);
     // Keep verbatim format for unmappable types so the pharmacy still gets a
@@ -342,6 +347,11 @@ const Inventory = () => {
       stock_quantity: stockQty,
       pcs_per_strip: pcsPerStrip,
       strip_per_pack: stripPerPack,
+      pack_size: med.pack_size,
+      box_size: med.box_size,
+      generic_name: med.generic_name,
+      strength: med.strength,
+      format: med.format,
     }).select().single();
 
     if (error) {
