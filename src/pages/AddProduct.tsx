@@ -145,14 +145,29 @@ const AddProduct = () => {
     if (!s?.editId || !s?.name) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // Strict brand + strength match. If the local row has a strength,
+      // only accept a master row whose normalized strength matches exactly.
+      // This prevents a different strength variant (e.g. Clonipres 0.2 mg)
+      // from silently overwriting this row's (e.g. 0.1 mg) pack numbers.
+      const norm = (v: string | null | undefined) =>
+        (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const wantStrength = norm(s.strength);
+      const { data: rows } = await supabase
         .from("master_medicines")
-        .select("pcs_per_strip, strip_per_pack, unit_price")
+        .select("pcs_per_strip, strip_per_pack, unit_price, strength")
         .ilike("brand_name", s.name)
         .ilike("company", s.companyName || "")
-        .limit(1)
-        .maybeSingle();
-      if (cancelled || !data) return;
+        .limit(20);
+      if (cancelled || !rows || rows.length === 0) return;
+      let data: typeof rows[number] | undefined;
+      if (wantStrength) {
+        data = rows.find((r) => norm(r.strength) === wantStrength);
+        if (!data) return; // no exact strength match → do NOT overwrite
+      } else {
+        // Local row has no strength: only safe if master has a single variant.
+        if (rows.length !== 1) return;
+        data = rows[0];
+      }
       if (typeof data.strip_per_pack === "number" && data.strip_per_pack > 0) {
         setStripPerBox(String(data.strip_per_pack));
       }
