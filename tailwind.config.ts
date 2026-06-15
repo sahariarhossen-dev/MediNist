@@ -28,6 +28,8 @@ export default {
           DEFAULT: "hsl(var(--accent-warning))",
           soft: "hsl(var(--accent-warning-soft))",
         },
+        "chat-canvas": "hsl(var(--chat-canvas))",
+        "chat-user-bubble": "hsl(var(--chat-user-bubble))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

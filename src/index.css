@@ -37,6 +37,10 @@ All colors MUST be HSL.
     --accent-warning-soft: 32 95% 95%;
     --surface-muted: 210 40% 98%;
 
+    /* Chat canvas tokens — warm neutral background for AI chat */
+    --chat-canvas: 60 6% 95%;
+    --chat-user-bubble: 60 5% 91%;
+
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 

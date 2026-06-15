@@ -228,7 +228,7 @@ const AIAssistant = () => {
   const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
   return (
-    <div className="fixed inset-0 flex h-[100dvh] flex-col bg-white">
+    <div className="fixed inset-0 flex h-[100dvh] flex-col bg-chat-canvas">
       <ChatHeader
         pharmacyName={pharmacyName}
         role={profile?.role ?? null}
@@ -302,7 +302,7 @@ const AIAssistant = () => {
 
       {/* Floating Composer Card */}
       <form onSubmit={handleSubmit} className="relative shrink-0 px-3 pt-2 pb-[15px]">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-3xl border border-slate-200/80 bg-white px-4 pb-2 pt-3 shadow-sm transition-all duration-200 focus-within:border-slate-300 focus-within:shadow-md">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-3xl border border-black/5 bg-white/70 px-4 pb-2 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur transition-all duration-200 focus-within:border-black/10 focus-within:bg-white/90 focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <textarea
             ref={textareaRef}
             value={input}
