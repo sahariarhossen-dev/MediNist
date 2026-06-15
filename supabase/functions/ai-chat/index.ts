@@ -449,6 +449,22 @@ function safeField(value: unknown, max = 100): string {
 
 type Role = "owner" | "manager" | "salesman";
 
+function buildScopeHeader(role: Role, shopName: string): string {
+  const allowed =
+    role === "owner"
+      ? "shop_totals,profit,cpa,expenses,salaries,staff_perf,dues,inventory,medex"
+      : role === "manager"
+      ? "inventory,sales_7d,staff_names,dues,expenses_7d,medex"
+      : "inventory,own_sales,medex";
+  const forbidden =
+    role === "owner"
+      ? "none"
+      : role === "manager"
+      ? "profit,margin,cpa,purchase_price,salaries,expenses_gt_7d,sales_gt_7d,owner_withdrawals"
+      : "profit,margin,cpa,purchase_price,shop_totals,expenses,supplier_info,other_staff_data,salaries";
+  return `<scope role="${role}" shop="${shopName.replace(/"/g, "'")}" allowed="${allowed}" forbidden="${forbidden}" />`;
+}
+
 function buildSecurityBlock(opts: {
   fullName: string;
   role: Role;
