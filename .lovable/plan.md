@@ -1,74 +1,41 @@
-# Format-aware parsing for spider-catalog-sync
+## Goal
 
-Refactor Step C (pack parsing) and Step D (math validation) in `supabase/functions/spider-catalog-sync/index.ts` so non-tablet products are saved in their native units instead of being rejected as `math_mismatch`.
+Loosen strength comparison and search fallback in `supabase/functions/spider-catalog-sync/index.ts` so the ~20 currently failing liquid/injection/inhaler/topical rows match on the next sweep.
 
-## 1. Detect product format
+## Changes (all in `supabase/functions/spider-catalog-sync/index.ts`)
 
-Add a helper `detectFormat(brand_title, pack_text)` returning one of:
-- `strip` — Tablet, Capsule, Suppository (default)
-- `liquid` — Syrup, Suspension, Drops, Solution, Spray, Inhaler, Mouthwash (volume in `ml`)
-- `semisolid` — Cream, Ointment, Gel, Lotion, Paste, Oil (weight in `g`/`gm`)
-- `single` — Injection, Infusion, Vial, Ampoule, IV, IM, PFS, or any `1's pack`
+### 1. New helper: `stripDenominators(s)`
+Removes trailing per-unit designators before normalization:
+- `/5 ml`, `/5ml`, `/10 ml`, `/ml`, `/vial`, `/puff`, `/spray`, `/drop`, `/dose`, `/g`, `/gm`, `/application`
+- Case-insensitive regex; also strips surrounding parentheses.
 
-Detection sources (in order):
-1. Form word inside the `<h1><small>...</small></h1>` brand title.
-2. Keywords in raw `pack_text` (`ml`, `bottle`, `gm`/`g tube`, `tube`, `vial`, `ampoule`, `1's pack`).
+### 2. New helper: `strengthNumbers(s)`
+Extracts every numeric token (incl. decimals) from a strength string into a sorted array, e.g. `(5 mg+2 mg+2 mg+20 mg)/5 ml` → `[2,2,5,20]` (ignoring the `5` denominator by first calling `stripDenominators`).
 
-## 2. Update `parseBrandPage`
+### 3. New comparator: `strengthMatches(dbStrength, pageStrength)`
+Returns true if ANY of:
+- a. `norm(stripDenominators(db)) === norm(stripDenominators(page))` — handles `125 mg/5 ml` ↔ `125 mg`.
+- b. Composite multiset match: `strengthNumbers(db)` is a subset of `strengthNumbers(page)` AND every db number appears verbatim in the page strength text (regex `\b<num>\b`). Handles `(5 mg+2 mg+2 mg+20 mg)/5 ml` ↔ page text containing `5 mg + 2 mg + 2 mg + 20 mg`.
+- c. Units-only fallback: when db has only a percentage (`0.1%`) or IU and page contains the same token.
 
-Extend `BrandPage` with:
-- `format: 'strip' | 'liquid' | 'semisolid' | 'single'`
-- `container_text: string | null` (e.g. `"60 ml bottle"`, `"15 gm tube"`, `"1 vial"`)
-- `container_qty: number | null` and `container_unit: 'ml' | 'g' | 'vial' | 'ampoule' | 'pcs' | null`
+Replace the line `if (!page.strength_text || norm(page.strength_text) !== wantStrength)` with `if (!page.strength_text || !strengthMatches(row.strength, page.strength_text))`.
 
-Parsing additions inside the `package-container` scope:
-- Regex for `(\d+(?:\.\d+)?)\s*(ml|gm|g)\b` → liquid/semisolid quantity + unit.
-- Regex for `(\d+)\s*(vial|ampoule|bottle|tube)s?` → single-unit container.
-- Fallback: if `pack_text` matches `\d+\s*'s\s*pack` and format ≠ strip → treat as single (qty=number, unit=`pcs`).
-- Keep existing N×M and `Ns pack` regex only when format = `strip`.
+### 4. Search fallback for `unmatched_no_candidate`
+Extend `discoverCandidates` query order to:
+1. `brand + full strength`
+2. `brand + first-number-only strength` (e.g. `A-Cal D 500 mg` instead of `500 mg+200 IU`)
+3. `brand` only (already there)
+4. `brandCoreToken(brand)` (last resort, strips suffix like " Tablet"/" Syrup")
 
-## 3. Rewrite Step C/D in `processOne` + main loop
+This auto-recovers `0.1%`, `500 mg+200 IU`, `500 mg+65 mg`, pediatric drops, etc.
 
-Replace the current unconditional math cross-check with branch by `page.format`:
+### 5. Outcome bookkeeping
+No schema changes. Same `Outcome` enum. After deploy, rows that previously failed will simply flip to `matched` on next cron tick; failure reasons remain accurate for the genuinely unmatched.
 
-```text
-if format == 'strip':
-    run existing unit*pcs == strip and strip*spp == pack checks
-else:
-    skip math entirely
-    require container_text to be present (else unmatched_no_candidate)
-```
+## Out of scope
+- No DB migration.
+- No changes to Step C/D pack-parsing math (already non-strip safe).
+- No retroactive re-run script — the existing cron sweep will pick these rows up because `medex_status != 'matched'` rows are re-queried.
 
-## 4. Database write policy
-
-In the matched branch of the main loop, build `after` based on format:
-
-- **strip** (unchanged):
-  - `pcs_per_strip = p.pcs_per_strip`
-  - `strip_per_pack = p.strip_per_pack`
-  - `pack_size = "${strip_per_pack} x ${pcs_per_strip}"`
-  - `unit_price = p.unit_price`
-
-- **liquid / semisolid / single**:
-  - `pcs_per_strip = 1`
-  - `strip_per_pack = 1`
-  - `pack_size = p.container_text` (e.g. `"60 ml bottle"`, `"15 gm tube"`, `"1 vial"`)
-  - `unit_price = p.unit_price` (absolute price of the bottle/tube/vial; falls back to `strip_price` or `pack_total` if `unit_price` is null)
-
-The mirrored `medicines` table update uses the same fields.
-
-## 5. Outcome reporting
-
-Add a per-row `format` field to the `samples` payload so we can verify in logs which branch ran. No new outcome codes; non-strip rows that match still report `matched`.
-
-## 6. Out of scope
-
-- No schema changes (`pack_size`, `pcs_per_strip`, `strip_per_pack`, `unit_price` columns already exist).
-- No changes to cron schedule, batch limit, auth, or progress-tracking logic.
-- No retroactive re-processing of rows already marked `math_mismatch`; next cron tick will re-examine them only if they fall back into the offset window. (If you want a one-shot reset of `medex_status = 'math_mismatch'` rows so they get re-tried, say so and I'll add it.)
-
-## Technical notes
-
-- Format detection runs on the MedEx page (authoritative), not on the DB row, because `master_medicines` doesn't reliably carry a form column.
-- All regexes are case-insensitive and tolerant of `&nbsp;`/extra whitespace (already normalized by `stripTags`).
-- `approxEq` and tablet math remain untouched for the strip branch.
+## Deploy
+Deploy `spider-catalog-sync` immediately after the edit. Monitor `spider_sync_progress.matched_total` to confirm the formerly-failing rows convert.
