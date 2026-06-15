@@ -235,6 +235,7 @@ const AIAssistant = () => {
           pharmacyName={pharmacyName}
           userName={profile?.full_name ?? null}
           avatarUrl={profile?.avatar_url ?? null}
+          role={profile?.role ?? null}
           onToggleSidebar={() => setSidebarOpen(true)}
         />
       </div>
