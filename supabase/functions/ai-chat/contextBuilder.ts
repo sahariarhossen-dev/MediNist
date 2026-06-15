@@ -135,9 +135,9 @@ export async function buildPharmacyContext(
             .limit(300),
     ]);
 
-    const medicines = medsRes.data ?? [];
-    const sales = salesRes.data ?? [];
-    const items = itemsRes.data ?? [];
+    const medicines = (medsRes.data ?? []) as any[];
+    const sales = (salesRes.data ?? []) as any[];
+    const items = (itemsRes.data ?? []) as any[];
     const staff = (staffRes?.data ?? []) as any[];
     const cashTx = (cashRes?.data ?? []) as any[];
     const dues = (duesRes?.data ?? []) as any[];
