@@ -6,17 +6,20 @@ interface LogoMarkProps {
 }
 
 /**
- * Icon-only MediNist mark — premium blue gradient "M".
+ * Icon-only MediNist mark — renders at 2x intrinsic resolution
+ * for crisp display on high-DPI screens.
  */
 const LogoMark = ({ size = 32, className }: LogoMarkProps) => {
   return (
     <img
       src={logoSrc}
       alt="MediNist logo"
-      width={size}
-      height={size}
-      className={`ml-0 mt-0 py-0 px-0 pt-0 pl-0 font-bold text-2xl opacity-100 object-fill pb-0 mb-0 ${className || ""}`.trim()}
-      style={{ width: size, height: size, objectFit: "fill" }}
+      width={size * 2}
+      height={size * 2}
+      draggable={false}
+      decoding="async"
+      className={`shrink-0 select-none object-contain ${className ?? ""}`.trim()}
+      style={{ width: size, height: size }}
     />
   );
 };

@@ -231,8 +231,6 @@ const AIAssistant = () => {
     <div className="fixed inset-0 flex h-[100dvh] flex-col bg-white">
       <ChatHeader
         pharmacyName={pharmacyName}
-        userName={profile?.full_name ?? null}
-        avatarUrl={profile?.avatar_url ?? null}
         role={profile?.role ?? null}
         onToggleSidebar={() => setSidebarOpen(true)}
       />
@@ -289,7 +287,13 @@ const AIAssistant = () => {
         ) : (
           <div className="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
             {messages.map((m, i) => (
-              <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
+              <ChatMessage
+                key={m.id ?? i}
+                role={m.role}
+                content={m.content}
+                userName={profile?.full_name ?? null}
+                userAvatarUrl={profile?.avatar_url ?? null}
+              />
             ))}
             {isLoading && <TypingIndicator />}
           </div>
