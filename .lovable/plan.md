@@ -1,107 +1,64 @@
 ## Goal
-Extract `buildPharmacyContext` (and its role-scoping helpers) from `supabase/functions/ai-chat/index.ts` into a standalone module so it can be unit-tested with a mocked Supabase client. Add a Deno test suite that asserts RBAC scoping for owner / manager / salesman.
 
-## Current layout
-```text
-supabase/functions/ai-chat/
-  index.ts        1256 lines — Deno.serve + auth + buildScopeHeader + buildSecurityBlock + buildPharmacyContext + MedEx + post-filter
+Teach the AI to switch between two answer modes — **(A) General Knowledge Mode** (pre-trained pharmacy/medical/app knowledge, no DB required) and **(B) Database-Driven Mode** (strict use of injected `<scope>` + `LIVE PHARMACY DATA`) — without weakening the RBAC rules we just hardened.
+
+All changes are confined to `supabase/functions/ai-chat/index.ts` (system prompt assembly). No changes to `contextBuilder.ts`, `shared.ts`, or tests.
+
+---
+
+## Changes
+
+### 1. Rewrite `SYSTEM_BASE` (line 11)
+
+Replace the current single-paragraph base with a dual-mode declaration:
+
+- Declare the AI has **two knowledge sources**: (1) its own pre-trained knowledge about MediNist features, general pharmacy operations, and medical concepts; (2) the injected `<scope>` + `LIVE PHARMACY DATA` block.
+- Tell it to classify each user turn:
+  - **Generic / conceptual / app-feature / general medical** → answer directly from pre-trained knowledge, conversational tone, Bangla if user wrote Bangla/Banglish.
+  - **Specific shop data** (inventory, sales numbers, dues, expenses, staff, etc.) → use ONLY the injected context, obeying every `<scope>` and security rule.
+- Explicitly state: "If LIVE PHARMACY DATA is marked unavailable, you may still answer general questions normally — do not refuse."
+
+### 2. Add Rule 24 inside `buildSecurityBlock` (after rule 23, line 553)
+
 ```
-`buildPharmacyContext` lives at lines 575–~1090 and is only called once (line 1103).
-
-## Target layout
-```text
-supabase/functions/ai-chat/
-  index.ts                  HTTP routing + auth + orchestration only
-  context/
-    contextBuilder.ts       buildPharmacyContext + render helpers + assertNoForbiddenFields + Role type
-    contextBuilder_test.ts  Deno tests with a stub Supabase client
-  (existing) buildScopeHeader / buildSecurityBlock stay in index.ts for now (small, prompt-only)
+24. DUAL-MODE ANSWERING:
+    (a) GENERAL / CONCEPTUAL queries (how MediNist works, what a generic
+        drug class does, general pharmacy workflow advice, greetings, app
+        help) → answer from your own knowledge in a friendly conversational
+        tone. No database lookup required. Do NOT say "data not found" for
+        these.
+    (b) SHOP-SPECIFIC queries (this shop's inventory, sales, dues,
+        expenses, staff, customers, today's numbers, etc.) → answer
+        STRICTLY from the LIVE PHARMACY DATA block. All RBAC rules
+        (1–23) still apply with full force.
+    (c) MEDICINE-BY-NAME queries are still governed by rule 21 (MedEx
+        blocks). Rule 24 does NOT relax rule 21.
+    (d) If LIVE PHARMACY DATA shows "unavailable" (fallback message),
+        still answer general / conceptual / medical questions normally.
+        Only refuse to give exact shop numbers, and explain briefly that
+        live data could not be loaded right now.
 ```
 
-Note: Deno edge functions support subfolders for *imports* from `index.ts`; Supabase only treats `index.ts` as the entry. The "no subfolders" rule in our guidelines is about not splitting *entry points* — co-located helper modules imported by `index.ts` are fine and already used elsewhere in this project.
+### 3. Soften rule 4 wording (line 488–490)
 
-## Step 1 — Create `context/contextBuilder.ts`
-Move out of `index.ts`:
-- `type Role = "owner" | "manager" | "salesman"`
-- `buildPharmacyContext(supabase, pharmacyId, role, currentUserId): Promise<string>`
-- Any private helpers it calls (date bucketers, formatters, `assertNoForbiddenFields`).
+Keep the "never invent numbers" rule, but scope the "no sales records" exact-reply requirement to **shop-specific sales questions** only, so a generic question like "tumi ki MediNist e kaj koro?" no longer collides with rule 4.
 
-Export shape:
-```ts
-export type Role = "owner" | "manager" | "salesman";
-export interface SupabaseLike { from: (t: string) => any; rpc: (n: string, a?: any) => any }
-export async function buildPharmacyContext(
-  supabase: SupabaseLike,
-  pharmacyId: string,
-  role: Role,
-  currentUserId: string,
-): Promise<string>;
-export function assertNoForbiddenFields(payload: unknown, role: Role): void;
-```
+Change rule 4 second sentence to:
+> "If the user asks for shop-specific sales numbers but NO sales records exist…"
 
-Keep all existing role-scoping behavior verbatim (salesman: own user_id only, no sale_items/dues/cash/staff; manager: 7-day sales + expenses cap; owner: unchanged).
+### 4. Verification
 
-## Step 2 — Slim `index.ts`
-- Remove the moved code.
-- Add `import { buildPharmacyContext } from "./context/contextBuilder.ts";`
-- `Deno.serve` handler stays focused on: CORS → JWT auth → load profile/pharmacy → role normalization → call `buildPharmacyContext` → MedEx → DeepSeek → post-filter → response.
-- No behavioral change.
+After edit, run `supabase--test_edge_functions` against `ai-chat` to confirm the existing RBAC unit tests still pass (the prompt text isn't covered by tests, so they should remain green — this is just a safety check).
 
-## Step 3 — `context/contextBuilder_test.ts`
-Deno test file with a hand-rolled `SupabaseLike` stub that:
-- Records every `.from(table).select(...).eq(...).gte(...)` call into a query log.
-- Returns canned rows for `medicines`, `sales`, `sale_items`, `cash_transactions`, `customers`, `expenses`, and RPC `get_pharmacy_member_directory`.
-
-Tests:
-
-1. **salesman scoping** — call `buildPharmacyContext(stub, "pharm-1", "salesman", "user-A")`:
-   - Assert the `sales` query log contains `eq("user_id", "user-A")`.
-   - Assert no query was made for `sale_items`, `customers`, `cash_transactions`, or the staff RPC.
-   - Assert the returned context string contains "Your sales" and does NOT contain `Cash vs Online`, `Customer dues`, `Daily sales`, or any other staff user_id.
-
-2. **manager 7-day cap** — call with `role="manager"`:
-   - Assert the `sales` query log contains `gte("created_at", <ISO date within last 7 days, ±1 min tolerance>)`.
-   - Assert the `expenses` (cash_transactions outflow) query also uses the 7-day window.
-   - Assert no `Cash vs Online` block and no `Previous 7 days` comparison string in the output.
-   - Assert staff directory RPC IS called (manager allowed).
-
-3. **owner full access** — call with `role="owner"`:
-   - Assert sales window is 120 days (matches existing behavior).
-   - Assert `Cash vs Online`, `Customer dues`, `Daily sales`, and staff directory all appear in the output.
-   - Assert no `eq("user_id", ...)` filter on `sales`.
-
-4. **assertNoForbiddenFields** — direct unit test:
-   - Salesman payload containing `purchase_price` throws.
-   - Manager payload containing `salary` throws.
-   - Owner payload with both passes.
-
-Test scaffolding:
-```ts
-import { assertEquals, assertStringIncludes, assertThrows }
-  from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildPharmacyContext, assertNoForbiddenFields }
-  from "./contextBuilder.ts";
-
-function makeStub(fixtures: Record<string, any[]>) {
-  const calls: Array<{ table: string; ops: any[] }> = [];
-  // chainable .select/.eq/.gte/.order/.limit returning { data, error }
-  // record ops on each call
-  return { stub, calls };
-}
-```
-No network, no env vars — runs offline.
-
-## Step 4 — How to run
-The user runs tests via the Lovable interface, not the terminal. After this lands they can ask "run the ai-chat tests" and we'll invoke `supabase--test_edge_functions` with `{ functions: ["ai-chat"] }`. The tool auto-discovers `*_test.ts` files inside the function folder.
+---
 
 ## Out of scope
-- No DB migrations.
-- No changes to `buildScopeHeader`, `buildSecurityBlock`, MedEx pipeline, post-filter, or UI.
-- No DeepSeek/model changes.
+
+- No changes to `buildPharmacyContext`, `assertNoForbiddenFields`, MedEx pipeline, output post-filter, or UI badge.
+- No new tools, no streaming changes, no DeepSeek model swap.
+- `fallbackContextMessage` already returns a soft "unavailable" string; we're just teaching the prompt to handle it gracefully.
 
 ## Deliverables
-- New `supabase/functions/ai-chat/context/contextBuilder.ts` (moved code, zero behavior change).
-- New `supabase/functions/ai-chat/context/contextBuilder_test.ts` (4 tests above).
-- Edited `supabase/functions/ai-chat/index.ts` (import + removed inlined function).
 
-Approve and I'll implement in one pass, then run the test suite and report results.
+- Edited `supabase/functions/ai-chat/index.ts` (SYSTEM_BASE + rule 4 + new rule 24).
+- Confirmation that `ai-chat` Deno tests still pass.
