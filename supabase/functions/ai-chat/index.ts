@@ -565,6 +565,11 @@ async function buildPharmacyContext(
   try {
     console.log("ai-chat: fetching pharmacy context", { pharmacyId, role, currentUserId });
 
+    // Role-scoped query windows (defense in depth — never put data in the
+    // prompt that the role isn't allowed to see).
+    const salesWindowDays = role === "manager" ? 7 : role === "salesman" ? 30 : 120;
+    const expensesWindowDays = role === "manager" ? 7 : 90;
+
     const [medsRes, salesRes, itemsRes, staffRes, cashRes, duesRes, expensesRes] = await Promise.all([
       supabase
         .from("medicines")
@@ -572,18 +577,26 @@ async function buildPharmacyContext(
         .eq("pharmacy_id", pharmacyId)
         .order("stock_quantity", { ascending: true })
         .limit(50),
-      supabase
-        .from("sales")
-        .select("id, total, created_at, sale_type, status, pharmacy_id, user_id")
-        .eq("pharmacy_id", pharmacyId)
-        .gte("created_at", new Date(Date.now() - 120 * 86400000).toISOString())
-        .order("created_at", { ascending: false })
-        .limit(500),
-      supabase
-        .from("sale_items")
-        .select("medicine_name, quantity, total_price, created_at, sale_id")
-        .gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString())
-        .limit(500),
+      (() => {
+        let q = supabase
+          .from("sales")
+          .select("id, total, created_at, sale_type, status, pharmacy_id, user_id")
+          .eq("pharmacy_id", pharmacyId)
+          .gte("created_at", new Date(Date.now() - salesWindowDays * 86400000).toISOString())
+          .order("created_at", { ascending: false })
+          .limit(500);
+        // Salesman can only ever see their own sales rows.
+        if (role === "salesman") q = q.eq("user_id", currentUserId);
+        return q;
+      })(),
+      // Salesman has no top-sellers section, skip the join entirely.
+      role === "salesman"
+        ? Promise.resolve({ data: [], error: null })
+        : supabase
+            .from("sale_items")
+            .select("medicine_name, quantity, total_price, created_at, sale_id")
+            .gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString())
+            .limit(500),
       // Staff list — owner & manager only need it; salesman skipped
       role === "salesman"
         ? Promise.resolve({ data: [], error: null })
@@ -615,7 +628,7 @@ async function buildPharmacyContext(
             .select("amount, category, party_name, note, occurred_at")
             .eq("pharmacy_id", pharmacyId)
             .eq("direction", "out")
-            .gte("occurred_at", new Date(Date.now() - 90 * 86400000).toISOString())
+            .gte("occurred_at", new Date(Date.now() - expensesWindowDays * 86400000).toISOString())
             .order("occurred_at", { ascending: false })
             .limit(300),
     ]);
