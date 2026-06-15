@@ -35,10 +35,10 @@ const ChatMessage = ({ role, content, userName, userAvatarUrl }: ChatMessageProp
       {!isUser && <LogoMark size={28} className="mt-0.5 h-7 w-7" />}
       {isUser ? (
         <>
-          <div className="max-w-[80%] rounded-3xl rounded-tr-md bg-slate-100 px-4 py-2.5 text-[15px] leading-relaxed text-slate-900">
+          <div className="max-w-[80%] rounded-3xl rounded-tr-md bg-chat-user-bubble px-4 py-2.5 text-[15px] leading-relaxed text-[#1f1f1f] ring-1 ring-black/5">
             <p className="whitespace-pre-wrap">{content}</p>
           </div>
-          <Avatar className="mt-0.5 h-7 w-7 shrink-0 ring-1 ring-slate-200">
+          <Avatar className="mt-0.5 h-7 w-7 shrink-0 ring-1 ring-black/10">
             {userAvatarUrl && <AvatarImage src={userAvatarUrl} alt={userName ?? "You"} />}
             <AvatarFallback className="bg-slate-100 text-[10px] font-semibold text-slate-700">
               {initials(userName)}
@@ -47,7 +47,7 @@ const ChatMessage = ({ role, content, userName, userAvatarUrl }: ChatMessageProp
         </>
       ) : (
         <div className="min-w-0 flex-1 pt-0.5">
-          <div className="prose prose-sm max-w-none text-[15px] leading-7 text-slate-800 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2.5 prose-headings:font-semibold prose-strong:text-slate-900 prose-code:rounded prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:text-[13px] prose-code:before:content-none prose-code:after:content-none prose-pre:my-2 prose-pre:rounded-xl prose-pre:bg-slate-900 prose-pre:p-3 prose-pre:text-slate-100">
+          <div className="space-y-3 prose prose-sm max-w-none text-[15.5px] leading-7 text-[#1f1f1f] prose-p:my-0 prose-p:mb-3 prose-strong:font-semibold prose-strong:text-black prose-headings:font-semibold prose-headings:text-black prose-headings:mt-4 prose-headings:mb-2 prose-h1:text-lg prose-h2:text-base prose-h3:text-[15px] prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 prose-li:my-1.5 prose-li:leading-7 marker:text-slate-400 prose-code:rounded-md prose-code:bg-black/[0.06] prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[13px] prose-code:before:content-none prose-code:after:content-none prose-pre:my-3 prose-pre:rounded-xl prose-pre:bg-[#1f1f1f] prose-pre:p-3 prose-pre:text-slate-100 prose-a:text-sky-700 prose-a:underline-offset-2">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
         </div>
