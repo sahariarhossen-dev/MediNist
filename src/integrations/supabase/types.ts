@@ -786,6 +786,9 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
+          medex_status: string | null
+          medex_url: string | null
+          medex_verified_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
@@ -801,6 +804,9 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          medex_status?: string | null
+          medex_url?: string | null
+          medex_verified_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -816,6 +822,9 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          medex_status?: string | null
+          medex_url?: string | null
+          medex_verified_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -1616,6 +1625,9 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
+          medex_status: string | null
+          medex_url: string | null
+          medex_verified_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
