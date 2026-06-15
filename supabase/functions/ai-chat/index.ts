@@ -1093,6 +1093,7 @@ Deno.serve(async (req) => {
       messageCount: messages.length,
     }));
 
+    const scopeHeader = buildScopeHeader(role, pharmacy.name);
     const securityBlock = buildSecurityBlock({
       fullName,
       role,
@@ -1128,7 +1129,7 @@ Deno.serve(async (req) => {
       console.warn("ai-chat: medex pipeline failed", safeErrorMessage(e));
     }
 
-    const systemPrompt = `${SYSTEM_BASE}\n\n${securityBlock}\n\n${context}${medexBlock}`;
+    const systemPrompt = `${SYSTEM_BASE}\n\n${scopeHeader}\n\n${securityBlock}\n\n${context}${medexBlock}`;
 
     const openAiMessages = [
       { role: "system", content: systemPrompt },
