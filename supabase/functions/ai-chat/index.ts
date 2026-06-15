@@ -430,27 +430,6 @@ NEVER mention "MedEx", "Spider", "scraped", "web search", or any external source
 `.trim();
 }
 
-function safeErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return typeof error === "string" ? error : "Unknown error";
-}
-
-function fallbackContextMessage(reason: string) {
-  return [
-    "LIVE PHARMACY DATA: unavailable for this request.",
-    `Reason: ${reason}`,
-    "If the user asks for exact live numbers, explain that live data could not be loaded and provide general pharmacy guidance instead.",
-  ].join("\n");
-}
-
-function safeField(value: unknown, max = 100): string {
-  if (value === null || value === undefined) return "—";
-  const s = String(value).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
-  return s.length > max ? s.slice(0, max) + "…" : s;
-}
-
-type Role = "owner" | "manager" | "salesman";
-
 function buildScopeHeader(role: Role, shopName: string): string {
   const allowed =
     role === "owner"
