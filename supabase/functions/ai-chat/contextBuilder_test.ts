@@ -23,8 +23,8 @@ type QueryCall = { table: string | null; rpc: string | null; ops: QueryOp[] };
 function makeStub(fixtures: Record<string, unknown[]>) {
   const calls: QueryCall[] = [];
 
-  function makeQuery(call: QueryCall, rows: unknown[]) {
-    const q: Record<string, unknown> & PromiseLike<unknown> = {} as any;
+  function makeQuery(call: QueryCall, rows: unknown[]): any {
+    const q: any = {};
     const record = (type: string, ...args: unknown[]) => {
       call.ops.push({ type, args });
       return q;
@@ -36,8 +36,8 @@ function makeStub(fixtures: Record<string, unknown[]>) {
     q.order = (...a: unknown[]) => record("order", ...a);
     q.limit = (...a: unknown[]) => record("limit", ...a);
     // Promise-like: resolves with { data, error }
-    q.then = (onResolved: (v: unknown) => unknown) =>
-      Promise.resolve({ data: rows, error: null }).then(onResolved);
+    q.then = (onFulfilled: any, onRejected?: any) =>
+      Promise.resolve({ data: rows, error: null }).then(onFulfilled, onRejected);
     return q;
   }
 
