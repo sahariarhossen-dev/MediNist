@@ -47,10 +47,10 @@ const ConversationSidebar = ({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="left"
-        className="flex w-[85vw] max-w-sm flex-col gap-0 border-0 bg-white p-0"
+        className="flex w-[85vw] max-w-sm flex-col gap-0 border-r border-slate-200/70 bg-white/80 p-0 backdrop-blur-md"
       >
-        <div className="flex items-center border-b border-gray-100 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">Chat history</h2>
+        <div className="flex items-center border-b border-slate-200/70 px-4 py-3">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Chat history</h2>
         </div>
 
         <div className="px-3 py-3">
@@ -59,7 +59,7 @@ const ConversationSidebar = ({
               onNewChat();
               onOpenChange(false);
             }}
-            className="h-11 w-full justify-start gap-2 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-semibold text-white shadow-md hover:from-blue-700 hover:to-indigo-700"
+            className="h-11 w-full justify-start gap-2 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-sm font-semibold text-white shadow-md ring-1 ring-indigo-500/20 transition hover:from-indigo-700 hover:to-blue-700"
           >
             <Plus className="h-4 w-4" />
             New chat
@@ -69,7 +69,7 @@ const ConversationSidebar = ({
         <ScrollArea className="flex-1">
           <div className="flex flex-col gap-1 px-2 pb-4">
             {conversations.length === 0 && (
-              <p className="px-3 py-8 text-center text-sm text-gray-400">
+              <p className="px-3 py-8 text-center text-sm text-slate-400">
                 No conversations yet
               </p>
             )}
@@ -79,8 +79,10 @@ const ConversationSidebar = ({
                 <div
                   key={c.id}
                   className={cn(
-                    "group flex items-center gap-2 rounded-lg px-2 py-2 transition",
-                    isActive ? "bg-blue-50" : "hover:bg-gray-50"
+                    "group flex items-center gap-2 rounded-xl px-2.5 py-2 transition-all active:scale-[0.99]",
+                    isActive
+                      ? "bg-indigo-50 ring-1 ring-indigo-100"
+                      : "hover:bg-slate-100/80"
                   )}
                 >
                   <button
@@ -93,19 +95,19 @@ const ConversationSidebar = ({
                     <MessageSquare
                       className={cn(
                         "h-4 w-4 shrink-0",
-                        isActive ? "text-blue-600" : "text-gray-400"
+                        isActive ? "text-indigo-600" : "text-slate-400"
                       )}
                     />
                     <div className="min-w-0 flex-1">
                       <p
                         className={cn(
                           "truncate text-sm",
-                          isActive ? "font-semibold text-blue-700" : "text-gray-800"
+                          isActive ? "font-semibold text-indigo-700" : "text-slate-800"
                         )}
                       >
                         {c.title}
                       </p>
-                      <p className="text-[10px] text-gray-400">{formatDate(c.updated_at)}</p>
+                      <p className="text-[10px] text-slate-400">{formatDate(c.updated_at)}</p>
                     </div>
                   </button>
                   <button
@@ -113,7 +115,7 @@ const ConversationSidebar = ({
                       e.stopPropagation();
                       if (confirm("Delete this conversation?")) onDelete(c.id);
                     }}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
                     aria-label="Delete conversation"
                   >
                     <Trash2 className="h-4 w-4" />

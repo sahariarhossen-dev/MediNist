@@ -37,42 +37,44 @@ const ChatHeader = ({ pharmacyName, userName, avatarUrl, role, onToggleSidebar }
   const badge = roleLabel(role);
 
   return (
-    <header className="shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md">
+    <header className="shrink-0 border-b border-slate-200/70 bg-white/70 backdrop-blur-md">
       <div className="flex items-center gap-3 px-3 py-3 sm:px-4">
         <button
           onClick={onToggleSidebar}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/90 transition hover:bg-white/15 active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 active:scale-95"
           aria-label="Open conversation history"
         >
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white p-1.5 shadow-sm">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center">
           <LogoMark size={28} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="truncate text-base font-bold text-white sm:text-lg">MediNist AI</h1>
+            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+              MediNist AI
+            </h1>
             {badge && (
-              <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+              <span className="shrink-0 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-indigo-700 shadow-sm ring-1 ring-indigo-100">
                 {badge}
               </span>
             )}
           </div>
           {subtitle && (
-            <p className="truncate text-[11px] text-blue-100 sm:text-xs">{subtitle}</p>
+            <p className="truncate text-[11px] text-slate-500 sm:text-xs">{subtitle}</p>
           )}
         </div>
 
         <button
           onClick={() => navigate("/profile")}
-          className="shrink-0 rounded-full ring-2 ring-white/30 transition hover:ring-white/60 active:scale-95"
+          className="shrink-0 rounded-full ring-2 ring-slate-200 transition hover:ring-indigo-300 active:scale-95"
           aria-label="Open profile"
         >
           <Avatar className="h-9 w-9">
             {avatarUrl && <AvatarImage src={avatarUrl} alt={userName ?? "Profile"} />}
-            <AvatarFallback className="bg-white/20 text-xs font-semibold text-white">
+            <AvatarFallback className="bg-indigo-50 text-xs font-semibold text-indigo-700">
               {initials(userName)}
             </AvatarFallback>
           </Avatar>
