@@ -144,6 +144,10 @@ export default {
           "0%": { opacity: "0", transform: "translate(-50%, 8px)" },
           "100%": { opacity: "1", transform: "translate(-50%, 0)" },
         },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -151,6 +155,7 @@ export default {
         jiggle: "jiggle 0.7s ease-in-out",
         "scanner-sweep": "scanner-sweep 1.6s linear infinite alternate",
         "ai-pill-in": "ai-pill-in 0.25s ease-out",
+        "fade-in-up": "fade-in-up 0.25s ease-out",
       },
     },
   },
