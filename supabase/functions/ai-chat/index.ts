@@ -1,4 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { buildPharmacyContext } from "./contextBuilder.ts";
+import {
+  fallbackContextMessage,
+  Role,
+  safeErrorMessage,
+  safeField,
+} from "./shared.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
