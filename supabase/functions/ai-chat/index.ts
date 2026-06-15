@@ -1195,9 +1195,52 @@ Deno.serve(async (req) => {
       );
     }
 
-    const reply =
+    let reply: string =
       dsData?.choices?.[0]?.message?.content ??
       "I couldn't generate a reply. Please try again.";
+
+    // Layer 4 — defense-in-depth output filter. If the model ever emits a
+    // restricted term for a non-owner, replace the reply with the canonical
+    // refusal and audit the attempt to staff_activity_logs.
+    if (role !== "owner") {
+      const managerForbidden =
+        /\b(profit|margin|cpa|purchase\s*price|cost\s*price|salary|salaries)\b|বেতন|মুনাফা|লাভ|ক্রয়\s*মূল্য/i;
+      const salesmanExtra = /\b(total\s+sales|shop[-\s]?wide|other\s+staff|all\s+staff)\b|মোট\s*বিক্রি|শপ[-\s]?ওয়াইড/i;
+      const tripped =
+        managerForbidden.test(reply) ||
+        (role === "salesman" && salesmanExtra.test(reply));
+      if (tripped) {
+        const refusal =
+          role === "salesman"
+            ? "দুঃখিত, এই তথ্যটি দেখার অনুমতি আপনার নেই। আপনি শুধুমাত্র আপনার নিজের সেলস রিপোর্ট দেখতে পারবেন।"
+            : "দুঃখিত, এই তথ্যটি দেখার অনুমতি আপনার নেই।";
+        const matched =
+          (reply.match(managerForbidden)?.[0] ?? "") ||
+          (role === "salesman" ? reply.match(salesmanExtra)?.[0] ?? "" : "");
+        console.warn("ai-chat: output post-filter tripped", { role, matched });
+        const lastUser = [...messages].reverse().find((m) => m.role === "user");
+        try {
+          const adminClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+          await adminClient.from("staff_activity_logs").insert({
+            pharmacy_id: profile.pharmacy_id,
+            user_id: userData.user.id,
+            action_type: "ai_denied_query",
+            entity_type: "ai_chat",
+            description: `AI blocked a restricted response (role=${role})`,
+            metadata: {
+              matched,
+              user_query: (lastUser?.content ?? "").slice(0, 200),
+            },
+          });
+        } catch (e) {
+          console.warn("ai-chat: audit log insert failed", safeErrorMessage(e));
+        }
+        reply = refusal;
+      }
+    }
 
     return new Response(JSON.stringify({ reply }), {
       status: 200,
