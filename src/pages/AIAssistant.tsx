@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Send } from "lucide-react";
+import { Plus, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -227,7 +227,17 @@ const AIAssistant = () => {
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-white h-[100dvh]">
+    <div className="fixed inset-0 flex h-[100dvh] flex-col bg-[#f8fafc]">
+      {/* Ambient glows */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -left-24 h-72 w-72 rounded-full bg-indigo-300/20 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -right-24 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl"
+      />
+
       <ChatHeader
         pharmacyName={pharmacyName}
         userName={profile?.full_name ?? null}
@@ -249,7 +259,7 @@ const AIAssistant = () => {
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 pt-4"
+        className="relative flex-1 overflow-y-auto px-3 pt-4"
         style={{
           paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
         }}
@@ -266,7 +276,7 @@ const AIAssistant = () => {
                 <button
                   key={s}
                   onClick={() => sendMessage(s)}
-                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
                 >
                   {s}
                 </button>
@@ -276,12 +286,19 @@ const AIAssistant = () => {
         </div>
       </div>
 
-      {/* Fixed Bottom Input */}
+      {/* Floating Input Capsule */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-t bg-white px-2 py-2 shadow-sm mb-[15px]"
+        className="relative shrink-0 px-3 pt-2 pb-[15px]"
       >
-        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md">
+        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100">
+          <button
+            type="button"
+            aria-label="Attach"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
@@ -300,12 +317,12 @@ const AIAssistant = () => {
             rows={1}
             placeholder={isLoading ? "AI is thinking..." : "Ask anything..."}
             disabled={isLoading}
-            className="flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-relaxed outline-none placeholder:text-gray-400 max-h-[120px]"
+            className="max-h-[120px] flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
           />
           <Button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 p-0 shadow-md hover:from-blue-700 hover:to-indigo-700 disabled:opacity-40"
+            className="h-9 w-9 shrink-0 rounded-xl bg-indigo-600 p-0 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-40"
             aria-label="Send"
           >
             <Send className="h-4 w-4" />
