@@ -1,68 +1,71 @@
-## Goal
-Upgrade the `/ai` chat surface so it feels like a premium AI copilot (ChatGPT / Gemini / DeepSeek vibe) instead of a basic messenger — without changing any chat logic, data flow, or keyboard handling.
+# MediNist AI — Gemini-Style Rebuild
 
-## Scope (visual only)
-Files to touch:
-- `src/pages/AIAssistant.tsx` — canvas background, ambient glows, floating input capsule, suggestion chips polish, message entry animation.
-- `src/components/ai/ChatHeader.tsx` — integrated light header, sleek capsule role badge.
-- `src/components/ai/ChatMessage.tsx` — refined user gradient bubble + clean white assistant card, typography rhythm.
-- `src/components/ai/ConversationSidebar.tsx` — glass/blur drawer, premium "New Chat" CTA, rounded hover items.
-- `src/components/ai/TypingIndicator.tsx` — match new assistant card surface.
-- `tailwind.config.ts` — add a `fade-in-up` keyframe/animation utility used by message entries.
+A full visual rewrite of `/ai`. No business logic, AI, or DB changes — only presentation. Same Supabase calls, same `useAuth`, same `ai-chat` edge function, same message persistence.
 
-No changes to: data fetching, Supabase calls, conversation state, keyboard inset behavior, BottomNav scroll wiring, or routing.
+## Design philosophy (UX architect notes)
 
-## Visual direction
+Gemini's strength is *restraint*: a near-white canvas, generous whitespace, one strong neutral (deep slate/near-black) for emphasis, soft pill surfaces, and motion that's barely there but always present. To make MediNist feel *more* elite than a Gemini clone, I'll layer in:
 
-### Canvas & ambient lighting
-- Root wrapper: `bg-[#f8fafc]` with two soft fixed radial glows (indigo + sky) behind content, very low opacity, `pointer-events-none`.
-- Removes the harsh white slab feel and gives depth without distracting from text.
+- **Ambient depth without noise:** a single ultra-soft radial wash behind the empty-state headline (not the full page), so the canvas reads "clean" but not "flat".
+- **Greeting personalization:** when the chat is empty, headline reads "Hello, {first name}" with a gradient sweep on just the name (Gemini's signature move) — bilingual fallback for Bangla users.
+- **Composer micro-interactions:** focus-within lifts the card 1px with a softer shadow; the send button stays disabled-gray until input has content, then animates to solid black with a tiny scale-in.
+- **Message motion:** assistant messages fade+rise 6px over 240ms; the typing indicator uses a 3-dot shimmer in the same neutral palette (no indigo).
+- **Drawer polish:** spring-eased slide-in (Sheet default), conversation rows get a 1px inset highlight on active, and the pinned profile footer has a hairline top divider + hover reveal of the settings gear.
+- **Suggestion chips:** replaced with Gemini-style "action tiles" (2×2 grid on mobile) under the greeting — same suggestion strings, but as soft cards with a leading icon.
+- **Tactile details:** all interactive surfaces get `active:scale-[0.98]`, all rounded corners standardize on `rounded-2xl` / `rounded-3xl` / `rounded-full`, all borders use `border-slate-200/70`.
 
-### Header (`ChatHeader`)
-- Replace blue gradient bar with an integrated light bar: `bg-white/70 backdrop-blur-md border-b border-slate-200/70`.
-- Title `MediNist AI` in slate-900; subtitle in slate-500.
-- Role badge becomes a capsule pill: `px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shadow-sm bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100`.
-- Menu + avatar buttons restyled for the light header (slate hover states).
-- Keep logo mark; drop the white "tile" wrapper for a flatter look.
+## Visual system
 
-### Messages (`ChatMessage`)
-- User bubble: `bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-2xl rounded-tr-none shadow-sm` (asymmetric corner per spec).
-- Assistant bubble: `bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-none`; typography `text-[15px] leading-relaxed text-slate-800`.
-- Markdown prose: tighter heading spacing, `prose-code:bg-slate-100 prose-code:px-1 prose-code:rounded`, `prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded-xl prose-pre:p-3`, list spacing tightened.
-- Each message gets `animate-fade-in-up` on mount.
-- Avatars: assistant keeps logo mark in soft ring; user avatar gets a subtle indigo tint instead of `bg-primary-foreground`.
+- **Canvas:** `bg-white` (pure). Drawer + header share the same white — no glassmorphism on the main shell (Gemini avoids it on chrome). Glass is reserved for the floating composer's focus state.
+- **Primary accent:** `bg-slate-900` (near-black) for the send button + new-chat CTA. No indigo/blue gradients anywhere.
+- **Secondary surfaces:** `bg-slate-50` for hover states, `bg-slate-100` for active drawer row.
+- **User bubble:** `bg-slate-100 text-slate-900 rounded-3xl rounded-tr-md` — soft, not branded.
+- **Assistant bubble:** no bubble. Plain text on canvas with avatar mark on the left, exactly like Gemini.
+- **Typography:** keep system font stack; headline uses `text-3xl font-medium tracking-tight`, with the name in a `bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent` sweep.
 
-### Typing indicator
-- Match assistant card: white surface, slate dots, soft shadow.
+## File changes
 
-### Floating input capsule
-- Wrap form so it floats above the canvas: remove `border-t bg-white shadow-sm`; instead inner pill is the visual element.
-- Pill: `rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100`.
-- Left utility slot reserved for a `Plus` (attach/quick-action) icon button — purely visual placeholder, no handler wired (out of scope to add features).
-- Send button: `rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white` nested on the right; disabled state desaturated.
-- Keep existing textarea auto-resize, Enter-to-send, and `keyboardInset` padding logic unchanged.
+### `src/pages/AIAssistant.tsx` (rewrite layout)
+- Pure white shell, no ambient blobs on the page (move to empty state only).
+- Empty state: centered greeting "Hello, {firstName}" with gradient name + subtitle "How can I help you today?" / Bangla fallback. Below it: 2×2 grid of action tiles (using existing `SUGGESTIONS`) with leading lucide icons (`TrendingUp`, `PackageSearch`, `Trophy`, `CalendarClock`).
+- Conversation state: vertical list, no max-width changes (keep `max-w-2xl`).
+- Composer: floating card `rounded-3xl border border-slate-200/80 bg-white shadow-sm`, two-row layout:
+  - Row 1: textarea (borderless, large `text-base`).
+  - Row 2: left side — `Plus` (attach) + `Globe` (web/tools placeholder, disabled visual); right side — circular send button `rounded-full bg-slate-900 text-white h-9 w-9` with `ArrowUp` icon, disabled state `bg-slate-200 text-slate-400`.
+- Keep `keyboardInset` padding logic intact.
 
-### Suggestion chips
-- Light slate chips with indigo hover: `rounded-full border border-slate-200 bg-white/80 backdrop-blur-sm px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition`.
+### `src/components/ai/ChatHeader.tsx` (refine)
+- Flat white background, single hairline bottom border.
+- Left cluster: menu icon → `LogoMark` → stacked title block ("MediNist AI" + shop name subtitle in `text-xs text-slate-500`).
+- Right cluster: role badge as a tight `rounded-full bg-slate-100 text-slate-700` pill (drop indigo), then avatar.
 
-### Sidebar drawer (`ConversationSidebar`)
-- `SheetContent` className → `bg-white/80 backdrop-blur-md border-r border-slate-200/70`.
-- Header row title in slate-900 with light divider.
-- "New chat" CTA: `bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-md ring-1 ring-indigo-500/20 hover:from-indigo-700 hover:to-blue-700`.
-- History rows: `rounded-xl px-2.5 py-2 transition-all hover:bg-slate-100/80 active:scale-[0.99]`; active row `bg-indigo-50 ring-1 ring-indigo-100`.
+### `src/components/ai/ConversationSidebar.tsx` (restructure)
+- Sheet stays. Internal layout becomes 3 zones:
+  - **Top:** "+ New chat" full-width pill `rounded-full bg-slate-900 text-white` (Gemini style — black, not gradient).
+  - **Middle:** scrollable history with section label "Recent". Active row gets `bg-slate-100` + medium weight; hover `bg-slate-50`. Delete icon reveals on hover only.
+  - **Bottom (pinned):** hairline top border, profile row with avatar + name + email-ish subtitle (role label) on the left, `Settings` gear icon on the right that navigates to `/profile`.
+- Use `flex flex-col` + `flex-1` middle so the footer truly anchors.
 
-### Animations
-- Add to `tailwind.config.ts`:
-  - keyframe `fade-in-up`: `0% { opacity:0; transform: translateY(6px) }` → `100% { opacity:1; transform: translateY(0) }`.
-  - animation `fade-in-up: fade-in-up 0.25s ease-out`.
-- Apply on each `ChatMessage` root and on `TypingIndicator`.
+### `src/components/ai/ChatMessage.tsx` (restyle)
+- Assistant: no bubble, no border, no background. Avatar (LogoMark) on the left, prose flows on canvas. `animate-fade-in-up`.
+- User: right-aligned soft pill `bg-slate-100 text-slate-900 rounded-3xl rounded-tr-md px-4 py-2.5`. No user icon (Gemini hides it).
+- Prose tweaks: `text-[15px] leading-7 text-slate-800`.
+
+### `src/components/ai/TypingIndicator.tsx` (restyle)
+- Three small `bg-slate-400` dots with staggered bounce, aligned next to the LogoMark — no bubble.
+
+### `tailwind.config.ts`
+- Keep existing `fade-in-up`. Add `dot-pulse` keyframe for the typing indicator if not already covered by built-ins.
 
 ## Out of scope
-- No changes to AI logic, prompts, edge functions, or persistence.
-- No new attachment feature wiring (the left-slot button is a static visual to match ChatGPT-style layout — confirm if you'd rather omit it entirely).
-- No dark mode pass in this round.
+- Edge functions, AI prompt, message persistence shape.
+- Auth, routing, `BottomNav` (not rendered on `/ai`).
+- Dark mode (Gemini reference is light; can be a follow-up).
+- Real attachment / web-tool wiring (icons are visual placeholders, matching current `Plus` behavior).
 
-## Technical notes
-- Tailwind v3 is in use; keyframe/animation additions go under `theme.extend.keyframes` / `theme.extend.animation` in `tailwind.config.ts`.
-- Light header changes the contrast against `BottomNav` / system UI — verified non-issue since BottomNav is not rendered on `/ai` (page uses `fixed inset-0`).
-- All Supabase calls, `useKeyboardInset`, and `useScrollContainer` wiring are preserved verbatim.
+## Acceptance check
+- Empty `/ai` shows the centered greeting + 4 action tiles + floating composer; no header tint.
+- Sending a message: user pill on the right, assistant text flows on canvas with logo, smooth fade-rise.
+- Menu opens a left drawer with black "New chat" CTA on top, recent list in the middle, profile + gear pinned at the bottom.
+- Composer send button is disabled-gray until input has text, then solid black.
+- No indigo/blue brand colors remain anywhere on the page.
