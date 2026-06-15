@@ -1,6 +1,6 @@
 // MedEx cross-verification scraper for master_medicines + medicines.
 // Auth: header `x-cron-secret` == CRON_SECRET, OR `apikey` == SERVICE_ROLE_KEY.
-// Query: limit (default 50, max 100), offset, dry (default 1), delay (ms),
+// Query: limit (default 15, max 100), offset, dry (default 1), delay (ms),
 // auto=1 to read/advance spider_sync_progress.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -299,7 +299,7 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "15", 10), 100);
   let offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
   const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2400", 10));
