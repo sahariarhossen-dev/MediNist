@@ -1,6 +1,7 @@
-// One-shot Spider.cloud-powered MedEx scraper for master_medicines + medicines.
-// Auth: header `x-cron-secret` must equal CRON_SECRET env.
-// Query params: limit (default 20), offset (default 0), dry (default 1).
+// MedEx cross-verification scraper for master_medicines + medicines.
+// Auth: header `x-cron-secret` == CRON_SECRET, OR `apikey` == SERVICE_ROLE_KEY.
+// Query: limit (default 50, max 100), offset, dry (default 1), delay (ms),
+// auto=1 to read/advance spider_sync_progress.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -12,18 +13,26 @@ const corsHeaders = {
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+const FORMAT_WORDS = new Set([
+  "tablet","capsule","syrup","suspension","injection","cream","ointment",
+  "gel","drops","drop","inhaler","inhalation","spray","solution","lotion",
+  "powder","sachet","vial","ampoule","suppository","lozenge","granules",
+  "liquid","mouthwash","shampoo","soap","wash","paste","oil","emulsion",
+  "bolus","pessary","film","patch","wafer","mdi","mdpi","dpi","nebuliser",
+  "nebulizer","eye","ear","nasal","oral","iv","im","sc","pfs",
+]);
 
 async function medexFetch(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
         "User-Agent": UA,
-        "Accept": "text/html,application/xhtml+xml",
+        Accept: "text/html,application/xhtml+xml",
         "Accept-Language": "en-US,en;q=0.9",
       },
     });
@@ -39,128 +48,125 @@ async function medexFetch(url: string): Promise<string | null> {
   }
 }
 
-function findBrandUrls(searchHtml: string): string[] {
+function findBrandUrls(html: string): string[] {
   const out: string[] = [];
-  const re = /href="(https:\/\/medex\.com\.bd\/brands\/\d+\/[^"]+)"/g;
+  const re = /href="(https?:\/\/medex\.com\.bd\/brands\/\d+\/[^"]+|\/brands\/\d+\/[^"]+)"/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(searchHtml)) !== null) {
-    out.push(m[1].replace(/&amp;/g, "&"));
+  while ((m = re.exec(html)) !== null) {
+    let u = m[1].replace(/&amp;/g, "&");
+    if (u.startsWith("/")) u = "https://medex.com.bd" + u;
+    if (!out.includes(u)) out.push(u);
   }
   return out;
 }
 
-const FORMAT_WORDS = new Set([
-  "tablet","capsule","syrup","suspension","injection","cream","ointment",
-  "gel","drops","drop","inhaler","inhalation","spray","solution","lotion",
-  "powder","sachet","vial","ampoule","suppository","lozenge","granules",
-  "liquid","mouthwash","shampoo","soap","wash","paste","oil","emulsion",
-  "bolus","pessary","film","patch","wafer","mdi","mdpi","dpi","nebuliser",
-  "nebulizer","eye","ear","nasal","oral","iv","im","sc","pfs",
-]);
-
 function brandCoreToken(name: string): string {
-  const cleaned = name
+  return name
     .toLowerCase()
     .split(/[\s/]+/)
     .filter((t) => t && !FORMAT_WORDS.has(t.replace(/[^a-z]/g, "")))
-    .join("");
-  return cleaned.replace(/[^a-z0-9]/g, "");
+    .join("")
+    .replace(/[^a-z0-9]/g, "");
 }
 
-function slugCore(brandUrl: string): string {
-  const slug = brandUrl.split("/").pop() ?? "";
-  return slug.toLowerCase().replace(/[^a-z0-9]/g, "");
+function slugCore(url: string): string {
+  return (url.split("/").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function normToken(v: string | null | undefined): string {
+function norm(v: string | null | undefined): string {
   return (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/**
- * Strict match: the brand URL slug must start with the brand core token AND
- * (when a strength is supplied) must contain the strength token.
- * Example: "clonipres 0.1 mg" → core "clonipres", strength "01mg".
- * Slug "clonipres-0-1-mg-tablet" → "clonipres01mgtablet" → starts with
- * "clonipres" AND contains "01mg" ✓
- */
-function pickMatchingBrandUrl(
-  searchHtml: string,
-  brandName: string,
-  strength?: string | null,
-): string | null {
-  const core = brandCoreToken(brandName);
-  if (!core) return null;
-  const urls = findBrandUrls(searchHtml);
-  const strengthTok = normToken(strength);
-  for (const u of urls) {
-    const slug = slugCore(u);
-    if (!slug.startsWith(core)) continue;
-    if (strengthTok && !slug.includes(strengthTok)) continue;
-    return u;
-  }
-  return null;
+function genericTokens(v: string | null | undefined): Set<string> {
+  return new Set(
+    (v || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9+]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t && t.length > 2),
+  );
 }
 
-interface Parsed {
-  pack_text: string | null;
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+}
+
+interface BrandPage {
+  brand_title: string | null;
+  generic_text: string | null;
+  strength_text: string | null;
+  company_text: string | null;
   unit_price: number | null;
+  strip_price: number | null;
+  pack_total: number | null;
+  pack_text: string | null;
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
-  strength_text: string | null;
 }
 
-function parseBrandPage(html: string): Parsed {
-  const out: Parsed = {
-    pack_text: null,
-    unit_price: null,
-    pcs_per_strip: null,
-    strip_per_pack: null,
-    strength_text: null,
+function parseBrandPage(html: string): BrandPage {
+  const out: BrandPage = {
+    brand_title: null, generic_text: null, strength_text: null, company_text: null,
+    unit_price: null, strip_price: null, pack_total: null,
+    pack_text: null, pcs_per_strip: null, strip_per_pack: null,
   };
 
-  // Strength shown on MedEx brand page, usually in <div class="dosage-form">
-  // or right after the brand title. Capture any "<number>(.<number>)? mg/mcg/ml/%"
-  // appearing near the top of the page.
-  const strengthMatch = html
-    .slice(0, 8000)
-    .match(/(\d+(?:\.\d+)?)\s*(mg|mcg|ml|%|iu|gm|g)\b/i);
-  if (strengthMatch) {
-    out.strength_text = `${strengthMatch[1]} ${strengthMatch[2].toLowerCase()}`;
-  }
+  // Brand title: <h1 ...>Amloten <small>Tablet</small></h1>
+  const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (titleMatch) out.brand_title = stripTags(titleMatch[1]);
 
-  // Isolate the .package-container block
+  // Generic: link to /generics/...
+  const genMatch = html.match(/<a[^>]*href="[^"]*\/generics\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i);
+  if (genMatch) out.generic_text = stripTags(genMatch[1]);
+
+  // Strength: <div class="dosage-form">5 mg+50 mg</div> OR similar div with strength
+  // Look for first standalone strength-like text after the brand title.
+  // Pattern: any line in first 8KB that looks like a dose (mg/mcg/ml/%/iu/g)
+  // possibly combined with "+".
+  const head = html.slice(0, 12000);
+  const doseMatch = head.match(/>\s*(\d+(?:\.\d+)?\s*(?:mg|mcg|ml|%|iu|gm|g)(?:\s*\+\s*\d+(?:\.\d+)?\s*(?:mg|mcg|ml|%|iu|gm|g))*)\s*</i);
+  if (doseMatch) out.strength_text = doseMatch[1].trim();
+
+  // Company: <a href="/manufacturers/..."> ACME Laboratories Ltd. </a>
+  const compMatch = html.match(/<a[^>]*href="[^"]*\/manufacturers\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i);
+  if (compMatch) out.company_text = stripTags(compMatch[1]);
+
+  // Package container
   const block = html.match(/<div class="package-container[\s\S]*?<\/div>\s*<\/div>/);
   const scope = block ? block[0] : html;
 
-  // Unit Price: ৳ X.XX  (per piece)
-  const unitMatch = scope.match(/Unit Price:[\s\S]*?৳\s*([\d,]+(?:\.\d+)?)/);
-  if (unitMatch) {
-    out.unit_price = parseFloat(unitMatch[1].replace(/,/g, ""));
-  }
+  const unitM = scope.match(/Unit Price:[\s\S]*?৳\s*([\d,]+(?:\.\d+)?)/i);
+  if (unitM) out.unit_price = parseFloat(unitM[1].replace(/,/g, ""));
 
-  // pack-size-info text: "(20 x 10: ৳ 450.00)" or "(10's pack: ৳ 22.50)"
-  const packMatch = scope.match(/class="pack-size-info"[\s\S]*?>\s*([\s\S]*?)<\/span>/);
-  if (packMatch) {
-    const raw = packMatch[1].replace(/\s+/g, " ").trim().replace(/^\(|\)$/g, "");
+  const stripM = scope.match(/Strip Price:[\s\S]*?৳\s*([\d,]+(?:\.\d+)?)/i);
+  if (stripM) out.strip_price = parseFloat(stripM[1].replace(/,/g, ""));
+
+  const packM = scope.match(/class="pack-size-info"[\s\S]*?>\s*([\s\S]*?)<\/span>/i);
+  if (packM) {
+    const raw = packM[1].replace(/\s+/g, " ").trim().replace(/^\(|\)$/g, "");
     out.pack_text = raw;
-    // Pattern A: "N x M" — MedEx convention is N strips per BOX × M pcs per STRIP.
-    // ALWAYS map first number → strip_per_pack, second → pcs_per_strip. Do NOT swap.
-    const nxm = raw.match(/(\d+)\s*[xX×]\s*(\d+)/);
+    const nxm = raw.match(/(\d+)\s*[xX×]\s*(\d+)\s*:\s*৳\s*([\d,]+(?:\.\d+)?)/);
     if (nxm) {
       out.strip_per_pack = parseInt(nxm[1], 10);
       out.pcs_per_strip = parseInt(nxm[2], 10);
+      out.pack_total = parseFloat(nxm[3].replace(/,/g, ""));
     } else {
-      // Pattern B: "Ns pack" / "N's pack"
-      const ns = raw.match(/(\d+)\s*'?s\s*pack/i);
+      const ns = raw.match(/(\d+)\s*'?s\s*pack\s*:\s*৳\s*([\d,]+(?:\.\d+)?)/i);
       if (ns) {
-        out.pcs_per_strip = parseInt(ns[1], 10);
         out.strip_per_pack = 1;
+        out.pcs_per_strip = parseInt(ns[1], 10);
+        out.pack_total = parseFloat(ns[2].replace(/,/g, ""));
+      } else {
+        const plain = raw.match(/(\d+)\s*[xX×]\s*(\d+)/);
+        if (plain) {
+          out.strip_per_pack = parseInt(plain[1], 10);
+          out.pcs_per_strip = parseInt(plain[2], 10);
+        }
       }
     }
   }
 
-  // Fallback: no pack-size-info — only Strip Price block; treat as single unit
-  if (!unitMatch) {
+  if (!out.unit_price) {
     const lone = scope.match(/৳\s*([\d,]+(?:\.\d+)?)/);
     if (lone) out.unit_price = parseFloat(lone[1].replace(/,/g, ""));
   }
@@ -168,47 +174,124 @@ function parseBrandPage(html: string): Parsed {
   return out;
 }
 
+function approxEq(a: number, b: number, tol = 0.02): boolean {
+  if (!isFinite(a) || !isFinite(b)) return false;
+  if (a === 0 && b === 0) return true;
+  return Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) <= tol;
+}
+
+type Outcome =
+  | "matched"
+  | "unmatched_no_candidate"
+  | "unmatched_generic_mismatch"
+  | "unmatched_strength_mismatch"
+  | "math_mismatch"
+  | "fetch_failed";
+
+interface ProcessResult {
+  outcome: Outcome;
+  brandUrl?: string;
+  page?: BrandPage;
+  reason?: string;
+}
+
+async function discoverCandidates(brand: string, strength: string | null): Promise<string[]> {
+  const core = brandCoreToken(brand);
+  if (!core) return [];
+  const queries = strength && strength.trim()
+    ? [`${brand} ${strength}`, brand]
+    : [brand];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const q of queries) {
+    const html = await medexFetch(`https://medex.com.bd/search?search=${encodeURIComponent(q)}`);
+    if (!html) continue;
+    for (const u of findBrandUrls(html)) {
+      if (seen.has(u)) continue;
+      if (!slugCore(u).startsWith(core)) continue;
+      seen.add(u);
+      out.push(u);
+      if (out.length >= 8) return out;
+    }
+    if (out.length) return out;
+  }
+  return out;
+}
+
 async function processOne(row: {
   id: string;
   brand_name: string;
   company: string | null;
-  strength?: string | null;
-}) {
-  const q = row.strength && row.strength.trim()
-    ? `${row.brand_name} ${row.strength}`
-    : row.brand_name;
-  const searchUrl = `https://medex.com.bd/search?search=${encodeURIComponent(q)}`;
-  let searchHtml = await medexFetch(searchUrl);
-  if (!searchHtml) return { row, error: "search_failed" as const };
-  let brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name, row.strength);
-  if (!brandUrl && row.strength) {
-    // Fall back to brand-only search but STILL require strength token in slug.
-    const fbUrl = `https://medex.com.bd/search?search=${encodeURIComponent(row.brand_name)}`;
-    searchHtml = await medexFetch(fbUrl);
-    if (searchHtml) brandUrl = pickMatchingBrandUrl(searchHtml, row.brand_name, row.strength);
-  }
-  if (!brandUrl) return { row, error: "no_strength_match" as const };
-  const brandHtml = await medexFetch(brandUrl);
-  if (!brandHtml) return { row, error: "brand_failed" as const };
-  const parsed = parseBrandPage(brandHtml);
+  strength: string | null;
+  generic_name: string | null;
+}): Promise<ProcessResult> {
+  const candidates = await discoverCandidates(row.brand_name, row.strength);
+  if (!candidates.length) return { outcome: "unmatched_no_candidate" };
 
-  // Second-line defense: validate parsed strength against the requested
-  // strength. If the brand page advertises a different strength, refuse.
-  if (row.strength && parsed.strength_text) {
-    if (normToken(parsed.strength_text) !== normToken(row.strength)) {
-      return { row, error: "strength_mismatch" as const };
+  const core = brandCoreToken(row.brand_name);
+  const wantStrength = norm(row.strength);
+  const wantGeneric = genericTokens(row.generic_name);
+
+  let lastReason: Outcome = "unmatched_no_candidate";
+  let lastPage: BrandPage | undefined;
+  let lastUrl: string | undefined;
+
+  for (const url of candidates) {
+    const html = await medexFetch(url);
+    if (!html) { lastReason = "fetch_failed"; continue; }
+    const page = parseBrandPage(html);
+    lastPage = page; lastUrl = url;
+
+    // Brand check
+    if (!norm(page.brand_title).startsWith(core) && !norm(page.brand_title).includes(core)) {
+      lastReason = "unmatched_no_candidate"; continue;
     }
+
+    // Generic check (subset)
+    if (wantGeneric.size > 0) {
+      const pageGen = genericTokens(page.generic_text);
+      let ok = true;
+      for (const t of wantGeneric) if (!pageGen.has(t)) { ok = false; break; }
+      if (!ok) { lastReason = "unmatched_generic_mismatch"; continue; }
+    }
+
+    // Strength check (only if DB has one)
+    if (wantStrength) {
+      if (!page.strength_text || norm(page.strength_text) !== wantStrength) {
+        lastReason = "unmatched_strength_mismatch"; continue;
+      }
+    }
+
+    // Math cross-check (only if we have enough numbers)
+    if (page.unit_price != null && page.pcs_per_strip != null && page.strip_price != null) {
+      if (!approxEq(page.unit_price * page.pcs_per_strip, page.strip_price)) {
+        lastReason = "math_mismatch"; continue;
+      }
+    }
+    if (page.strip_price != null && page.strip_per_pack != null && page.pack_total != null) {
+      if (!approxEq(page.strip_price * page.strip_per_pack, page.pack_total)) {
+        lastReason = "math_mismatch"; continue;
+      }
+    }
+
+    return { outcome: "matched", brandUrl: url, page };
   }
 
-  return { row, brandUrl, parsed };
+  return { outcome: lastReason, brandUrl: lastUrl, page: lastPage };
+}
+
+function authorized(req: Request): boolean {
+  const provided = req.headers.get("x-cron-secret") ?? "";
+  if (CRON_SECRET && provided === CRON_SECRET) return true;
+  const apikey = req.headers.get("apikey") ?? "";
+  if (SERVICE_KEY && apikey === SERVICE_KEY) return true;
+  return false;
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // Require CRON_SECRET header — internal tool only.
-  const provided = req.headers.get("x-cron-secret") ?? "";
-  if (!CRON_SECRET || provided !== CRON_SECRET) {
+  if (!authorized(req)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -216,13 +299,12 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
   let offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
-  const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2500", 10));
+  const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2400", 10));
   const auto = url.searchParams.get("auto") === "1";
 
-  // Auto mode: read next_offset from progress tracker, skip if finished.
   if (auto) {
     const { data: prog } = await sb
       .from("spider_sync_progress")
@@ -231,89 +313,96 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!prog) {
       return new Response(JSON.stringify({ error: "no_progress_row" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (prog.finished_at || prog.next_offset >= prog.total_rows) {
-      return new Response(
-        JSON.stringify({ done: true, offset: prog.next_offset, total: prog.total_rows }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ done: true, offset: prog.next_offset, total: prog.total_rows }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     offset = prog.next_offset;
   }
 
   const { data: rows, error: selErr } = await sb
     .from("master_medicines")
-    .select("id, brand_name, company, strength, pack_size, unit_price, pcs_per_strip, strip_per_pack")
+    .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack")
     .order("brand_name", { ascending: true })
     .range(offset, offset + limit - 1);
 
   if (selErr || !rows) {
     return new Response(JSON.stringify({ error: selErr?.message ?? "select_failed" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
+  const outcomes: Record<string, number> = {};
   const samples: any[] = [];
-  const unmatched: any[] = [];
   let updatedMaster = 0;
   let updatedMedicines = 0;
+  let matched = 0;
+  let unmatched = 0;
 
   for (const r of rows) {
-    const result = await processOne(r as any);
-    if ("error" in result) {
-      unmatched.push({ id: r.id, brand: r.brand_name, reason: result.error });
-      continue;
-    }
-    const before = {
-      pack_size: r.pack_size,
-      unit_price: r.unit_price,
-      pcs_per_strip: r.pcs_per_strip,
-      strip_per_pack: r.strip_per_pack,
-    };
-    const after = {
-      pack_size: result.parsed.pack_text ?? r.pack_size,
-      unit_price: result.parsed.unit_price ?? r.unit_price,
-      pcs_per_strip: result.parsed.pcs_per_strip,
-      strip_per_pack: result.parsed.strip_per_pack,
-    };
-    samples.push({
-      id: r.id,
-      brand: r.brand_name,
-      company: r.company,
-      brandUrl: result.brandUrl,
-      before,
-      after,
-    });
+    const res = await processOne(r as any);
+    outcomes[res.outcome] = (outcomes[res.outcome] ?? 0) + 1;
 
-    if (!dry) {
-      const { error: upErr } = await sb
-        .from("master_medicines")
-        .update(after)
-        .eq("id", r.id);
-      if (!upErr) updatedMaster++;
-      // Mirror to per-pharmacy medicines (pack info + pack_size text so the
-      // frontend parser can re-derive strips/pcs from the source string).
-      const { data: medRows } = await sb
-        .from("medicines")
-        .update({
-          pcs_per_strip: after.pcs_per_strip,
-          strip_per_pack: after.strip_per_pack,
-          pack_size: after.pack_size,
-        })
-        .eq("name", r.brand_name)
-        .eq("company_name", r.company ?? "")
-        .select("id");
-      updatedMedicines += medRows?.length ?? 0;
+    if (res.outcome === "matched" && res.page) {
+      matched++;
+      const p = res.page;
+      const packSizeText = p.strip_per_pack != null && p.pcs_per_strip != null
+        ? `${p.strip_per_pack} x ${p.pcs_per_strip}`
+        : (p.pack_text ?? r.pack_size);
+
+      const after: Record<string, any> = {
+        unit_price: p.unit_price ?? r.unit_price,
+        pcs_per_strip: p.pcs_per_strip,
+        strip_per_pack: p.strip_per_pack,
+        pack_size: packSizeText,
+        medex_verified_at: new Date().toISOString(),
+        medex_url: res.brandUrl ?? null,
+        medex_status: "matched",
+      };
+      if (!r.generic_name && p.generic_text) after.generic_name = p.generic_text;
+
+      if (samples.length < 5) {
+        samples.push({
+          id: r.id, brand: r.brand_name, strength: r.strength,
+          url: res.brandUrl,
+          before: { unit_price: r.unit_price, pcs_per_strip: r.pcs_per_strip, strip_per_pack: r.strip_per_pack, pack_size: r.pack_size },
+          after,
+        });
+      }
+
+      if (!dry) {
+        const { error: upErr } = await sb.from("master_medicines").update(after).eq("id", r.id);
+        if (!upErr) updatedMaster++;
+        const { data: medRows } = await sb
+          .from("medicines")
+          .update({
+            pcs_per_strip: after.pcs_per_strip,
+            strip_per_pack: after.strip_per_pack,
+            pack_size: after.pack_size,
+            price: after.unit_price,
+          })
+          .eq("name", r.brand_name)
+          .eq("company_name", r.company ?? "")
+          .select("id");
+        updatedMedicines += medRows?.length ?? 0;
+      }
+    } else {
+      unmatched++;
+      if (!dry) {
+        await sb
+          .from("master_medicines")
+          .update({ medex_status: res.outcome, medex_verified_at: new Date().toISOString() })
+          .eq("id", r.id);
+      }
     }
-    // polite delay between rows to avoid MedEx rate-limiting
-    await new Promise((r) => setTimeout(r, delayMs));
+
+    if (delayMs > 0) await new Promise((rs) => setTimeout(rs, delayMs));
   }
 
-  // Auto-mode: advance progress tracker after each chunk.
   if (auto && !dry) {
     const newOffset = offset + rows.length;
     const { data: prog } = await sb
@@ -326,8 +415,8 @@ Deno.serve(async (req) => {
       .from("spider_sync_progress")
       .update({
         next_offset: newOffset,
-        matched_total: (prog?.matched_total ?? 0) + samples.length,
-        unmatched_total: (prog?.unmatched_total ?? 0) + unmatched.length,
+        matched_total: (prog?.matched_total ?? 0) + matched,
+        unmatched_total: (prog?.unmatched_total ?? 0) + unmatched,
         last_run_at: new Date().toISOString(),
         finished_at: newOffset >= totalRows ? new Date().toISOString() : null,
       })
@@ -335,20 +424,11 @@ Deno.serve(async (req) => {
   }
 
   return new Response(
-    JSON.stringify(
-      {
-        dry,
-        offset,
-        scanned: rows.length,
-        scraped: samples.length,
-        updated_master: updatedMaster,
-        updated_medicines: updatedMedicines,
-        unmatched,
-        samples: auto ? samples.slice(0, 3) : samples,
-      },
-      null,
-      2,
-    ),
+    JSON.stringify({
+      dry, offset, scanned: rows.length, matched, unmatched,
+      outcomes, updated_master: updatedMaster, updated_medicines: updatedMedicines,
+      samples,
+    }, null, 2),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });
