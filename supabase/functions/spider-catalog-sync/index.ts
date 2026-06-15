@@ -245,6 +245,61 @@ function approxEq(a: number, b: number, tol = 0.02): boolean {
   return Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) <= tol;
 }
 
+// ---- Relaxed strength comparison helpers ----
+function stripDenominators(s: string | null | undefined): string {
+  if (!s) return "";
+  let out = s.toLowerCase();
+  // Remove per-unit denominators like /5 ml, /ml, /vial, /puff, /spray, /drop, /dose, /g, /gm, /application
+  out = out.replace(/\/\s*\d*\.?\d*\s*(ml|millilit(?:re|er)s?|vial|puff|spray|drop|dose|gm?|application)s?\b/gi, "");
+  // Strip surrounding parentheses
+  out = out.replace(/[()]/g, " ");
+  return out.replace(/\s+/g, " ").trim();
+}
+
+function strengthNumbers(s: string | null | undefined): number[] {
+  const stripped = stripDenominators(s);
+  const nums = stripped.match(/\d+(?:\.\d+)?/g) ?? [];
+  return nums.map((n) => parseFloat(n)).filter((n) => isFinite(n));
+}
+
+function strengthMatches(db: string | null | undefined, page: string | null | undefined): boolean {
+  if (!db || !page) return false;
+  // a) Normalized strict equality after denominator strip
+  const dbN = norm(stripDenominators(db));
+  const pgN = norm(stripDenominators(page));
+  if (dbN && dbN === pgN) return true;
+  // a2) one contains the other (e.g. "125mg" inside "125mg5ml")
+  if (dbN && pgN && (pgN.includes(dbN) || dbN.includes(pgN))) return true;
+  // b) Composite multiset: every db number appears in page strength text
+  const dbNums = strengthNumbers(db);
+  const pgNums = strengthNumbers(page);
+  if (dbNums.length > 0 && pgNums.length > 0) {
+    const pool = [...pgNums];
+    let ok = true;
+    for (const n of dbNums) {
+      const idx = pool.findIndex((p) => Math.abs(p - n) < 1e-6);
+      if (idx === -1) { ok = false; break; }
+      pool.splice(idx, 1);
+    }
+    if (ok) return true;
+  }
+  // c) Units-only fallback: percentage / IU tokens
+  const dbLow = db.toLowerCase();
+  const pgLow = page.toLowerCase();
+  const pctTokens = dbLow.match(/\d+(?:\.\d+)?\s*%/g) ?? [];
+  if (pctTokens.length > 0 && pctTokens.every((t) => pgLow.includes(t.replace(/\s+/g, "")))) {
+    return true;
+  }
+  return false;
+}
+
+function firstStrengthToken(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const cleaned = stripDenominators(s).replace(/[()]/g, " ");
+  const m = cleaned.match(/(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|gm|iu|%|ml))/i);
+  return m ? m[1].trim() : null;
+}
+
 type Outcome =
   | "matched"
   | "unmatched_no_candidate"
@@ -263,9 +318,18 @@ interface ProcessResult {
 async function discoverCandidates(brand: string, strength: string | null): Promise<string[]> {
   const core = brandCoreToken(brand);
   if (!core) return [];
-  const queries = strength && strength.trim()
-    ? [`${brand} ${strength}`, brand]
-    : [brand];
+  const queries: string[] = [];
+  if (strength && strength.trim()) {
+    queries.push(`${brand} ${strength}`);
+    const first = firstStrengthToken(strength);
+    if (first && first.toLowerCase() !== strength.trim().toLowerCase()) {
+      queries.push(`${brand} ${first}`);
+    }
+  }
+  queries.push(brand);
+  if (core && core !== brand.toLowerCase().replace(/[^a-z0-9]/g, "")) {
+    queries.push(core);
+  }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const q of queries) {
@@ -320,9 +384,9 @@ async function processOne(row: {
       if (!ok) { lastReason = "unmatched_generic_mismatch"; continue; }
     }
 
-    // Strength check (only if DB has one)
+    // Strength check (only if DB has one) — relaxed comparator
     if (wantStrength) {
-      if (!page.strength_text || norm(page.strength_text) !== wantStrength) {
+      if (!page.strength_text || !strengthMatches(row.strength, page.strength_text)) {
         lastReason = "unmatched_strength_mismatch"; continue;
       }
     }
