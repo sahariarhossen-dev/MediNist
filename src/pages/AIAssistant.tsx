@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Send } from "lucide-react";
+import { Plus, Globe, ArrowUp, TrendingUp, PackageSearch, Trophy, CalendarClock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,11 @@ interface Message {
   content: string;
 }
 
-const SUGGESTIONS = [
-  "আজকের বিক্রি কত?",
-  "Stock kom ase kon medicine gulor?",
-  "Top selling medicines this month",
-  "Expire howar age ki ki ase?",
+const SUGGESTIONS: { text: string; icon: typeof TrendingUp }[] = [
+  { text: "আজকের বিক্রি কত?", icon: TrendingUp },
+  { text: "Stock kom ase kon medicine gulor?", icon: PackageSearch },
+  { text: "Top selling medicines this month", icon: Trophy },
+  { text: "Expire howar age ki ki ase?", icon: CalendarClock },
 ];
 
 const WELCOME: Message = {
@@ -225,19 +225,10 @@ const AIAssistant = () => {
   };
 
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
+  const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
   return (
-    <div className="fixed inset-0 flex h-[100dvh] flex-col bg-[#f8fafc]">
-      {/* Ambient glows */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-32 -left-24 h-72 w-72 rounded-full bg-indigo-300/20 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-40 -right-24 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl"
-      />
-
+    <div className="fixed inset-0 flex h-[100dvh] flex-col bg-white">
       <ChatHeader
         pharmacyName={pharmacyName}
         userName={profile?.full_name ?? null}
@@ -259,46 +250,55 @@ const AIAssistant = () => {
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="relative flex-1 overflow-y-auto px-3 pt-4"
+        className="relative flex-1 overflow-y-auto px-4 pt-4"
         style={{
           paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
         }}
       >
-        <div className="mx-auto flex max-w-2xl flex-col gap-3">
-          {messages.map((m, i) => (
-            <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
-          ))}
-          {isLoading && <TypingIndicator />}
+        {isWelcomeOnly && !isLoading ? (
+          <div className="relative mx-auto flex h-full max-w-2xl flex-col justify-center pb-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/3 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-indigo-200/40 via-sky-200/30 to-emerald-200/30 blur-3xl"
+            />
+            <h2 className="animate-fade-in-up text-3xl font-medium tracking-tight text-slate-900 sm:text-4xl">
+              Hello,{" "}
+              <span className="bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent">
+                {firstName}
+              </span>
+            </h2>
+            <p className="mt-2 animate-fade-in-up text-base text-slate-500">
+              How can I help you today?
+            </p>
 
-          {isWelcomeOnly && !isLoading && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
+            <div className="mt-8 grid animate-fade-in-up grid-cols-1 gap-3 sm:grid-cols-2">
+              {SUGGESTIONS.map(({ text, icon: Icon }) => (
                 <button
-                  key={s}
-                  onClick={() => sendMessage(s)}
-                  className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                  key={text}
+                  onClick={() => sendMessage(text)}
+                  className="group flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99]"
                 >
-                  {s}
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="text-sm leading-snug text-slate-700">{text}</span>
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
+            {messages.map((m, i) => (
+              <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
+            ))}
+            {isLoading && <TypingIndicator />}
+          </div>
+        )}
       </div>
 
-      {/* Floating Input Capsule */}
-      <form
-        onSubmit={handleSubmit}
-        className="relative shrink-0 px-3 pt-2 pb-[15px]"
-      >
-        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100">
-          <button
-            type="button"
-            aria-label="Attach"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
+      {/* Floating Composer Card */}
+      <form onSubmit={handleSubmit} className="relative shrink-0 px-3 pt-2 pb-[15px]">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-3xl border border-slate-200/80 bg-white px-4 pb-2 pt-3 shadow-sm transition-all duration-200 focus-within:border-slate-300 focus-within:shadow-md">
           <textarea
             ref={textareaRef}
             value={input}
@@ -306,7 +306,7 @@ const AIAssistant = () => {
               setInput(e.target.value);
               const ta = e.currentTarget;
               ta.style.height = "auto";
-              ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+              ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -315,18 +315,42 @@ const AIAssistant = () => {
               }
             }}
             rows={1}
-            placeholder={isLoading ? "AI is thinking..." : "Ask anything..."}
+            placeholder={isLoading ? "MediNist is thinking..." : "Ask MediNist anything…"}
             disabled={isLoading}
-            className="max-h-[120px] flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
+            className="max-h-[140px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
           />
-          <Button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="h-9 w-9 shrink-0 rounded-xl bg-indigo-600 p-0 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-40"
-            aria-label="Send"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="Attach"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Tools"
+                className="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
+              >
+                <Globe className="h-4 w-4" />
+                Tools
+              </button>
+            </div>
+            <Button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className={
+                "h-9 w-9 shrink-0 rounded-full p-0 transition-all duration-200 " +
+                (input.trim() && !isLoading
+                  ? "scale-100 bg-slate-900 text-white hover:bg-slate-800"
+                  : "scale-95 bg-slate-200 text-slate-400 hover:bg-slate-200")
+              }
+              aria-label="Send"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </form>
     </div>
