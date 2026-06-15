@@ -246,10 +246,40 @@ const AIAssistant = () => {
         onDelete={handleDelete}
       />
 
-      {/* Pill Input — pinned directly below the header */}
+      {/* Messages */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-3 pt-4"
+        style={{
+          paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
+        }}
+      >
+        <div className="mx-auto flex max-w-2xl flex-col gap-3">
+          {messages.map((m, i) => (
+            <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
+          ))}
+          {isLoading && <TypingIndicator />}
+
+          {isWelcomeOnly && !isLoading && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => sendMessage(s)}
+                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Fixed Bottom Input */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-b bg-white px-2 py-2 shadow-sm"
+        className="shrink-0 border-t bg-white px-2 py-2 shadow-sm"
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md">
           <textarea
@@ -282,36 +312,6 @@ const AIAssistant = () => {
           </Button>
         </div>
       </form>
-
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 pt-4"
-        style={{
-          paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
-        }}
-      >
-        <div className="mx-auto flex max-w-2xl flex-col gap-3">
-          {messages.map((m, i) => (
-            <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
-          ))}
-          {isLoading && <TypingIndicator />}
-
-          {isWelcomeOnly && !isLoading && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => sendMessage(s)}
-                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 };
