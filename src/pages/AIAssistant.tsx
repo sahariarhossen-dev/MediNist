@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ChatMessage, { type ChatRole } from "@/components/ai/ChatMessage";
@@ -10,7 +9,7 @@ import TypingIndicator from "@/components/ai/TypingIndicator";
 import ChatHeader from "@/components/ai/ChatHeader";
 import ConversationSidebar, { type Conversation } from "@/components/ai/ConversationSidebar";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
-import { useScrollDirection } from "@/hooks/useScrollDirection";
+import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 
 interface Message {
   id?: string;
@@ -40,9 +39,9 @@ const AIAssistant = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
-  const scrollDirection = useScrollDirection(scrollRef.current);
-  const isHeaderHidden = scrollDirection === "down";
+  const keyboardInset = useKeyboardInset();
 
   // Register the chat scroll container so BottomNav can react to scroll direction here.
   useEffect(() => {
@@ -220,25 +219,22 @@ const AIAssistant = () => {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     sendMessage(input);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
 
   return (
     <div className="fixed inset-0 flex flex-col bg-white h-[100dvh]">
-      <div
-        className={`absolute inset-x-0 top-0 z-30 transition-transform duration-300 ease-out ${
-          isHeaderHidden ? "-translate-y-full" : "translate-y-0"
-        }`}
-      >
-        <ChatHeader
-          pharmacyName={pharmacyName}
-          userName={profile?.full_name ?? null}
-          avatarUrl={profile?.avatar_url ?? null}
-          role={profile?.role ?? null}
-          onToggleSidebar={() => setSidebarOpen(true)}
-        />
-      </div>
+      <ChatHeader
+        pharmacyName={pharmacyName}
+        userName={profile?.full_name ?? null}
+        avatarUrl={profile?.avatar_url ?? null}
+        role={profile?.role ?? null}
+        onToggleSidebar={() => setSidebarOpen(true)}
+      />
 
       <ConversationSidebar
         open={sidebarOpen}
@@ -250,8 +246,51 @@ const AIAssistant = () => {
         onDelete={handleDelete}
       />
 
+      {/* Pill Input — pinned directly below the header */}
+      <form
+        onSubmit={handleSubmit}
+        className="shrink-0 border-b bg-white px-2 py-2 shadow-sm"
+      >
+        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              const ta = e.currentTarget;
+              ta.style.height = "auto";
+              ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e as unknown as FormEvent);
+              }
+            }}
+            rows={1}
+            placeholder={isLoading ? "AI is thinking..." : "Ask anything..."}
+            disabled={isLoading}
+            className="flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-relaxed outline-none placeholder:text-gray-400 max-h-[120px]"
+          />
+          <Button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 p-0 shadow-md hover:from-blue-700 hover:to-indigo-700 disabled:opacity-40"
+            aria-label="Send"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+      </form>
+
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-4 pt-20">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-3 pt-4"
+        style={{
+          paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
+        }}
+      >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {messages.map((m, i) => (
             <ChatMessage key={m.id ?? i} role={m.role} content={m.content} />
@@ -273,31 +312,6 @@ const AIAssistant = () => {
           )}
         </div>
       </div>
-
-      {/* Pill Input */}
-      <form
-        onSubmit={handleSubmit}
-        className="shrink-0 border-t bg-white px-3 py-3 pl-[5px] pr-[5px] pb-[15px] pt-[15px] shadow-sm opacity-100 border-solid border-secondary rounded-xl"
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
-      >
-        <div className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-1.5 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md pl-[20px] pr-[20px] pb-[10px] pt-[10px] mb-[10px] ml-[5px] mr-[5px]">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={isLoading ? "AI is thinking..." : "Ask anything..."}
-            disabled={isLoading}
-            className="h-9 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-          <Button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 p-0 shadow-md hover:from-blue-700 hover:to-indigo-700 disabled:opacity-40"
-            aria-label="Send"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </form>
     </div>
   );
 };
