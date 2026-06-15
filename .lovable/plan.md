@@ -1,151 +1,107 @@
+## Goal
+Extract `buildPharmacyContext` (and its role-scoping helpers) from `supabase/functions/ai-chat/index.ts` into a standalone module so it can be unit-tested with a mocked Supabase client. Add a Deno test suite that asserts RBAC scoping for owner / manager / salesman.
 
-# MediNist AI Assistant — RBAC Audit & Hardening Blueprint
-
-Good news: most of what you described is **already built** in `supabase/functions/ai-chat/index.ts`. Below is an honest audit of the current state, the real gaps, and a tight plan to close them.
-
----
-
-## 1. What the AI currently knows about our app
-
-The `ai-chat` edge function already does all of the following on every request:
-
-**Identity & auth (server-side, never trusts client):**
-- Validates the JWT via `supabase.auth.getUser(token)`.
-- Loads `profiles.full_name, role, pharmacy_id` for the caller.
-- Loads `pharmacies.name`.
-- Normalises role into three buckets: `owner` (admin/owner), `manager`, `salesman`.
-- Rejects users with no `pharmacy_id`.
-
-**Live tenant-scoped data injected into the system prompt** (all filtered by `pharmacy_id`):
-- `medicines` — stock, price, expiry, stock_alert (top 50 by lowest stock)
-- `sales` — last 120 days, with per-day buckets + today/yesterday/7d/prev-7d comparisons
-- `sale_items` — last 30 days, top sellers
-- `cash_transactions` — cash-vs-online split (owner only) and supplier/expense outflows (owner + manager)
-- `customers` — outstanding dues (owner + manager only)
-- `get_pharmacy_member_directory` RPC — staff list (owner + manager only)
-
-**MedEx live medicine lookup:** intent-detected per turn, scraped via Spider, cached in `medex_cache`, injected as `<pharma_data>` / `<pharma_candidates>` / `<pharma_miss>` blocks.
-
-**Role-based system prompt (`buildSecurityBlock`)** already encodes:
-- Owner → full access (revenue, profit, CPA, expenses, salaries, staff perf).
-- Manager → inventory, last-7-day sales totals, staff list (names+roles), dues, expiry alerts. Forbidden: profit, CPA, expenses, salaries, sales >7d.
-- Salesman → MRP, stock, rack, expiry, alternatives, **only their own** personal sales. Forbidden: CPA, shop-wide totals, profit, expenses, supplier info, other staff data, salaries.
-- Hard refusal strings in Bangla + English.
-- Prompt-injection guardrails (rules 7–8, untrusted `<pharmacy_data>` wrapper).
-
-**So the answer to Q1:** the AI already has a complete picture of the schema, the caller's role/pharmacy, and a tenant-scoped live snapshot. It is not flying blind.
-
----
-
-## 2. What still needs to be exposed / what's actually missing
-
-Real gaps, in priority order:
-
-1. **Salesman data is currently the same shop-wide snapshot as the owner's.**
-   `buildPharmacyContext` fetches `sales` for the whole pharmacy regardless of role. The salesman's prompt *tells* the model not to reveal shop totals, but the **raw shop totals are still in the context**. That is a prompt-only guard, not a data guard. We should never put data into the prompt that the role isn't allowed to see.
-   - Fix: when `role === "salesman"`, filter `sales` (and the derived daily buckets + top-sellers) by `user_id = currentUserId`, and omit the cash-vs-online block, dues block, expenses block, and staff block entirely. Replace the shop-wide aggregates with "Your sales — today / 7d / 30d" only.
-
-2. **Manager sees 120 days of sales rows even though the policy says ≤7 days.**
-   Same issue — policy is in the prompt, but the data window in context is 120d.
-   - Fix: when `role === "manager"`, cap the `sales` window to 7 days and drop the "Previous 7 days" comparison line.
-
-3. **Cost / purchase price (CPA) is never in the context today** (good — `medicines` select omits `purchase_price`). Keep it that way; add an assertion in code so a future edit can't accidentally add it for non-owner roles.
-
-4. **No structured "scope" object passed to the model.** Today everything is free-form text. Adds risk that the model misreads which bucket belongs to whom.
-   - Fix: prefix the context with a small machine-readable header:
-     ```
-     <scope role="salesman" user_id_hash="…" shop="Demo Pharmacy" allowed="own_sales,inventory,medex" forbidden="shop_totals,profit,cpa,expenses,salaries,other_staff" />
-     ```
-     (hash, not raw uuid — rule 7 forbids leaking IDs.)
-
-5. **No deny-list audit log.** If a salesman *does* ask for profit, we refuse in text but never log it. Optional: insert into `staff_activity_logs` with `action_type = 'ai_denied_query'` so owners can review attempts.
-
-6. **Client doesn't surface role to the UI** beyond the existing app. Not strictly needed for RBAC, but a small "You're chatting as **Salesman** — limited view" chip in `ChatHeader` sets expectations and reduces support load.
-
----
-
-## 3. How to structure the prompt / function-calling so financial data never leaks to staff
-
-The current architecture is the right one (server-resolved role + injected context + locked system prompt). The hardening principle is **defense in depth**:
-
+## Current layout
 ```text
-Layer 1 — Auth:        JWT validated, profile/pharmacy resolved server-side. ✅ done
-Layer 2 — Data scope:  Queries in buildPharmacyContext must filter by role
-                       BEFORE the data reaches the prompt.            ⚠ partial
-Layer 3 — Prompt:      buildSecurityBlock encodes allow/deny + refusal. ✅ done
-Layer 4 — Output:      Post-response regex sweep for forbidden tokens
-                       (CPA, purchase_price, profit %, salary, other-staff
-                       names) when role !== 'owner'. If found → replace
-                       with the canonical refusal string.            ❌ missing
-Layer 5 — Audit:       Log denied attempts to staff_activity_logs.    ❌ missing
+supabase/functions/ai-chat/
+  index.ts        1256 lines — Deno.serve + auth + buildScopeHeader + buildSecurityBlock + buildPharmacyContext + MedEx + post-filter
+```
+`buildPharmacyContext` lives at lines 575–~1090 and is only called once (line 1103).
+
+## Target layout
+```text
+supabase/functions/ai-chat/
+  index.ts                  HTTP routing + auth + orchestration only
+  context/
+    contextBuilder.ts       buildPharmacyContext + render helpers + assertNoForbiddenFields + Role type
+    contextBuilder_test.ts  Deno tests with a stub Supabase client
+  (existing) buildScopeHeader / buildSecurityBlock stay in index.ts for now (small, prompt-only)
 ```
 
-Layer 2 is the most important fix. Layer 4 is a cheap belt-and-braces guard against jailbreaks.
+Note: Deno edge functions support subfolders for *imports* from `index.ts`; Supabase only treats `index.ts` as the entry. The "no subfolders" rule in our guidelines is about not splitting *entry points* — co-located helper modules imported by `index.ts` are fine and already used elsewhere in this project.
 
-We will **not** move to OpenAI function-calling for this — the data is small, deterministic, and already shaped for the prompt. Tools would add latency without improving safety.
+## Step 1 — Create `context/contextBuilder.ts`
+Move out of `index.ts`:
+- `type Role = "owner" | "manager" | "salesman"`
+- `buildPharmacyContext(supabase, pharmacyId, role, currentUserId): Promise<string>`
+- Any private helpers it calls (date bucketers, formatters, `assertNoForbiddenFields`).
 
----
-
-## Step-by-step blueprint (build phase)
-
-### Step A — Lock down `buildPharmacyContext` by role (the real fix)
-In `supabase/functions/ai-chat/index.ts`:
-
-1. Pass `role` into every query block (already passed, just use it harder):
-   - `salesman`: `sales` query gets `.eq("user_id", currentUserId)`. Daily buckets, top-selling, cash-vs-online, dues, expenses, staff → all skipped.
-   - `manager`: `sales` window reduced to 7 days. Cash-vs-online skipped. Keep dues + expenses + staff (names/roles only).
-   - `owner`: unchanged.
-2. Build three distinct `<pharmacy_data>` renderers: `renderSalesmanData`, `renderManagerData`, `renderOwnerData`. Each only outputs the sections that role is allowed to see. Today there is effectively one renderer that conditionally hides text.
-3. Add a unit-style guard at the top of each renderer:
-   ```ts
-   assertNoForbiddenFields(payload, role);
-   ```
-   that throws if e.g. `cpa`, `purchase_price`, `salary`, or other-user `user_id`s slip in.
-
-### Step B — Add the `<scope>` header
-Tiny block prepended to the context. Helps the model anchor on permissions even under adversarial prompts.
-
-### Step C — Output post-filter (role !== 'owner')
-After DeepSeek returns, run a regex pass:
-- Manager forbidden: `/profit|margin|CPA|purchase price|salary|বেতন|মুনাফা|লাভ/i`
-- Salesman forbidden: manager list **plus** `/total sales|shop[- ]wide|other staff/i` and any staff name not equal to the caller's `full_name`.
-
-If matched, replace the offending paragraph with the canonical refusal line. Always safe; never blocks owners.
-
-### Step D — Audit denied queries (optional, cheap)
-When the post-filter trips, `insert` a row into `staff_activity_logs`:
-```
-action_type: 'ai_denied_query'
-description: 'AI blocked a restricted response (role=salesman)'
-metadata: { matched: '<pattern>', user_query: '<first 200 chars>' }
+Export shape:
+```ts
+export type Role = "owner" | "manager" | "salesman";
+export interface SupabaseLike { from: (t: string) => any; rpc: (n: string, a?: any) => any }
+export async function buildPharmacyContext(
+  supabase: SupabaseLike,
+  pharmacyId: string,
+  role: Role,
+  currentUserId: string,
+): Promise<string>;
+export function assertNoForbiddenFields(payload: unknown, role: Role): void;
 ```
 
-### Step E — UI affordance in `src/pages/AIAssistant.tsx`
-Pass `profile.role` to `ChatHeader` and render a small badge: `Owner view` / `Manager view` / `Salesman view`. Pure cosmetic, no logic change.
+Keep all existing role-scoping behavior verbatim (salesman: own user_id only, no sale_items/dues/cash/staff; manager: 7-day sales + expenses cap; owner: unchanged).
 
-### Step F — Tests
-Add `supabase/functions/ai-chat/role_scope_test.ts` (Deno test) that builds the context for fake owner/manager/salesman profiles using a stub Supabase client and asserts:
-- salesman context contains **no** `Cash vs Online`, no `Customer dues`, no `Daily sales`, no other user's name.
-- manager context contains **no** `Previous 7 days`, no sales row older than 7 days, no `Cash vs Online`.
-- owner context contains all sections.
+## Step 2 — Slim `index.ts`
+- Remove the moved code.
+- Add `import { buildPharmacyContext } from "./context/contextBuilder.ts";`
+- `Deno.serve` handler stays focused on: CORS → JWT auth → load profile/pharmacy → role normalization → call `buildPharmacyContext` → MedEx → DeepSeek → post-filter → response.
+- No behavioral change.
 
-Run via `supabase--test_edge_functions`.
+## Step 3 — `context/contextBuilder_test.ts`
+Deno test file with a hand-rolled `SupabaseLike` stub that:
+- Records every `.from(table).select(...).eq(...).gte(...)` call into a query log.
+- Returns canned rows for `medicines`, `sales`, `sale_items`, `cash_transactions`, `customers`, `expenses`, and RPC `get_pharmacy_member_directory`.
 
----
+Tests:
 
-## What I will NOT touch
+1. **salesman scoping** — call `buildPharmacyContext(stub, "pharm-1", "salesman", "user-A")`:
+   - Assert the `sales` query log contains `eq("user_id", "user-A")`.
+   - Assert no query was made for `sale_items`, `customers`, `cash_transactions`, or the staff RPC.
+   - Assert the returned context string contains "Your sales" and does NOT contain `Cash vs Online`, `Customer dues`, `Daily sales`, or any other staff user_id.
 
-- The MedEx pipeline and `<pharma_*>` blocks — orthogonal to RBAC and already strict.
-- The DeepSeek model choice and prompt scaffolding — working well.
-- Database schema, RLS, or the spider-catalog cron — out of scope for this RBAC task.
+2. **manager 7-day cap** — call with `role="manager"`:
+   - Assert the `sales` query log contains `gte("created_at", <ISO date within last 7 days, ±1 min tolerance>)`.
+   - Assert the `expenses` (cash_transactions outflow) query also uses the 7-day window.
+   - Assert no `Cash vs Online` block and no `Previous 7 days` comparison string in the output.
+   - Assert staff directory RPC IS called (manager allowed).
 
----
+3. **owner full access** — call with `role="owner"`:
+   - Assert sales window is 120 days (matches existing behavior).
+   - Assert `Cash vs Online`, `Customer dues`, `Daily sales`, and staff directory all appear in the output.
+   - Assert no `eq("user_id", ...)` filter on `sales`.
 
-## Deliverables when you approve
+4. **assertNoForbiddenFields** — direct unit test:
+   - Salesman payload containing `purchase_price` throws.
+   - Manager payload containing `salary` throws.
+   - Owner payload with both passes.
 
-- Edited `supabase/functions/ai-chat/index.ts` (Steps A–D).
-- New `supabase/functions/ai-chat/role_scope_test.ts` (Step F).
-- Small edit to `src/pages/AIAssistant.tsx` + `src/components/ai/ChatHeader.tsx` (Step E).
-- No DB migrations needed.
+Test scaffolding:
+```ts
+import { assertEquals, assertStringIncludes, assertThrows }
+  from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { buildPharmacyContext, assertNoForbiddenFields }
+  from "./contextBuilder.ts";
 
-Approve this plan and I'll implement it in one pass.
+function makeStub(fixtures: Record<string, any[]>) {
+  const calls: Array<{ table: string; ops: any[] }> = [];
+  // chainable .select/.eq/.gte/.order/.limit returning { data, error }
+  // record ops on each call
+  return { stub, calls };
+}
+```
+No network, no env vars — runs offline.
+
+## Step 4 — How to run
+The user runs tests via the Lovable interface, not the terminal. After this lands they can ask "run the ai-chat tests" and we'll invoke `supabase--test_edge_functions` with `{ functions: ["ai-chat"] }`. The tool auto-discovers `*_test.ts` files inside the function folder.
+
+## Out of scope
+- No DB migrations.
+- No changes to `buildScopeHeader`, `buildSecurityBlock`, MedEx pipeline, post-filter, or UI.
+- No DeepSeek/model changes.
+
+## Deliverables
+- New `supabase/functions/ai-chat/context/contextBuilder.ts` (moved code, zero behavior change).
+- New `supabase/functions/ai-chat/context/contextBuilder_test.ts` (4 tests above).
+- Edited `supabase/functions/ai-chat/index.ts` (import + removed inlined function).
+
+Approve and I'll implement in one pass, then run the test suite and report results.
