@@ -102,6 +102,30 @@ interface BrandPage {
   pack_text: string | null;
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
+  format: "strip" | "liquid" | "semisolid" | "single";
+  container_text: string | null;
+  container_qty: number | null;
+  container_unit: "ml" | "g" | "vial" | "ampoule" | "bottle" | "tube" | "pcs" | null;
+}
+
+function detectFormat(
+  brandTitle: string | null,
+  packText: string | null,
+): BrandPage["format"] {
+  const t = (brandTitle || "").toLowerCase();
+  const p = (packText || "").toLowerCase();
+  // single-unit containers
+  if (/\b(injection|infusion|iv|im|pfs)\b/.test(t)) return "single";
+  if (/\b(vial|ampoule|amp)\b/.test(p) || /\b(vial|ampoule)\b/.test(t)) return "single";
+  // semi-solids (weight in g/gm)
+  if (/\b(cream|ointment|gel|lotion|paste|oil|emulsion)\b/.test(t)) return "semisolid";
+  if (/\b\d+(?:\.\d+)?\s*(?:gm|g)\b.*\b(tube|jar|pot)\b/.test(p)) return "semisolid";
+  // liquids (volume in ml)
+  if (/\b(syrup|suspension|drops?|solution|spray|inhaler|inhalation|mouthwash|nebuliser|nebulizer|shampoo|wash|liquid)\b/.test(t)) return "liquid";
+  if (/\b\d+(?:\.\d+)?\s*ml\b/.test(p) || /\bbottle\b/.test(p)) return "liquid";
+  // tube fallback
+  if (/\btube\b/.test(p)) return "semisolid";
+  return "strip";
 }
 
 function parseBrandPage(html: string): BrandPage {
@@ -109,6 +133,7 @@ function parseBrandPage(html: string): BrandPage {
     brand_title: null, generic_text: null, strength_text: null, company_text: null,
     unit_price: null, strip_price: null, pack_total: null,
     pack_text: null, pcs_per_strip: null, strip_per_pack: null,
+    format: "strip", container_text: null, container_qty: null, container_unit: null,
   };
 
   // Brand title: <h1 ...>Amloten <small>Tablet</small></h1>
@@ -145,24 +170,64 @@ function parseBrandPage(html: string): BrandPage {
   if (packM) {
     const raw = packM[1].replace(/\s+/g, " ").trim().replace(/^\(|\)$/g, "");
     out.pack_text = raw;
-    const nxm = raw.match(/(\d+)\s*[xX×]\s*(\d+)\s*:\s*৳\s*([\d,]+(?:\.\d+)?)/);
+    const totalM = raw.match(/:\s*৳\s*([\d,]+(?:\.\d+)?)/);
+    if (totalM) out.pack_total = parseFloat(totalM[1].replace(/,/g, ""));
+  }
+
+  // Detect format from title + pack text
+  out.format = detectFormat(out.brand_title, out.pack_text);
+
+  if (out.format === "strip") {
+    const raw = out.pack_text ?? "";
+    const nxm = raw.match(/(\d+)\s*[xX×]\s*(\d+)/);
     if (nxm) {
       out.strip_per_pack = parseInt(nxm[1], 10);
       out.pcs_per_strip = parseInt(nxm[2], 10);
-      out.pack_total = parseFloat(nxm[3].replace(/,/g, ""));
     } else {
-      const ns = raw.match(/(\d+)\s*'?s\s*pack\s*:\s*৳\s*([\d,]+(?:\.\d+)?)/i);
+      const ns = raw.match(/(\d+)\s*'?s\s*pack/i);
       if (ns) {
         out.strip_per_pack = 1;
         out.pcs_per_strip = parseInt(ns[1], 10);
-        out.pack_total = parseFloat(ns[2].replace(/,/g, ""));
+      }
+    }
+  } else {
+    const raw = out.pack_text ?? "";
+    // Try volume ml
+    const mlM = raw.match(/(\d+(?:\.\d+)?)\s*ml\b/i);
+    const gM = raw.match(/(\d+(?:\.\d+)?)\s*(gm|g)\b/i);
+    const contM = raw.match(/\b(vial|ampoule|bottle|tube|jar|pot)s?\b/i);
+    if (out.format === "liquid" && mlM) {
+      out.container_qty = parseFloat(mlM[1]);
+      out.container_unit = "ml";
+      const container = contM ? contM[1].toLowerCase() : "bottle";
+      out.container_text = `${mlM[1]} ml ${container}`;
+    } else if (out.format === "semisolid" && gM) {
+      out.container_qty = parseFloat(gM[1]);
+      out.container_unit = "g";
+      const container = contM ? contM[1].toLowerCase() : "tube";
+      out.container_text = `${gM[1]} gm ${container}`;
+    } else if (out.format === "single") {
+      if (mlM && contM) {
+        out.container_qty = parseFloat(mlM[1]);
+        out.container_unit = "ml";
+        out.container_text = `${mlM[1]} ml ${contM[1].toLowerCase()}`;
+      } else if (contM) {
+        const nM = raw.match(/(\d+)\s*(?:x\s*)?(?:vial|ampoule|bottle|tube)/i);
+        const qty = nM ? parseInt(nM[1], 10) : 1;
+        out.container_qty = qty;
+        out.container_unit = contM[1].toLowerCase() as any;
+        out.container_text = `${qty} ${contM[1].toLowerCase()}`;
       } else {
-        const plain = raw.match(/(\d+)\s*[xX×]\s*(\d+)/);
-        if (plain) {
-          out.strip_per_pack = parseInt(plain[1], 10);
-          out.pcs_per_strip = parseInt(plain[2], 10);
+        const nsM = raw.match(/(\d+)\s*'?s\s*pack/i);
+        if (nsM) {
+          out.container_qty = parseInt(nsM[1], 10);
+          out.container_unit = "pcs";
+          out.container_text = `${nsM[1]}'s pack`;
         }
       }
+    } else {
+      // Fallback: use raw pack text if nothing structured
+      if (raw) out.container_text = raw;
     }
   }
 
@@ -263,14 +328,21 @@ async function processOne(row: {
     }
 
     // Math cross-check (only if we have enough numbers)
-    if (page.unit_price != null && page.pcs_per_strip != null && page.strip_price != null) {
-      if (!approxEq(page.unit_price * page.pcs_per_strip, page.strip_price)) {
-        lastReason = "math_mismatch"; continue;
+    if (page.format === "strip") {
+      if (page.unit_price != null && page.pcs_per_strip != null && page.strip_price != null) {
+        if (!approxEq(page.unit_price * page.pcs_per_strip, page.strip_price)) {
+          lastReason = "math_mismatch"; continue;
+        }
       }
-    }
-    if (page.strip_price != null && page.strip_per_pack != null && page.pack_total != null) {
-      if (!approxEq(page.strip_price * page.strip_per_pack, page.pack_total)) {
-        lastReason = "math_mismatch"; continue;
+      if (page.strip_price != null && page.strip_per_pack != null && page.pack_total != null) {
+        if (!approxEq(page.strip_price * page.strip_per_pack, page.pack_total)) {
+          lastReason = "math_mismatch"; continue;
+        }
+      }
+    } else {
+      // Non-strip: require a container description; skip math entirely.
+      if (!page.container_text) {
+        lastReason = "unmatched_no_candidate"; continue;
       }
     }
 
@@ -350,24 +422,38 @@ Deno.serve(async (req) => {
     if (res.outcome === "matched" && res.page) {
       matched++;
       const p = res.page;
-      const packSizeText = p.strip_per_pack != null && p.pcs_per_strip != null
-        ? `${p.strip_per_pack} x ${p.pcs_per_strip}`
-        : (p.pack_text ?? r.pack_size);
-
-      const after: Record<string, any> = {
-        unit_price: p.unit_price ?? r.unit_price,
-        pcs_per_strip: p.pcs_per_strip,
-        strip_per_pack: p.strip_per_pack,
-        pack_size: packSizeText,
-        medex_verified_at: new Date().toISOString(),
-        medex_url: res.brandUrl ?? null,
-        medex_status: "matched",
-      };
+      let after: Record<string, any>;
+      if (p.format === "strip") {
+        const packSizeText = p.strip_per_pack != null && p.pcs_per_strip != null
+          ? `${p.strip_per_pack} x ${p.pcs_per_strip}`
+          : (p.pack_text ?? r.pack_size);
+        after = {
+          unit_price: p.unit_price ?? r.unit_price,
+          pcs_per_strip: p.pcs_per_strip,
+          strip_per_pack: p.strip_per_pack,
+          pack_size: packSizeText,
+          medex_verified_at: new Date().toISOString(),
+          medex_url: res.brandUrl ?? null,
+          medex_status: "matched",
+        };
+      } else {
+        // Liquid / semisolid / single — native format, no math.
+        const absolutePrice = p.unit_price ?? p.strip_price ?? p.pack_total ?? r.unit_price;
+        after = {
+          unit_price: absolutePrice,
+          pcs_per_strip: 1,
+          strip_per_pack: 1,
+          pack_size: p.container_text ?? p.pack_text ?? r.pack_size,
+          medex_verified_at: new Date().toISOString(),
+          medex_url: res.brandUrl ?? null,
+          medex_status: "matched",
+        };
+      }
       if (!r.generic_name && p.generic_text) after.generic_name = p.generic_text;
 
       if (samples.length < 5) {
         samples.push({
-          id: r.id, brand: r.brand_name, strength: r.strength,
+          id: r.id, brand: r.brand_name, strength: r.strength, format: p.format,
           url: res.brandUrl,
           before: { unit_price: r.unit_price, pcs_per_strip: r.pcs_per_strip, strip_per_pack: r.strip_per_pack, pack_size: r.pack_size },
           after,
