@@ -279,7 +279,7 @@ const AIAssistant = () => {
       {/* Fixed Bottom Input */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-t bg-white px-2 py-2 shadow-sm"
+        className="shrink-0 border-t bg-white px-2 py-2 shadow-sm mb-[15px]"
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 shadow-sm focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-md">
           <textarea
