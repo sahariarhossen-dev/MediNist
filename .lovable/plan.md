@@ -1,52 +1,68 @@
 ## Goal
-Move the AI chat input from the bottom of the screen to the top, positioned directly below the header. The input must remain fixed during typing (including multi-line), and the message list must scroll below it while adapting to the on-screen keyboard.
+Upgrade the `/ai` chat surface so it feels like a premium AI copilot (ChatGPT / Gemini / DeepSeek vibe) instead of a basic messenger — without changing any chat logic, data flow, or keyboard handling.
 
-## Current State
-- `AIAssistant.tsx` uses a full-screen `fixed inset-0 flex flex-col` layout.
-- The `ChatHeader` is `absolute inset-x-0 top-0` and hides on scroll-down via `translate-y-full`.
-- The message list is `flex-1 overflow-y-auto pt-20` (padding reserves space for the absolute header).
-- The input form sits at the bottom as a `shrink-0` element with `border-t` and safe-area bottom padding.
+## Scope (visual only)
+Files to touch:
+- `src/pages/AIAssistant.tsx` — canvas background, ambient glows, floating input capsule, suggestion chips polish, message entry animation.
+- `src/components/ai/ChatHeader.tsx` — integrated light header, sleek capsule role badge.
+- `src/components/ai/ChatMessage.tsx` — refined user gradient bubble + clean white assistant card, typography rhythm.
+- `src/components/ai/ConversationSidebar.tsx` — glass/blur drawer, premium "New Chat" CTA, rounded hover items.
+- `src/components/ai/TypingIndicator.tsx` — match new assistant card surface.
+- `tailwind.config.ts` — add a `fade-in-up` keyframe/animation utility used by message entries.
 
-## Plan
+No changes to: data fetching, Supabase calls, conversation state, keyboard inset behavior, BottomNav scroll wiring, or routing.
 
-### 1. Reorder layout in `AIAssistant.tsx`
-Change the flex column so the top section (header + input) lives in normal document flow, and only the messages area scrolls.
+## Visual direction
 
-```text
-Before:  fixed flex-col → absolute Header → flex-1 Messages (pt-20) → shrink-0 Input
-After:   fixed flex-col → shrink-0 Header → shrink-0 Input → flex-1 Messages
-```
+### Canvas & ambient lighting
+- Root wrapper: `bg-[#f8fafc]` with two soft fixed radial glows (indigo + sky) behind content, very low opacity, `pointer-events-none`.
+- Removes the harsh white slab feel and gives depth without distracting from text.
 
-- Remove `absolute` positioning from the header wrapper; keep it as a `shrink-0` block.
-- Move the entire `<form>` input block so it renders immediately after the header.
-- Give the messages `<div>` `flex-1 overflow-y-auto` with **no** top padding (the header and input now occupy their own space).
+### Header (`ChatHeader`)
+- Replace blue gradient bar with an integrated light bar: `bg-white/70 backdrop-blur-md border-b border-slate-200/70`.
+- Title `MediNist AI` in slate-900; subtitle in slate-500.
+- Role badge becomes a capsule pill: `px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide shadow-sm bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100`.
+- Menu + avatar buttons restyled for the light header (slate hover states).
+- Keep logo mark; drop the white "tile" wrapper for a flatter look.
 
-### 2. Convert single-line Input to auto-resizing Textarea
-- Replace the `<Input>` component with a native `<textarea>` so users can type multi-line messages.
-- Implement auto-resize: on every `input`/`change` event, set `textarea.style.height = 'auto'` then `textarea.style.height = textarea.scrollHeight + 'px'`, capped at a sensible max (e.g., 120 px).
-- Keep the existing rounded-pill container styling; the textarea itself sits inside with transparent background, no border, and no focus ring.
-- Retain the circular send `<Button>` inside the same container.
+### Messages (`ChatMessage`)
+- User bubble: `bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-2xl rounded-tr-none shadow-sm` (asymmetric corner per spec).
+- Assistant bubble: `bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-none`; typography `text-[15px] leading-relaxed text-slate-800`.
+- Markdown prose: tighter heading spacing, `prose-code:bg-slate-100 prose-code:px-1 prose-code:rounded`, `prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-pre:rounded-xl prose-pre:p-3`, list spacing tightened.
+- Each message gets `animate-fade-in-up` on mount.
+- Avatars: assistant keeps logo mark in soft ring; user avatar gets a subtle indigo tint instead of `bg-primary-foreground`.
 
-### 3. Keyboard-aware message scrolling
-- Import and use the existing `useKeyboardInset` hook in `AIAssistant.tsx`.
-- Apply the keyboard inset value as bottom padding on the scrollable messages area:
-  `paddingBottom: \`calc(1rem + \${keyboardInset}px + env(safe-area-inset-bottom))\``
-- This ensures the last messages remain reachable and visible above the on-screen keyboard.
+### Typing indicator
+- Match assistant card: white surface, slate dots, soft shadow.
 
-### 4. Remove header hide-on-scroll for this page
-- The header slide-away (`translate-y-full`) relies on `absolute` positioning and is incompatible with a fixed top input block in normal flow.
-- Remove the scroll-direction-driven header hiding logic from `AIAssistant.tsx` (the `useScrollDirection` usage and the translate classes).
-- Keep the `ChatHeader` component itself unchanged; only the wrapper in `AIAssistant.tsx` is simplified.
+### Floating input capsule
+- Wrap form so it floats above the canvas: remove `border-t bg-white shadow-sm`; instead inner pill is the visual element.
+- Pill: `rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100`.
+- Left utility slot reserved for a `Plus` (attach/quick-action) icon button — purely visual placeholder, no handler wired (out of scope to add features).
+- Send button: `rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white` nested on the right; disabled state desaturated.
+- Keep existing textarea auto-resize, Enter-to-send, and `keyboardInset` padding logic unchanged.
 
-### 5. Preserve existing auto-scroll behaviour
-- Keep the existing `useEffect` that calls `scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })` on `messages`/`isLoading` changes.
-- Because the messages area is now below the input, scrolling to bottom still reveals the newest content correctly.
+### Suggestion chips
+- Light slate chips with indigo hover: `rounded-full border border-slate-200 bg-white/80 backdrop-blur-sm px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition`.
 
-## Files to Edit
-- `src/pages/AIAssistant.tsx` — layout reorder, textarea swap, keyboard inset integration, remove header translate logic.
+### Sidebar drawer (`ConversationSidebar`)
+- `SheetContent` className → `bg-white/80 backdrop-blur-md border-r border-slate-200/70`.
+- Header row title in slate-900 with light divider.
+- "New chat" CTA: `bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-md ring-1 ring-indigo-500/20 hover:from-indigo-700 hover:to-blue-700`.
+- History rows: `rounded-xl px-2.5 py-2 transition-all hover:bg-slate-100/80 active:scale-[0.99]`; active row `bg-indigo-50 ring-1 ring-indigo-100`.
 
-## Out of Scope
-- `ChatHeader.tsx` — no changes to the header component itself.
-- `ChatMessage.tsx` — no changes to message rendering.
-- Edge function (`ai-chat`) — no backend changes.
-- Bottom navigation behaviour — remains handled by `AppLayout` / `BottomNav`.
+### Animations
+- Add to `tailwind.config.ts`:
+  - keyframe `fade-in-up`: `0% { opacity:0; transform: translateY(6px) }` → `100% { opacity:1; transform: translateY(0) }`.
+  - animation `fade-in-up: fade-in-up 0.25s ease-out`.
+- Apply on each `ChatMessage` root and on `TypingIndicator`.
+
+## Out of scope
+- No changes to AI logic, prompts, edge functions, or persistence.
+- No new attachment feature wiring (the left-slot button is a static visual to match ChatGPT-style layout — confirm if you'd rather omit it entirely).
+- No dark mode pass in this round.
+
+## Technical notes
+- Tailwind v3 is in use; keyframe/animation additions go under `theme.extend.keyframes` / `theme.extend.animation` in `tailwind.config.ts`.
+- Light header changes the contrast against `BottomNav` / system UI — verified non-issue since BottomNav is not rendered on `/ai` (page uses `fixed inset-0`).
+- All Supabase calls, `useKeyboardInset`, and `useScrollContainer` wiring are preserved verbatim.
