@@ -56,12 +56,14 @@ Deno.serve(async (req) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(rawEmail) || rawEmail.length > 255) {
+      console.error("Invalid email payload:", JSON.stringify(rawEmail));
       return new Response(JSON.stringify({ error: "Invalid email address" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (!["owner", "manager", "salesman"].includes(role)) {
+      console.error("Invalid role payload:", JSON.stringify(role));
       return new Response(JSON.stringify({ error: "Invalid role" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
