@@ -303,19 +303,29 @@ const ShopProfile = () => {
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) return;
+    if (!EMAIL_RE.test(email) || email.length > 255) {
+      toast({
+        title: "Invalid email",
+        description: "Enter a valid email address like name@example.com.",
+        variant: "destructive",
+      });
+      return;
+    }
     setInviting(true);
     const { data, error } = await supabase.functions.invoke("invite-staff", {
-      body: { email: inviteEmail.trim(), role: inviteRole },
+      body: { email, role: inviteRole },
     });
     setInviting(false);
     if (error || data?.error) {
-      toast({ title: "Invitation failed", description: data?.error || error?.message, variant: "destructive" });
+      const description = await extractInvokeError(error, data);
+      toast({ title: "Invitation failed", description, variant: "destructive" });
       return;
     }
     setLinkDialog({
       open: true,
-      email: data?.email ?? inviteEmail.trim(),
+      email: data?.email ?? email,
       role: data?.role ?? inviteRole,
       url: data?.acceptUrl ?? "",
     });
@@ -340,7 +350,8 @@ const ShopProfile = () => {
   const handleResendInvite = async (email: string, role: string) => {
     const { data, error } = await supabase.functions.invoke("invite-staff", { body: { email, role } });
     if (error || data?.error) {
-      toast({ title: "Resend failed", description: data?.error || error?.message, variant: "destructive" });
+      const description = await extractInvokeError(error, data);
+      toast({ title: "Resend failed", description, variant: "destructive" });
       return;
     }
     setLinkDialog({
