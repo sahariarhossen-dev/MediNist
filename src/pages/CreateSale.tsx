@@ -331,91 +331,84 @@ const CreateSale = () => {
     }
     setSaving(true);
     try {
-      let saleId: string;
-
-      const salePayload = {
-        sale_type: saleType,
-        subtotal: roundMoney(subtotal),
-        discount_percent: saleType === "wholesale" ? 0 : discountPercent,
-        discount_amount: roundMoney(totalDiscountAmount),
-        total: roundMoney(netTotal),
-        status,
-      };
-
-      if (draftId) {
-        const { error: updateError } = await supabase
-          .from("sales")
-          .update(salePayload)
-          .eq("id", draftId);
-        if (updateError) throw updateError;
-        saleId = draftId;
-        await supabase.from("sale_items").delete().eq("sale_id", draftId);
-      } else {
-        const { data: sale, error: saleError } = await supabase
-          .from("sales")
-          .insert({
-            pharmacy_id: profile.pharmacy_id,
-            user_id: profile.id,
-            ...salePayload,
-          })
-          .select("id")
-          .single();
-        if (saleError) throw saleError;
-        saleId = sale.id;
-      }
-
       const items = cartItems.map((c) => ({
-        sale_id: saleId,
         medicine_id: c.medicine.id,
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
-        // sale_items.quantity is stored in pieces so reports, targets and
-        // activity logs keep a single canonical unit.
         quantity: getItemPieces(c),
         unit_price: roundMoney(c.medicine.price || 0),
         total_price: roundMoney(getLineTotal(c)),
         discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
       }));
 
-      const { error: itemsError } = await supabase.from("sale_items").insert(items);
-      if (itemsError) throw itemsError;
+      const salePayload = {
+        draft_id: draftId,
+        sale_type: saleType,
+        subtotal: roundMoney(subtotal),
+        discount_percent: saleType === "wholesale" ? 0 : discountPercent,
+        discount_amount: roundMoney(totalDiscountAmount),
+        total: roundMoney(netTotal),
+        items,
+        payment: {
+          method: paymentMethod,
+          paid_now:
+            paymentMethod === "split"
+              ? roundMoney(Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0)))
+              : 0,
+          customer_id: selectedCustomer?.id ?? null,
+          customer_name: selectedCustomer?.name ?? null,
+        },
+      };
 
-      if (status === "completed") {
-        for (const c of cartItems) {
-          const newStock = Math.max(0, (c.medicine.stock_quantity || 0) - getItemPieces(c));
-          await supabase
-            .from("medicines")
-            .update({ stock_quantity: newStock })
-            .eq("id", c.medicine.id);
+      if (status === "draft") {
+        // Drafts skip stock/ledger logic — use direct insert path.
+        let saleId: string;
+        const draftFields = {
+          sale_type: saleType,
+          subtotal: roundMoney(subtotal),
+          discount_percent: saleType === "wholesale" ? 0 : discountPercent,
+          discount_amount: roundMoney(totalDiscountAmount),
+          total: roundMoney(netTotal),
+          status: "draft" as const,
+        };
+        if (draftId) {
+          const { error: updateError } = await supabase
+            .from("sales").update(draftFields).eq("id", draftId);
+          if (updateError) throw updateError;
+          saleId = draftId;
+          await supabase.from("sale_items").delete().eq("sale_id", draftId);
+        } else {
+          const { data: sale, error: saleError } = await supabase
+            .from("sales")
+            .insert({
+              pharmacy_id: profile.pharmacy_id,
+              user_id: profile.id,
+              ...draftFields,
+            })
+            .select("id")
+            .single();
+          if (saleError) throw saleError;
+          saleId = sale.id;
         }
-
-        // Customer ledger posting (due/split)
-        if (selectedCustomer && (paymentMethod === "due" || paymentMethod === "split")) {
-          const paid = paymentMethod === "split" ? roundMoney(Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0))) : 0;
-          const dueAmt = roundMoney(Math.max(0, netTotal - paid));
-          if (dueAmt > 0) {
-            const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
-              customer_id: selectedCustomer.id,
-              pharmacy_id: profile.pharmacy_id,
-              user_id: profile.id,
-              entry_type: "due",
-              amount: dueAmt,
-              description: `Sale #${saleId.slice(0, 8)}`,
-              sale_id: saleId,
-            });
-            if (ledgerErr) throw ledgerErr;
+        const { error: itemsError } = await supabase
+          .from("sale_items")
+          .insert(items.map((it) => ({ ...it, sale_id: saleId })));
+        if (itemsError) throw itemsError;
+      } else {
+        const { error: rpcError } = await supabase.rpc(
+          "complete_sale" as never,
+          { _payload: salePayload } as never,
+        );
+        if (rpcError) {
+          const msg = rpcError.message || "Failed to complete sale";
+          const m = msg.match(/INSUFFICIENT_STOCK:([0-9a-f-]+)/i);
+          if (m) {
+            const out = cartItems.find((c) => c.medicine.id === m[1]);
+            throw new Error(
+              `Not enough stock for "${out?.medicine.name ?? "an item"}". Refresh and try again.`,
+            );
           }
-          if (paymentMethod === "split" && paid > 0) {
-            await supabase.from("cash_transactions").insert({
-              pharmacy_id: profile.pharmacy_id,
-              user_id: profile.id,
-              direction: "in",
-              category: "sale_cash",
-              party_name: selectedCustomer.name,
-              amount: paid,
-              sale_id: saleId,
-            });
-          }
+          throw new Error(msg);
         }
       }
 
@@ -427,7 +420,8 @@ const CreateSale = () => {
       setDraftId(null);
       navigate("/sales");
     } catch (err: any) {
-      toast.error(err.message || "Failed to save sale");
+      console.error("[CreateSale] saveSale failed", err);
+      toast.error(err?.message || "Failed to save sale");
     } finally {
       setSaving(false);
     }

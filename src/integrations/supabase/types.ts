@@ -1481,6 +1481,7 @@ export type Database = {
       }
       admin_resync_medicines_pack_info: { Args: never; Returns: number }
       admin_truncate_master_medicines: { Args: never; Returns: undefined }
+      complete_sale: { Args: { _payload: Json }; Returns: string }
       create_group_room: {
         Args: { _avatar_url?: string; _member_ids: string[]; _name: string }
         Returns: string
