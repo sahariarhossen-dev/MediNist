@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -301,12 +301,21 @@ const Inventory = () => {
 
   const handleConfirmStock = async (med: Medicine) => {
     const { addedPieces } = parseStockInput(unitInputs[med.id] || "", med);
-    if (addedPieces <= 0) return;
+    if (!Number.isFinite(addedPieces) || addedPieces <= 0) {
+      toast.error("Enter a positive quantity to add");
+      return;
+    }
     setSavingId(med.id);
     const newStock = getCalculatedStock(med);
+    if (!Number.isFinite(newStock) || newStock < 0) {
+      toast.error("Invalid stock value");
+      setSavingId(null);
+      return;
+    }
     const { error } = await supabase.from("medicines").update({ stock_quantity: newStock }).eq("id", med.id);
     if (error) {
-      toast.error("Failed to update stock");
+      console.error("[Inventory] stock update failed:", error);
+      toast.error("Failed to update stock: " + (error.message || "Unknown error"));
     } else {
       toast.success(`${med.name} stock updated`);
       setMedicines((prev) => prev.map((m) => (m.id === med.id ? { ...m, stock_quantity: newStock } : m)));
