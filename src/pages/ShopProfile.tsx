@@ -53,7 +53,6 @@ interface StaffMember {
   role: string;
   status: string;
   created_at: string;
-  token?: string | null;
   expires_at?: string | null;
   user_id?: string | null;
 }
@@ -160,7 +159,7 @@ const ShopProfile = () => {
   const fetchStaff = async () => {
     const { data } = await supabase
       .from("shop_staff")
-      .select("*")
+      .select("id,email,role,status,created_at,expires_at,user_id,pharmacy_id,invited_by,accepted_at")
       .eq("pharmacy_id", profile!.pharmacy_id!)
       .order("created_at", { ascending: false });
     if (data) setStaff(data as unknown as StaffMember[]);
@@ -365,18 +364,6 @@ const ShopProfile = () => {
 
   const buildAcceptUrl = (token: string) => `${window.location.origin}/accept-invitation?token=${token}`;
 
-  const handleShowExistingLink = (s: StaffMember) => {
-    if (!s.token) {
-      toast({ title: "Link unavailable", description: "Resend the invitation to generate a new link.", variant: "destructive" });
-      return;
-    }
-    setLinkDialog({
-      open: true,
-      email: s.email,
-      role: s.role,
-      url: buildAcceptUrl(s.token),
-    });
-  };
 
   const handleCopyLink = async (url: string) => {
     try {
@@ -667,15 +654,6 @@ const ShopProfile = () => {
                       </div>
                       {isAdmin && (
                         <div className="flex items-center gap-1">
-                          {s.status === "pending" && (
-                            <button
-                              onClick={() => handleShowExistingLink(s)}
-                              className="p-2 rounded-full hover:bg-emerald-100"
-                              title="Show invitation link"
-                            >
-                              <Link2 size={14} className="text-emerald-600" />
-                            </button>
-                          )}
                           {s.status === "pending" && (
                             <button
                               onClick={() => handleResendInvite(s.email, s.role)}
