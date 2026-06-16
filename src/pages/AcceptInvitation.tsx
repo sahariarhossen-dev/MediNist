@@ -38,6 +38,29 @@ const AcceptInvitation = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const DebugPanel = () => (
+    <div className="mt-4 p-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">
+        Debug Info
+      </p>
+      <pre className="text-[10px] font-mono text-amber-900 whitespace-pre-wrap break-all leading-snug">
+{`Token: ${token || "(none)"}
+Token length: ${token?.length ?? 0}
+Is UUID: ${token ? isUuid(token) : false}
+Loading: ${loading}
+Auth loading: ${authLoading}
+Auth user: ${authUser?.email ?? "(none)"}
+Error: ${error ?? "null"}
+Invite: ${invite ? "present" : "null"}
+Invite.email: ${invite?.email ?? "-"}
+Invite.status: ${invite?.status ?? "-"}
+Invite.role: ${invite?.role ?? "-"}
+Invite.isExpired: ${invite?.isExpired ?? "-"}
+URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
+      </pre>
+    </div>
+  );
+
   const fetchInvite = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
@@ -150,7 +173,10 @@ const AcceptInvitation = () => {
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="w-full max-w-md flex flex-col items-center">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="w-full"><DebugPanel /></div>
+        </div>
       </div>
     );
   }
@@ -201,6 +227,7 @@ const AcceptInvitation = () => {
               </Button>
             </div>
           </Card>
+          <DebugPanel />
         </div>
       </div>
     );
@@ -232,6 +259,7 @@ const AcceptInvitation = () => {
               Sign Out & Continue
             </Button>
           </Card>
+          <DebugPanel />
         </div>
       </div>
     );
@@ -307,6 +335,7 @@ const AcceptInvitation = () => {
             By joining, you agree to be added to {invite.pharmacyName}'s staff with the {roleLabel(invite.role)} role.
           </p>
         </Card>
+        <DebugPanel />
       </div>
     </div>
   );
