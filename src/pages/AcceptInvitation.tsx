@@ -38,48 +38,17 @@ const AcceptInvitation = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const DebugPanel = () => (
-    <div className="mt-4 p-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 text-left">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">
-        Debug Info
-      </p>
-      <pre className="text-[10px] font-mono text-amber-900 whitespace-pre-wrap break-all leading-snug">
-{`Token: ${token || "(none)"}
-Token length: ${token?.length ?? 0}
-Is UUID: ${token ? isUuid(token) : false}
-Loading: ${loading}
-Auth loading: ${authLoading}
-Auth user: ${authUser?.email ?? "(none)"}
-Error: ${error ?? "null"}
-Invite: ${invite ? "present" : "null"}
-Invite.email: ${invite?.email ?? "-"}
-Invite.status: ${invite?.status ?? "-"}
-Invite.role: ${invite?.role ?? "-"}
-Invite.isExpired: ${invite?.isExpired ?? "-"}
-URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
-      </pre>
-    </div>
-  );
-
   const fetchInvite = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     setInvite(null);
 
-    console.log("[AcceptInvitation] fetchInvite start", {
-      token,
-      tokenLength: token?.length,
-      href: typeof window !== "undefined" ? window.location.href : null,
-    });
-
     if (!token) {
-      console.warn("[AcceptInvitation] No token in URL");
       setError("This invitation link is missing a token.");
       setLoading(false);
       return;
     }
     if (!isUuid(token)) {
-      console.warn("[AcceptInvitation] Token is not a valid UUID:", token);
       setError("Invitation not found");
       setLoading(false);
       return;
@@ -87,7 +56,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
 
     try {
       const url = `${SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
-      console.log("[AcceptInvitation] Fetching:", url);
       const res = await fetch(url, {
         headers: {
           apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -96,16 +64,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
         signal,
       });
       const info = await res.json().catch(() => ({}));
-      console.log("[AcceptInvitation] Response", {
-        status: res.status,
-        ok: res.ok,
-        body: info,
-        hasEmail: !!info?.email,
-        hasPharmacyName: !!info?.pharmacyName,
-        hasRole: !!info?.role,
-        status_field: info?.status,
-        isExpired: info?.isExpired,
-      });
       if (!res.ok || info?.error) {
         console.error("[AcceptInvitation] Backend error:", info?.error ?? res.status);
         setError(info?.error ?? `Failed to load invitation (${res.status})`);
@@ -120,13 +78,11 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
         setError(e?.message ?? "Failed to load invitation");
       }
     } finally {
-      console.log("[AcceptInvitation] fetchInvite finished, loading=false");
       setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    console.log("[AcceptInvitation] auth state", { authLoading, authUserEmail: authUser?.email ?? null });
     if (authLoading) return;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 15000);
@@ -175,7 +131,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
       <div className="min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
         <div className="w-full max-w-md flex flex-col items-center">
           <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-          <div className="w-full"><DebugPanel /></div>
         </div>
       </div>
     );
@@ -227,7 +182,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
               </Button>
             </div>
           </Card>
-          <DebugPanel />
         </div>
       </div>
     );
@@ -259,7 +213,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
               Sign Out & Continue
             </Button>
           </Card>
-          <DebugPanel />
         </div>
       </div>
     );
@@ -335,7 +288,6 @@ URL: ${typeof window !== "undefined" ? window.location.href : "-"}`}
             By joining, you agree to be added to {invite.pharmacyName}'s staff with the {roleLabel(invite.role)} role.
           </p>
         </Card>
-        <DebugPanel />
       </div>
     </div>
   );
