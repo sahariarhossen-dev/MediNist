@@ -13,6 +13,25 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function extractInvokeError(error: any, data: any): Promise<string> {
+  if (data?.error) return data.error;
+  const ctx = error?.context;
+  if (ctx && typeof ctx.json === "function") {
+    try {
+      const body = await ctx.clone().json();
+      if (body?.error) return body.error;
+    } catch {
+      try {
+        const text = await ctx.clone().text();
+        if (text) return text;
+      } catch {}
+    }
+  }
+  return error?.message || "Something went wrong. Please try again.";
+}
+
 interface PharmacyData {
   id: string;
   name: string;
