@@ -103,30 +103,35 @@ Deno.serve(async (req) => {
       if (!looksExisting) {
         return json({ error: "Failed to create account: " + createErr.message }, 400);
       }
-      // Account exists from a previous failed attempt — try to recover by signing in.
-      console.log("[accept-invitation] User already exists, attempting recovery sign-in");
-      const { data: existingSignIn, error: existingSignInErr } =
-        await admin.auth.signInWithPassword({ email, password });
-      if (existingSignInErr || !existingSignIn.user) {
-        return json(
-          {
-            error:
-              "An account with this email already exists. Sign in with your existing password, or ask your admin to remove the account so you can re-register.",
-          },
-          409
-        );
-      }
-      userId = existingSignIn.user.id;
-      console.log("[accept-invitation] Recovered existing user:", userId);
+      // An account with this email already exists. We intentionally do NOT
+      // try to sign in with the password the invitee just typed: that would
+      // either lock them out (wrong password) or silently take over an
+      // unrelated existing account. Tell them to sign in first, then revisit
+      // the invitation link so they can call accept_staff_invitation while
+      // authenticated with their real session.
+      console.log("[accept-invitation] User already exists; asking them to sign in first");
+      return json(
+        {
+          error:
+            "An account with this email already exists. Please sign in with your existing password, then open this invitation link again to join the pharmacy.",
+        },
+        409
+      );
     } else {
       userId = created.user?.id ?? null;
       if (!userId) return json({ error: "Failed to create account" }, 500);
       console.log("[accept-invitation] Created auth user:", userId);
     }
 
-    // 3. Set full_name on profile (created by handle_new_user trigger)
+    // 3. Set full_name on profile (created by handle_new_user trigger).
+    // Profile guards block role/pharmacy_id changes for the user, but
+    // full_name is allowed. Raise if it fails so we don't silently leave
+    // the new account without a name.
     const { error: nameErr } = await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
-    if (nameErr) console.error("[accept-invitation] Profile name update warning:", nameErr.message);
+    if (nameErr) {
+      console.error("[accept-invitation] Profile name update failed:", nameErr.message);
+      return json({ error: "Failed to set profile name: " + nameErr.message }, 500);
+    }
 
     // 4. Sign in to get session
     const { data: signIn, error: signInErr } = await admin.auth.signInWithPassword({ email, password });

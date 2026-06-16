@@ -90,8 +90,9 @@ Deno.serve(async (req) => {
       .single();
 
     if (pharmacyError) {
+      console.error("register-pharmacy: pharmacy insert failed:", pharmacyError);
       return new Response(
-        JSON.stringify({ error: "Failed to create pharmacy" }),
+        JSON.stringify({ error: `Failed to create pharmacy: ${pharmacyError.message}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -104,10 +105,11 @@ Deno.serve(async (req) => {
     });
 
     if (authError) {
+      console.error("register-pharmacy: createUser failed:", authError);
       // Rollback pharmacy
       await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
       return new Response(
-        JSON.stringify({ error: "Failed to create user account" }),
+        JSON.stringify({ error: `Failed to create user account: ${authError.message}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -145,12 +147,22 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!
     );
-    const { data: signInData, error: signInError } = await supabaseAnon.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (signInError) {
+    let signInData: { session: unknown; user: unknown } | null = null;
+    try {
+      const result = await supabaseAnon.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (result.error || !result.data.session) {
+        console.error("register-pharmacy: auto sign-in failed:", result.error?.message);
+        return new Response(
+          JSON.stringify({ error: "Account created but auto-login failed. Please sign in manually." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      signInData = result.data;
+    } catch (signInThrown) {
+      console.error("register-pharmacy: auto sign-in threw:", signInThrown);
       return new Response(
         JSON.stringify({ error: "Account created but auto-login failed. Please sign in manually." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -160,14 +172,15 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        session: signInData.session,
-        user: signInData.user,
+        session: signInData!.session,
+        user: signInData!.user,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    console.error("register-pharmacy: unexpected error:", err);
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
+      JSON.stringify({ error: `An unexpected error occurred: ${(err as Error)?.message ?? "unknown"}` }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
