@@ -216,6 +216,14 @@ const AddProduct = () => {
       toast.error("No pharmacy linked to your account");
       return;
     }
+    if (usesStripPack) {
+      const pps = Number(pcsPerStrip);
+      const spp = Number(stripPerBox);
+      if (!pcsPerStrip || !stripPerBox || !Number.isFinite(pps) || !Number.isFinite(spp) || pps <= 0 || spp <= 0) {
+        toast.error("Pieces per strip and strips per box are required for tablets/capsules");
+        return;
+      }
+    }
 
     setSaving(true);
 
@@ -259,10 +267,14 @@ const AddProduct = () => {
 
     setSaving(false);
     if (error) {
-      toast.error(editId ? "Failed to update product" : "Failed to save product");
+      console.error("[AddProduct] save failed:", error);
+      toast.error(
+        (editId ? "Failed to update product: " : "Failed to save product: ") +
+          (error.message || "Unknown error")
+      );
     } else {
       toast.success(editId ? "Product updated successfully!" : "Product added successfully!");
-      navigate("/inventory", { replace: true });
+      navigate("/inventory", { replace: true, state: { refresh: Date.now() } });
     }
   };
 
