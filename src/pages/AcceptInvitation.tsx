@@ -43,12 +43,20 @@ const AcceptInvitation = () => {
     setError(null);
     setInvite(null);
 
+    console.log("[AcceptInvitation] fetchInvite start", {
+      token,
+      tokenLength: token?.length,
+      href: typeof window !== "undefined" ? window.location.href : null,
+    });
+
     if (!token) {
+      console.warn("[AcceptInvitation] No token in URL");
       setError("This invitation link is missing a token.");
       setLoading(false);
       return;
     }
     if (!isUuid(token)) {
+      console.warn("[AcceptInvitation] Token is not a valid UUID:", token);
       setError("Invitation not found");
       setLoading(false);
       return;
@@ -56,6 +64,7 @@ const AcceptInvitation = () => {
 
     try {
       const url = `${SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
+      console.log("[AcceptInvitation] Fetching:", url);
       const res = await fetch(url, {
         headers: {
           apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -64,23 +73,37 @@ const AcceptInvitation = () => {
         signal,
       });
       const info = await res.json().catch(() => ({}));
+      console.log("[AcceptInvitation] Response", {
+        status: res.status,
+        ok: res.ok,
+        body: info,
+        hasEmail: !!info?.email,
+        hasPharmacyName: !!info?.pharmacyName,
+        hasRole: !!info?.role,
+        status_field: info?.status,
+        isExpired: info?.isExpired,
+      });
       if (!res.ok || info?.error) {
+        console.error("[AcceptInvitation] Backend error:", info?.error ?? res.status);
         setError(info?.error ?? `Failed to load invitation (${res.status})`);
       } else {
         setInvite(info as InvitationInfo);
       }
     } catch (e: any) {
+      console.error("[AcceptInvitation] Fetch threw:", e?.name, e?.message);
       if (e?.name === "AbortError") {
         setError("The invitation server didn't respond. Check your connection and try again.");
       } else {
         setError(e?.message ?? "Failed to load invitation");
       }
     } finally {
+      console.log("[AcceptInvitation] fetchInvite finished, loading=false");
       setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
+    console.log("[AcceptInvitation] auth state", { authLoading, authUserEmail: authUser?.email ?? null });
     if (authLoading) return;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 15000);
@@ -89,7 +112,7 @@ const AcceptInvitation = () => {
       clearTimeout(timer);
       ac.abort();
     };
-  }, [authLoading, fetchInvite]);
+  }, [authLoading, fetchInvite, authUser?.email]);
 
   const handleRetry = () => {
     const ac = new AbortController();
