@@ -13,6 +13,25 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function extractInvokeError(error: any, data: any): Promise<string> {
+  if (data?.error) return data.error;
+  const ctx = error?.context;
+  if (ctx && typeof ctx.json === "function") {
+    try {
+      const body = await ctx.clone().json();
+      if (body?.error) return body.error;
+    } catch {
+      try {
+        const text = await ctx.clone().text();
+        if (text) return text;
+      } catch {}
+    }
+  }
+  return error?.message || "Something went wrong. Please try again.";
+}
+
 interface PharmacyData {
   id: string;
   name: string;
@@ -284,19 +303,29 @@ const ShopProfile = () => {
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) return;
+    if (!EMAIL_RE.test(email) || email.length > 255) {
+      toast({
+        title: "Invalid email",
+        description: "Enter a valid email address like name@example.com.",
+        variant: "destructive",
+      });
+      return;
+    }
     setInviting(true);
     const { data, error } = await supabase.functions.invoke("invite-staff", {
-      body: { email: inviteEmail.trim(), role: inviteRole },
+      body: { email, role: inviteRole },
     });
     setInviting(false);
     if (error || data?.error) {
-      toast({ title: "Invitation failed", description: data?.error || error?.message, variant: "destructive" });
+      const description = await extractInvokeError(error, data);
+      toast({ title: "Invitation failed", description, variant: "destructive" });
       return;
     }
     setLinkDialog({
       open: true,
-      email: data?.email ?? inviteEmail.trim(),
+      email: data?.email ?? email,
       role: data?.role ?? inviteRole,
       url: data?.acceptUrl ?? "",
     });
@@ -321,7 +350,8 @@ const ShopProfile = () => {
   const handleResendInvite = async (email: string, role: string) => {
     const { data, error } = await supabase.functions.invoke("invite-staff", { body: { email, role } });
     if (error || data?.error) {
-      toast({ title: "Resend failed", description: data?.error || error?.message, variant: "destructive" });
+      const description = await extractInvokeError(error, data);
+      toast({ title: "Resend failed", description, variant: "destructive" });
       return;
     }
     setLinkDialog({
