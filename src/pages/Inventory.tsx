@@ -69,6 +69,8 @@ const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { 
 
 const Inventory = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const refreshToken = (location.state as { refresh?: number } | null)?.refresh ?? 0;
   const { profile, pharmacyName } = useAuth();
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
@@ -136,7 +138,7 @@ const Inventory = () => {
       }
     };
     fetchData();
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, refreshToken]);
 
   useEffect(() => {
     if (searchOpen && searchRef.current) {
