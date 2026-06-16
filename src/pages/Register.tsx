@@ -129,13 +129,22 @@ const Register = () => {
             try { serverMsg = JSON.parse(t)?.error; } catch { serverMsg = t; }
           }
         } catch {}
+        console.error("[Register] invoke error:", res.error, "server:", serverMsg);
         toast.error(serverMsg || res.error.message || "Registration failed");
         return;
       }
 
       const data = res.data;
       if (data?.error) {
+        console.error("[Register] server returned error:", data.error);
         toast.error(data.error);
+        // Account may have been created even though auto-login failed —
+        // route to /login so the user can sign in manually instead of
+        // re-submitting and hitting "email already exists".
+        const msg = String(data.error).toLowerCase();
+        if (msg.includes("auto-login") || msg.includes("sign in manually")) {
+          setTimeout(() => navigate("/login"), 1500);
+        }
         return;
       }
 
@@ -148,7 +157,8 @@ const Register = () => {
         navigate("/dashboard");
       }
     } catch (err: any) {
-      toast.error(err.message || "Something went wrong");
+      console.error("[Register] unexpected:", err);
+      toast.error(err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
