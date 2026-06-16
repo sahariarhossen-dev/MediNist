@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Store, Check, AlertTriangle } from "lucide-react";
+import { Eye, EyeOff, Store, Check, AlertTriangle, LogOut, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface InvitationInfo {
@@ -20,10 +21,14 @@ interface InvitationInfo {
 const roleLabel = (r: string) =>
   r === "salesman" ? "Salesman" : r === "manager" ? "Manager" : r === "owner" ? "Owner" : r;
 
+const isUuid = (v: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
 const AcceptInvitation = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
+  const { user: authUser, loading: authLoading, signOut } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState<InvitationInfo | null>(null);
@@ -33,36 +38,64 @@ const AcceptInvitation = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  const fetchInvite = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    setInvite(null);
+
     if (!token) {
       setError("This invitation link is missing a token.");
       setLoading(false);
       return;
     }
-    (async () => {
-      let info: any = null;
-      let errorMsg: string | null = null;
-      try {
-        const url = `${SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
-        const res = await fetch(url, {
-          headers: {
-            apikey: SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        });
-        info = await res.json();
-        errorMsg = res.ok ? null : info?.error ?? "Failed to load invitation";
-      } catch (e: any) {
-        errorMsg = e?.message ?? "Failed to load invitation";
-      }
-      if (errorMsg || !info || info.error) {
-        setError(errorMsg || info?.error || "Invitation not found");
+    if (!isUuid(token)) {
+      setError("Invitation not found");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const url = `${SUPABASE_URL}/functions/v1/accept-invitation?token=${encodeURIComponent(token)}`;
+      const res = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        signal,
+      });
+      const info = await res.json().catch(() => ({}));
+      if (!res.ok || info?.error) {
+        setError(info?.error ?? `Failed to load invitation (${res.status})`);
       } else {
         setInvite(info as InvitationInfo);
       }
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        setError("The invitation server didn't respond. Check your connection and try again.");
+      } else {
+        setError(e?.message ?? "Failed to load invitation");
+      }
+    } finally {
       setLoading(false);
-    })();
+    }
   }, [token]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    fetchInvite(ac.signal);
+    return () => {
+      clearTimeout(timer);
+      ac.abort();
+    };
+  }, [authLoading, fetchInvite]);
+
+  const handleRetry = () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 15000);
+    fetchInvite(ac.signal);
+  };
 
   const handleAccept = async () => {
     if (!invite || fullName.trim().length < 2 || password.length < 6) return;
@@ -91,7 +124,7 @@ const AcceptInvitation = () => {
   };
 
   // Loading
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
         <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
@@ -130,11 +163,50 @@ const AcceptInvitation = () => {
             </div>
             <h2 className="text-lg font-bold text-foreground">{headline}</h2>
             <p className="text-sm text-muted-foreground">{detail}</p>
+            <div className="space-y-2">
+              {error && (
+                <Button variant="outline" className="w-full h-11 gap-2" onClick={handleRetry}>
+                  <RefreshCw size={16} />
+                  Try Again
+                </Button>
+              )}
+              <Button
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700"
+                onClick={() => navigate("/login")}
+              >
+                Go to Sign In
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Already signed in as a different user
+  if (authUser && authUser.email?.toLowerCase() !== invite.email.toLowerCase()) {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <h1 className="text-2xl font-bold text-blue-600 text-center mb-6">Medinist</h1>
+          <Card className="p-6 border-0 shadow-lg rounded-2xl text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
+              <LogOut size={22} className="text-blue-600" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground">Sign in with a different account</h2>
+            <p className="text-sm text-muted-foreground">
+              You're currently signed in as <strong>{authUser.email}</strong>. This invitation is for{" "}
+              <strong>{invite.email}</strong>. Please sign out and open the link again.
+            </p>
             <Button
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700"
-              onClick={() => navigate("/login")}
+              className="w-full h-11 bg-blue-600 hover:bg-blue-700 gap-2"
+              onClick={async () => {
+                await signOut();
+                window.location.reload();
+              }}
             >
-              Go to Sign In
+              <LogOut size={16} />
+              Sign Out & Continue
             </Button>
           </Card>
         </div>
