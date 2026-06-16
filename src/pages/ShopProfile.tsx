@@ -656,15 +656,6 @@ const ShopProfile = () => {
                         <div className="flex items-center gap-1">
                           {s.status === "pending" && (
                             <button
-                              onClick={() => handleShowExistingLink(s)}
-                              className="p-2 rounded-full hover:bg-emerald-100"
-                              title="Show invitation link"
-                            >
-                              <Link2 size={14} className="text-emerald-600" />
-                            </button>
-                          )}
-                          {s.status === "pending" && (
-                            <button
                               onClick={() => handleResendInvite(s.email, s.role)}
                               className="p-2 rounded-full hover:bg-emerald-100"
                               title="Generate new link"
