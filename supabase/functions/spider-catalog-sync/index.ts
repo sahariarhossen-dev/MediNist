@@ -246,49 +246,90 @@ function approxEq(a: number, b: number, tol = 0.02): boolean {
 }
 
 // ---- Relaxed strength comparison helpers ----
-function stripDenominators(s: string | null | undefined): string {
-  if (!s) return "";
-  let out = s.toLowerCase();
-  // Remove per-unit denominators like /5 ml, /ml, /vial, /puff, /spray, /drop, /dose, /g, /gm, /application
-  out = out.replace(/\/\s*\d*\.?\d*\s*(ml|millilit(?:re|er)s?|vial|puff|spray|drop|dose|gm?|application)s?\b/gi, "");
-  // Strip surrounding parentheses
-  out = out.replace(/[()]/g, " ");
-  return out.replace(/\s+/g, " ").trim();
+// Canonical strength representation for structured comparison.
+interface Strength {
+  components: { value: number; unit: string }[]; // e.g. [{5,"mg"},{2,"mg"}]
+  denominator: { value: number; unit: string } | null; // e.g. "/5 ml" -> {5,"ml"}
+  percents: number[];      // e.g. 2 for "2%"
+  iu: number[];            // international units
 }
 
-function strengthNumbers(s: string | null | undefined): number[] {
-  const stripped = stripDenominators(s);
-  const nums = stripped.match(/\d+(?:\.\d+)?/g) ?? [];
-  return nums.map((n) => parseFloat(n)).filter((n) => isFinite(n));
+function canonUnit(u: string): string {
+  const t = u.toLowerCase();
+  if (t === "gm" || t === "g") return "g";
+  if (t === "millilitre" || t === "millilitres" || t === "milliliter" || t === "milliliters") return "ml";
+  if (t === "µg" || t === "ug") return "mcg";
+  return t;
+}
+
+function parseStrength(raw: string | null | undefined): Strength {
+  const out: Strength = { components: [], denominator: null, percents: [], iu: [] };
+  if (!raw) return out;
+  let s = raw.toLowerCase().replace(/w\s*\/\s*[wv]/g, " ");
+  // percents
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*%/g)) {
+    out.percents.push(parseFloat(m[1]));
+  }
+  s = s.replace(/\d+(?:\.\d+)?\s*%/g, " ");
+  // IU
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*iu\b/g)) {
+    out.iu.push(parseFloat(m[1]));
+  }
+  s = s.replace(/\d+(?:\.\d+)?\s*iu\b/g, " ");
+  // denominator: /5 ml, /vial, /puff, /dose, /drop, /spray, /application, /g, /gm
+  const denomM = s.match(/\/\s*(\d+(?:\.\d+)?)?\s*(ml|g|gm|vial|puff|dose|drop|spray|application)s?\b/);
+  if (denomM) {
+    out.denominator = {
+      value: denomM[1] ? parseFloat(denomM[1]) : 1,
+      unit: canonUnit(denomM[2]),
+    };
+    s = s.replace(denomM[0], " ");
+  }
+  // components: number + unit
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*(mg|mcg|µg|ug|g|gm|ml)\b/g)) {
+    out.components.push({ value: parseFloat(m[1]), unit: canonUnit(m[2]) });
+  }
+  // Sort components for stable multiset compare
+  out.components.sort((a, b) => a.value - b.value || a.unit.localeCompare(b.unit));
+  out.percents.sort((a, b) => a - b);
+  out.iu.sort((a, b) => a - b);
+  return out;
+}
+
+function componentsEqual(a: Strength["components"], b: Strength["components"]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].unit !== b[i].unit) return false;
+    if (Math.abs(a[i].value - b[i].value) > 1e-6) return false;
+  }
+  return true;
+}
+
+function arraysNearlyEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-6) return false;
+  return true;
 }
 
 function strengthMatches(db: string | null | undefined, page: string | null | undefined): boolean {
   if (!db || !page) return false;
-  // a) Normalized strict equality after denominator strip
-  const dbN = norm(stripDenominators(db));
-  const pgN = norm(stripDenominators(page));
-  if (dbN && dbN === pgN) return true;
-  // a2) one contains the other (e.g. "125mg" inside "125mg5ml")
-  if (dbN && pgN && (pgN.includes(dbN) || dbN.includes(pgN))) return true;
-  // b) Composite multiset: every db number appears in page strength text
-  const dbNums = strengthNumbers(db);
-  const pgNums = strengthNumbers(page);
-  if (dbNums.length > 0 && pgNums.length > 0) {
-    const pool = [...pgNums];
-    let ok = true;
-    for (const n of dbNums) {
-      const idx = pool.findIndex((p) => Math.abs(p - n) < 1e-6);
-      if (idx === -1) { ok = false; break; }
-      pool.splice(idx, 1);
-    }
-    if (ok) return true;
-  }
-  // c) Units-only fallback: percentage / IU tokens
-  const dbLow = db.toLowerCase();
-  const pgLow = page.toLowerCase();
-  const pctTokens = dbLow.match(/\d+(?:\.\d+)?\s*%/g) ?? [];
-  if (pctTokens.length > 0 && pctTokens.every((t) => pgLow.includes(t.replace(/\s+/g, "")))) {
-    return true;
+  const dS = parseStrength(db);
+  const pS = parseStrength(page);
+  const dEmpty = !dS.components.length && !dS.percents.length && !dS.iu.length;
+  const pEmpty = !pS.components.length && !pS.percents.length && !pS.iu.length;
+  if (dEmpty && pEmpty) return true;
+  // Percent-only forms (creams, ointments)
+  if (dS.percents.length && arraysNearlyEqual(dS.percents, pS.percents)) return true;
+  // IU
+  if (dS.iu.length && arraysNearlyEqual(dS.iu, pS.iu)) return true;
+  // Components: multiset equal
+  if (dS.components.length && componentsEqual(dS.components, pS.components)) {
+    // Denominator compat: null/null OR both equal OR db-null (we were incomplete)
+    if (!dS.denominator && !pS.denominator) return true;
+    if (!dS.denominator && pS.denominator) return true; // upgrade case
+    if (dS.denominator && pS.denominator
+        && dS.denominator.unit === pS.denominator.unit
+        && Math.abs(dS.denominator.value - pS.denominator.value) < 1e-6) return true;
   }
   return false;
 }
@@ -440,8 +481,13 @@ Deno.serve(async (req) => {
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
   const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2400", 10));
   const auto = url.searchParams.get("auto") === "1";
+  // Retry-by-status mode: e.g. retry_statuses=unmatched_strength_mismatch,unmatched_generic_mismatch
+  const retryStatusesParam = url.searchParams.get("retry_statuses");
+  const retryStatuses = retryStatusesParam
+    ? retryStatusesParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : null;
 
-  if (auto) {
+  if (auto && !retryStatuses) {
     const { data: prog } = await sb
       .from("spider_sync_progress")
       .select("next_offset, total_rows, finished_at")
@@ -460,11 +506,25 @@ Deno.serve(async (req) => {
     offset = prog.next_offset;
   }
 
-  const { data: rows, error: selErr } = await sb
-    .from("master_medicines")
-    .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack")
-    .order("brand_name", { ascending: true })
-    .range(offset, offset + limit - 1);
+  let rows: any[] | null = null;
+  let selErr: any = null;
+  if (retryStatuses && retryStatuses.length) {
+    const res = await sb
+      .from("master_medicines")
+      .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack, medex_attempts")
+      .in("medex_status", retryStatuses)
+      .order("medex_last_attempt_at", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
+      .limit(limit);
+    rows = res.data; selErr = res.error;
+  } else {
+    const res = await sb
+      .from("master_medicines")
+      .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack, medex_attempts")
+      .order("brand_name", { ascending: true })
+      .range(offset, offset + limit - 1);
+    rows = res.data; selErr = res.error;
+  }
 
   if (selErr || !rows) {
     return new Response(JSON.stringify({ error: selErr?.message ?? "select_failed" }), {
@@ -486,6 +546,20 @@ Deno.serve(async (req) => {
     if (res.outcome === "matched" && res.page) {
       matched++;
       const p = res.page;
+      // Upgrade strength when we were incomplete (db has no denominator but page does),
+      // or when db strength is missing entirely.
+      let upgradedStrength: string | null = null;
+      const dbS = parseStrength(r.strength);
+      const pgS = parseStrength(p.strength_text);
+      if (
+        p.strength_text && (
+          !r.strength ||
+          (!dbS.denominator && pgS.denominator) ||
+          (dbS.components.length === 0 && pgS.components.length > 0)
+        )
+      ) {
+        upgradedStrength = p.strength_text;
+      }
       let after: Record<string, any>;
       if (p.format === "strip") {
         const packSizeText = p.strip_per_pack != null && p.pcs_per_strip != null
@@ -497,6 +571,9 @@ Deno.serve(async (req) => {
           strip_per_pack: p.strip_per_pack,
           pack_size: packSizeText,
           medex_verified_at: new Date().toISOString(),
+          medex_last_attempt_at: new Date().toISOString(),
+          medex_attempts: (r.medex_attempts ?? 0) + 1,
+          medex_confidence: "high",
           medex_url: res.brandUrl ?? null,
           medex_status: "matched",
         };
@@ -509,11 +586,15 @@ Deno.serve(async (req) => {
           strip_per_pack: 1,
           pack_size: p.container_text ?? p.pack_text ?? r.pack_size,
           medex_verified_at: new Date().toISOString(),
+          medex_last_attempt_at: new Date().toISOString(),
+          medex_attempts: (r.medex_attempts ?? 0) + 1,
+          medex_confidence: "high",
           medex_url: res.brandUrl ?? null,
           medex_status: "matched",
         };
       }
       if (!r.generic_name && p.generic_text) after.generic_name = p.generic_text;
+      if (upgradedStrength) after.strength = upgradedStrength;
 
       if (samples.length < 5) {
         samples.push({
@@ -545,7 +626,13 @@ Deno.serve(async (req) => {
       if (!dry) {
         await sb
           .from("master_medicines")
-          .update({ medex_status: res.outcome, medex_verified_at: new Date().toISOString() })
+          .update({
+            medex_status: res.outcome,
+            medex_verified_at: new Date().toISOString(),
+            medex_last_attempt_at: new Date().toISOString(),
+            medex_attempts: (r.medex_attempts ?? 0) + 1,
+            medex_confidence: "none",
+          })
           .eq("id", r.id);
       }
     }
@@ -553,7 +640,7 @@ Deno.serve(async (req) => {
     if (delayMs > 0) await new Promise((rs) => setTimeout(rs, delayMs));
   }
 
-  if (auto && !dry) {
+  if (auto && !dry && !retryStatuses) {
     const newOffset = offset + rows.length;
     const { data: prog } = await sb
       .from("spider_sync_progress")
