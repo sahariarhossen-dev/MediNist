@@ -481,8 +481,13 @@ Deno.serve(async (req) => {
   const dry = (url.searchParams.get("dry") ?? "1") !== "0";
   const delayMs = Math.max(0, parseInt(url.searchParams.get("delay") ?? "2400", 10));
   const auto = url.searchParams.get("auto") === "1";
+  // Retry-by-status mode: e.g. retry_statuses=unmatched_strength_mismatch,unmatched_generic_mismatch
+  const retryStatusesParam = url.searchParams.get("retry_statuses");
+  const retryStatuses = retryStatusesParam
+    ? retryStatusesParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : null;
 
-  if (auto) {
+  if (auto && !retryStatuses) {
     const { data: prog } = await sb
       .from("spider_sync_progress")
       .select("next_offset, total_rows, finished_at")
@@ -501,11 +506,25 @@ Deno.serve(async (req) => {
     offset = prog.next_offset;
   }
 
-  const { data: rows, error: selErr } = await sb
-    .from("master_medicines")
-    .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack")
-    .order("brand_name", { ascending: true })
-    .range(offset, offset + limit - 1);
+  let rows: any[] | null = null;
+  let selErr: any = null;
+  if (retryStatuses && retryStatuses.length) {
+    const res = await sb
+      .from("master_medicines")
+      .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack, medex_attempts")
+      .in("medex_status", retryStatuses)
+      .order("medex_last_attempt_at", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
+      .limit(limit);
+    rows = res.data; selErr = res.error;
+  } else {
+    const res = await sb
+      .from("master_medicines")
+      .select("id, brand_name, company, strength, generic_name, pack_size, unit_price, pcs_per_strip, strip_per_pack, medex_attempts")
+      .order("brand_name", { ascending: true })
+      .range(offset, offset + limit - 1);
+    rows = res.data; selErr = res.error;
+  }
 
   if (selErr || !rows) {
     return new Response(JSON.stringify({ error: selErr?.message ?? "select_failed" }), {
@@ -527,6 +546,20 @@ Deno.serve(async (req) => {
     if (res.outcome === "matched" && res.page) {
       matched++;
       const p = res.page;
+      // Upgrade strength when we were incomplete (db has no denominator but page does),
+      // or when db strength is missing entirely.
+      let upgradedStrength: string | null = null;
+      const dbS = parseStrength(r.strength);
+      const pgS = parseStrength(p.strength_text);
+      if (
+        p.strength_text && (
+          !r.strength ||
+          (!dbS.denominator && pgS.denominator) ||
+          (dbS.components.length === 0 && pgS.components.length > 0)
+        )
+      ) {
+        upgradedStrength = p.strength_text;
+      }
       let after: Record<string, any>;
       if (p.format === "strip") {
         const packSizeText = p.strip_per_pack != null && p.pcs_per_strip != null
@@ -538,6 +571,9 @@ Deno.serve(async (req) => {
           strip_per_pack: p.strip_per_pack,
           pack_size: packSizeText,
           medex_verified_at: new Date().toISOString(),
+          medex_last_attempt_at: new Date().toISOString(),
+          medex_attempts: (r.medex_attempts ?? 0) + 1,
+          medex_confidence: "high",
           medex_url: res.brandUrl ?? null,
           medex_status: "matched",
         };
@@ -550,11 +586,15 @@ Deno.serve(async (req) => {
           strip_per_pack: 1,
           pack_size: p.container_text ?? p.pack_text ?? r.pack_size,
           medex_verified_at: new Date().toISOString(),
+          medex_last_attempt_at: new Date().toISOString(),
+          medex_attempts: (r.medex_attempts ?? 0) + 1,
+          medex_confidence: "high",
           medex_url: res.brandUrl ?? null,
           medex_status: "matched",
         };
       }
       if (!r.generic_name && p.generic_text) after.generic_name = p.generic_text;
+      if (upgradedStrength) after.strength = upgradedStrength;
 
       if (samples.length < 5) {
         samples.push({
@@ -586,7 +626,13 @@ Deno.serve(async (req) => {
       if (!dry) {
         await sb
           .from("master_medicines")
-          .update({ medex_status: res.outcome, medex_verified_at: new Date().toISOString() })
+          .update({
+            medex_status: res.outcome,
+            medex_verified_at: new Date().toISOString(),
+            medex_last_attempt_at: new Date().toISOString(),
+            medex_attempts: (r.medex_attempts ?? 0) + 1,
+            medex_confidence: "none",
+          })
           .eq("id", r.id);
       }
     }
@@ -594,7 +640,7 @@ Deno.serve(async (req) => {
     if (delayMs > 0) await new Promise((rs) => setTimeout(rs, delayMs));
   }
 
-  if (auto && !dry) {
+  if (auto && !dry && !retryStatuses) {
     const newOffset = offset + rows.length;
     const { data: prog } = await sb
       .from("spider_sync_progress")
