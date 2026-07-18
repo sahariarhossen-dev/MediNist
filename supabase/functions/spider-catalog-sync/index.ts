@@ -246,49 +246,90 @@ function approxEq(a: number, b: number, tol = 0.02): boolean {
 }
 
 // ---- Relaxed strength comparison helpers ----
-function stripDenominators(s: string | null | undefined): string {
-  if (!s) return "";
-  let out = s.toLowerCase();
-  // Remove per-unit denominators like /5 ml, /ml, /vial, /puff, /spray, /drop, /dose, /g, /gm, /application
-  out = out.replace(/\/\s*\d*\.?\d*\s*(ml|millilit(?:re|er)s?|vial|puff|spray|drop|dose|gm?|application)s?\b/gi, "");
-  // Strip surrounding parentheses
-  out = out.replace(/[()]/g, " ");
-  return out.replace(/\s+/g, " ").trim();
+// Canonical strength representation for structured comparison.
+interface Strength {
+  components: { value: number; unit: string }[]; // e.g. [{5,"mg"},{2,"mg"}]
+  denominator: { value: number; unit: string } | null; // e.g. "/5 ml" -> {5,"ml"}
+  percents: number[];      // e.g. 2 for "2%"
+  iu: number[];            // international units
 }
 
-function strengthNumbers(s: string | null | undefined): number[] {
-  const stripped = stripDenominators(s);
-  const nums = stripped.match(/\d+(?:\.\d+)?/g) ?? [];
-  return nums.map((n) => parseFloat(n)).filter((n) => isFinite(n));
+function canonUnit(u: string): string {
+  const t = u.toLowerCase();
+  if (t === "gm" || t === "g") return "g";
+  if (t === "millilitre" || t === "millilitres" || t === "milliliter" || t === "milliliters") return "ml";
+  if (t === "µg" || t === "ug") return "mcg";
+  return t;
+}
+
+function parseStrength(raw: string | null | undefined): Strength {
+  const out: Strength = { components: [], denominator: null, percents: [], iu: [] };
+  if (!raw) return out;
+  let s = raw.toLowerCase().replace(/w\s*\/\s*[wv]/g, " ");
+  // percents
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*%/g)) {
+    out.percents.push(parseFloat(m[1]));
+  }
+  s = s.replace(/\d+(?:\.\d+)?\s*%/g, " ");
+  // IU
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*iu\b/g)) {
+    out.iu.push(parseFloat(m[1]));
+  }
+  s = s.replace(/\d+(?:\.\d+)?\s*iu\b/g, " ");
+  // denominator: /5 ml, /vial, /puff, /dose, /drop, /spray, /application, /g, /gm
+  const denomM = s.match(/\/\s*(\d+(?:\.\d+)?)?\s*(ml|g|gm|vial|puff|dose|drop|spray|application)s?\b/);
+  if (denomM) {
+    out.denominator = {
+      value: denomM[1] ? parseFloat(denomM[1]) : 1,
+      unit: canonUnit(denomM[2]),
+    };
+    s = s.replace(denomM[0], " ");
+  }
+  // components: number + unit
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*(mg|mcg|µg|ug|g|gm|ml)\b/g)) {
+    out.components.push({ value: parseFloat(m[1]), unit: canonUnit(m[2]) });
+  }
+  // Sort components for stable multiset compare
+  out.components.sort((a, b) => a.value - b.value || a.unit.localeCompare(b.unit));
+  out.percents.sort((a, b) => a - b);
+  out.iu.sort((a, b) => a - b);
+  return out;
+}
+
+function componentsEqual(a: Strength["components"], b: Strength["components"]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].unit !== b[i].unit) return false;
+    if (Math.abs(a[i].value - b[i].value) > 1e-6) return false;
+  }
+  return true;
+}
+
+function arraysNearlyEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-6) return false;
+  return true;
 }
 
 function strengthMatches(db: string | null | undefined, page: string | null | undefined): boolean {
   if (!db || !page) return false;
-  // a) Normalized strict equality after denominator strip
-  const dbN = norm(stripDenominators(db));
-  const pgN = norm(stripDenominators(page));
-  if (dbN && dbN === pgN) return true;
-  // a2) one contains the other (e.g. "125mg" inside "125mg5ml")
-  if (dbN && pgN && (pgN.includes(dbN) || dbN.includes(pgN))) return true;
-  // b) Composite multiset: every db number appears in page strength text
-  const dbNums = strengthNumbers(db);
-  const pgNums = strengthNumbers(page);
-  if (dbNums.length > 0 && pgNums.length > 0) {
-    const pool = [...pgNums];
-    let ok = true;
-    for (const n of dbNums) {
-      const idx = pool.findIndex((p) => Math.abs(p - n) < 1e-6);
-      if (idx === -1) { ok = false; break; }
-      pool.splice(idx, 1);
-    }
-    if (ok) return true;
-  }
-  // c) Units-only fallback: percentage / IU tokens
-  const dbLow = db.toLowerCase();
-  const pgLow = page.toLowerCase();
-  const pctTokens = dbLow.match(/\d+(?:\.\d+)?\s*%/g) ?? [];
-  if (pctTokens.length > 0 && pctTokens.every((t) => pgLow.includes(t.replace(/\s+/g, "")))) {
-    return true;
+  const dS = parseStrength(db);
+  const pS = parseStrength(page);
+  const dEmpty = !dS.components.length && !dS.percents.length && !dS.iu.length;
+  const pEmpty = !pS.components.length && !pS.percents.length && !pS.iu.length;
+  if (dEmpty && pEmpty) return true;
+  // Percent-only forms (creams, ointments)
+  if (dS.percents.length && arraysNearlyEqual(dS.percents, pS.percents)) return true;
+  // IU
+  if (dS.iu.length && arraysNearlyEqual(dS.iu, pS.iu)) return true;
+  // Components: multiset equal
+  if (dS.components.length && componentsEqual(dS.components, pS.components)) {
+    // Denominator compat: null/null OR both equal OR db-null (we were incomplete)
+    if (!dS.denominator && !pS.denominator) return true;
+    if (!dS.denominator && pS.denominator) return true; // upgrade case
+    if (dS.denominator && pS.denominator
+        && dS.denominator.unit === pS.denominator.unit
+        && Math.abs(dS.denominator.value - pS.denominator.value) < 1e-6) return true;
   }
   return false;
 }
