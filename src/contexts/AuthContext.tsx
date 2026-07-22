@@ -102,17 +102,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const demoPharmacyId = profile?.is_demo ? profile.pharmacy_id : null;
     if (demoPharmacyId) {
       try {
-        await supabase.functions.invoke("cleanup-demo-sessions", {
-          body: {},
-          headers: {},
-          method: "POST",
-          // pass id via query string on the function URL
-        } as any);
-      } catch {}
-      // Also fire an explicit URL-based cleanup so the demo tenant is destroyed
-      try {
-        const url = `${(supabase as any).functionsUrl || ""}/cleanup-demo-sessions?pharmacy_id=${demoPharmacyId}`;
-        await fetch(url, { method: "POST" });
+        const base = `https://hjqcvidezzzkfipcneit.supabase.co/functions/v1/cleanup-demo-sessions`;
+        await fetch(`${base}?pharmacy_id=${demoPharmacyId}`, { method: "POST" });
       } catch {}
     }
     localStorage.removeItem("medinist_demo");
