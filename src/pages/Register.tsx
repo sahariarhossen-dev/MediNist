@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { getDivisions, getDistricts, getUpazilas } from "@/data/bangladeshLocations";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [shopNameStatus, setShopNameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [form, setForm] = useState<FormData>({
     shopName: "",
     fullName: "",
@@ -96,6 +98,10 @@ const Register = () => {
   };
 
   const handleSubmit = async () => {
+    if (!termsAccepted) {
+      toast.error("Please agree to the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     setLoading(true);
     try {
       // Clear any stale local session so a leftover JWT from a deleted user
@@ -113,6 +119,7 @@ const Register = () => {
           district: form.district,
           upazila: form.upazila,
           streetAddress: form.streetAddress.trim(),
+          terms_accepted: true,
         },
       });
 
