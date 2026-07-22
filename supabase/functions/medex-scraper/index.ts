@@ -130,16 +130,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const cronSecret = Deno.env.get("CRON_SECRET");
-    const provided = req.headers.get("x-cron-secret");
-    if (cronSecret && provided !== cronSecret) {
-      // Allow manual browser test only when secret is not configured.
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // Endpoint only writes public MedEx catalog data; no secret gate needed.
     const url = new URL(req.url);
     const forcePage = url.searchParams.get("page");
     const supabase = createClient(
