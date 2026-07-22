@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useScrollFocusedInput } from "@/hooks/useScrollFocusedInput";
 
-const schema = z.object({
+const baseSchema = z.object({
   party_name: z
     .string()
     .trim()
@@ -25,7 +25,12 @@ const schema = z.object({
     .max(10_000_000, "Amount too large"),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<typeof baseSchema>;
+
+const formatBDT = (n: number) =>
+  new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(
+    Math.round(n),
+  );
 
 interface Props {
   open: boolean;
@@ -33,14 +38,33 @@ interface Props {
   date: Date;
   pharmacyId: string;
   userId: string;
+  cashInHand: number;
   onSaved: () => void;
 }
 
-const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onSaved }: Props) => {
+const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, cashInHand, onSaved }: Props) => {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   useScrollFocusedInput(formRef);
+
+  const schema = useMemo(
+    () =>
+      baseSchema.superRefine((val, ctx) => {
+        if (
+          val.type === "out" &&
+          typeof val.amount === "number" &&
+          val.amount > cashInHand
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["amount"],
+            message: `Amount exceeds available Cash in Hand (৳${formatBDT(cashInHand)})`,
+          });
+        }
+      }),
+    [cashInHand],
+  );
 
   const {
     register,
@@ -55,8 +79,22 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onS
   });
 
   const typeValue = watch("type");
+  const amountValue = watch("amount");
+  const exceedsCash =
+    typeValue === "out" &&
+    typeof amountValue === "number" &&
+    !Number.isNaN(amountValue) &&
+    amountValue > cashInHand;
 
   const onSubmit = async (values: FormValues) => {
+    if (values.type === "out" && values.amount > cashInHand) {
+      toast({
+        title: "Insufficient Cash in Hand",
+        description: "Please deposit cash or record cash sales first.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     const direction = values.type;
     const category = direction === "in" ? "other_in" : "expense";
@@ -79,7 +117,16 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onS
     setSaving(false);
 
     if (error) {
-      toast({ title: "Could not save", description: error.message, variant: "destructive" });
+      const msg = error.message || "";
+      if (msg.includes("INSUFFICIENT_CASH")) {
+        toast({
+          title: "Insufficient Cash in Hand",
+          description: "Please deposit cash or record cash sales first.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Could not save", description: msg, variant: "destructive" });
+      }
       return;
     }
 
@@ -182,7 +229,7 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, onS
             <Button
               type="submit"
               className="flex-1 h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-              disabled={saving}
+              disabled={saving || exceedsCash}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
             </Button>
