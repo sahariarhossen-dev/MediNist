@@ -385,6 +385,7 @@ const DailyTransactions = () => {
             date={date}
             pharmacyId={profile.pharmacy_id}
             userId={profile.id}
+            cashInHand={cashInHand}
             onSaved={loadData}
           />
         </>
