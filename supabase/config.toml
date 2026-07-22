@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.accept-invitation]
 verify_jwt = false
+
+[functions.create-demo-session]
+verify_jwt = false
+
+[functions.cleanup-demo-sessions]
+verify_jwt = false

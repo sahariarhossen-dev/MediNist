@@ -20,6 +20,7 @@ import {
   Database,
   Loader2,
   Mail,
+  Rocket,
 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";

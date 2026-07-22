@@ -9,6 +9,7 @@ interface Profile {
   pharmacy_id: string | null;
   role: string | null;
   avatar_url: string | null;
+  is_demo?: boolean | null;
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
   pharmacyName: string | null;
   loading: boolean;
   isPasswordRecovery: boolean;
+  isDemo: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -27,6 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   pharmacyName: null,
   loading: true,
   isPasswordRecovery: false,
+  isDemo: false,
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -96,6 +99,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile]);
 
   const signOut = async () => {
+    const demoPharmacyId = profile?.is_demo ? profile.pharmacy_id : null;
+    if (demoPharmacyId) {
+      try {
+        await supabase.functions.invoke("cleanup-demo-sessions", {
+          body: {},
+          headers: {},
+          method: "POST",
+          // pass id via query string on the function URL
+        } as any);
+      } catch {}
+      // Also fire an explicit URL-based cleanup so the demo tenant is destroyed
+      try {
+        const url = `${(supabase as any).functionsUrl || ""}/cleanup-demo-sessions?pharmacy_id=${demoPharmacyId}`;
+        await fetch(url, { method: "POST" });
+      } catch {}
+    }
+    localStorage.removeItem("medinist_demo");
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -103,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, isPasswordRecovery, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, isPasswordRecovery, isDemo: !!profile?.is_demo, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
