@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const cronSecret = Deno.env.get("SPIDER_CRON_SECRET");
+    const cronSecret = Deno.env.get("CRON_SECRET");
     const provided = req.headers.get("x-cron-secret");
     if (cronSecret && provided !== cronSecret) {
       // Allow manual browser test only when secret is not configured.
