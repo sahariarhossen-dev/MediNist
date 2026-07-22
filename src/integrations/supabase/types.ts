@@ -912,12 +912,7 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
-          medex_attempts: number
-          medex_confidence: string | null
-          medex_last_attempt_at: string | null
-          medex_status: string | null
           medex_url: string | null
-          medex_verified_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
@@ -933,12 +928,7 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
-          medex_attempts?: number
-          medex_confidence?: string | null
-          medex_last_attempt_at?: string | null
-          medex_status?: string | null
           medex_url?: string | null
-          medex_verified_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -954,12 +944,7 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
-          medex_attempts?: number
-          medex_confidence?: string | null
-          medex_last_attempt_at?: string | null
-          medex_status?: string | null
           medex_url?: string | null
-          medex_verified_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -984,6 +969,39 @@ export type Database = {
           fetched_at?: string
           name_key?: string
           payload?: Json
+        }
+        Relationships: []
+      }
+      medex_scrape_progress: {
+        Row: {
+          finished: boolean
+          id: number
+          last_error: string | null
+          last_run_at: string | null
+          last_status: string | null
+          next_page: number
+          total_scraped: number
+          updated_at: string
+        }
+        Insert: {
+          finished?: boolean
+          id?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          next_page?: number
+          total_scraped?: number
+          updated_at?: string
+        }
+        Update: {
+          finished?: boolean
+          id?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          next_page?: number
+          total_scraped?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1464,39 +1482,6 @@ export type Database = {
         }
         Relationships: []
       }
-      spider_sync_progress: {
-        Row: {
-          finished_at: string | null
-          id: number
-          last_run_at: string | null
-          matched_total: number
-          next_offset: number
-          started_at: string
-          total_rows: number
-          unmatched_total: number
-        }
-        Insert: {
-          finished_at?: string | null
-          id?: number
-          last_run_at?: string | null
-          matched_total?: number
-          next_offset?: number
-          started_at?: string
-          total_rows?: number
-          unmatched_total?: number
-        }
-        Update: {
-          finished_at?: string | null
-          id?: number
-          last_run_at?: string | null
-          matched_total?: number
-          next_offset?: number
-          started_at?: string
-          total_rows?: number
-          unmatched_total?: number
-        }
-        Relationships: []
-      }
       staff_activity_logs: {
         Row: {
           action_type: string
@@ -1776,12 +1761,7 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
-          medex_attempts: number
-          medex_confidence: string | null
-          medex_last_attempt_at: string | null
-          medex_status: string | null
           medex_url: string | null
-          medex_verified_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
