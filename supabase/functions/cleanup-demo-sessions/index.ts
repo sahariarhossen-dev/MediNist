@@ -4,6 +4,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
+// build v2
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
