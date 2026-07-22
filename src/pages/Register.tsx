@@ -356,6 +356,28 @@ const Register = () => {
           )}
 
           {/* Navigation */}
+          {currentStep === 3 && (
+            <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-border bg-muted/30 p-3">
+              <Checkbox
+                id="terms-agree"
+                checked={termsAccepted}
+                onCheckedChange={(v) => setTermsAccepted(v === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor="terms-agree" className="text-xs leading-relaxed text-foreground cursor-pointer select-none">
+                I have read and agree to the{" "}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">
+                  Privacy Policy
+                </a>
+                .
+              </label>
+            </div>
+          )}
+
           <div className="flex gap-3 mt-6">
             {currentStep > 0 && (
               <Button variant="outline" className="flex-1 h-12" onClick={() => setCurrentStep(currentStep - 1)}>
@@ -373,7 +395,7 @@ const Register = () => {
             ) : (
               <Button
                 className="flex-1 h-12 bg-blue-600 hover:bg-blue-700"
-                disabled={loading}
+                disabled={loading || !termsAccepted}
                 onClick={handleSubmit}
               >
                 {loading ? "Creating Account..." : "Confirm & Create Account"}
