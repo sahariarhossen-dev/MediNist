@@ -20,6 +20,7 @@ import {
   SEED_PRODUCT_TYPES,
   getStandardizedType,
 } from "@/lib/productType";
+import { toAddProductState, type MedExMappedPayload } from "@/lib/medExMapper";
 
 const ADD_NEW_SENTINEL = "__add_new__";
 
@@ -109,31 +110,34 @@ const AddProduct = () => {
   useEffect(() => {
     const s = location.state;
     if (!s) return;
-    if (s.editId) setEditId(s.editId);
-    if (s.companyName) setCompanyName(s.companyName);
-    if (s.name) setName(s.name);
-    if (s.productType) {
-      setProductType(s.productType);
-      // Make sure the saved type is selectable in the dropdown
+    // MedEx-mapped payload takes precedence — it comes from the shared
+    // parser and already normalizes brand/strength/pack/price into the
+    // exact keys this form consumes.
+    const src = s.medexPayload
+      ? { ...s, ...toAddProductState(s.medexPayload as MedExMappedPayload) }
+      : s;
+    if (src.editId) setEditId(src.editId);
+    if (src.companyName) setCompanyName(src.companyName);
+    if (src.name) setName(src.name);
+    if (src.productType) {
+      setProductType(src.productType);
       setProductTypes((prev) =>
-        prev.some((t) => t.toLowerCase() === s.productType.toLowerCase())
+        prev.some((t) => t.toLowerCase() === src.productType.toLowerCase())
           ? prev
-          : [...prev, s.productType]
+          : [...prev, src.productType]
       );
     } else {
-      // Auto-detect from medicine name only when DB value is empty/null
-      const detected = detectFunctionalTypeFromName(s.name);
+      const detected = detectFunctionalTypeFromName(src.name);
       if (detected) setProductType(detected);
     }
-    if (s.strength) {
-      // Parse numeric part from strength like "500" or already-numeric values
-      const numericStrength = String(s.strength).replace(/[^0-9.]/g, "");
+    if (src.strength) {
+      const numericStrength = String(src.strength).replace(/[^0-9.]/g, "");
       setStrength(numericStrength);
     }
-    if (s.stockAlert) setStockAlert(s.stockAlert);
-    if (s.mrp) setMrp(s.mrp);
-    if (s.pcsPerStrip) setPcsPerStrip(s.pcsPerStrip);
-    if (s.stripPerBox) setStripPerBox(s.stripPerBox);
+    if (src.stockAlert) setStockAlert(src.stockAlert);
+    if (src.mrp) setMrp(src.mrp);
+    if (src.pcsPerStrip) setPcsPerStrip(src.pcsPerStrip);
+    if (src.stripPerBox) setStripPerBox(src.stripPerBox);
   }, []);
 
   // Self-heal: when opening Edit for an existing product, look up the
