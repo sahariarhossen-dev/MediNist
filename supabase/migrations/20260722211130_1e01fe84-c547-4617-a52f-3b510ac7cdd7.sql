@@ -1,0 +1,1 @@
+ALTER TABLE public.medex_scrape_progress ADD COLUMN IF NOT EXISTS page_offset integer NOT NULL DEFAULT 0;

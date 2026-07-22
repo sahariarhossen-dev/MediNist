@@ -147,10 +147,13 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const page = forcePage ? parseInt(forcePage, 10) : progress?.next_page ?? 1;
+    const cursorOffset = startIdxParam
+      ? parseInt(startIdxParam, 10)
+      : (forcePage ? 0 : (progress?.page_offset ?? 0));
 
     const indexHtml = await fetchHtml(`${BASE}/brands?page=${page}`);
     const allLinks = extractBrandLinks(indexHtml);
-    const startIdx = startIdxParam ? parseInt(startIdxParam, 10) : 0;
+    const startIdx = cursorOffset;
     const links = allLinks.slice(startIdx, startIdx + MAX_LINKS_PER_RUN);
 
     if (allLinks.length === 0) {
@@ -194,8 +197,10 @@ Deno.serve(async (req) => {
     const nextPage = forcePage
       ? (progress?.next_page ?? 1)
       : pageDone ? page + 1 : page;
+    const nextOffset = pageDone ? 0 : consumedEnd;
     await supabase.from("medex_scrape_progress").update({
       next_page: nextPage,
+      page_offset: nextOffset,
       total_scraped: (progress?.total_scraped ?? 0) + inserted,
       last_run_at: new Date().toISOString(),
       last_status: `page ${page} [${startIdx}-${consumedEnd}/${allLinks.length}]: ${inserted} scraped${errors.length ? `, ${errors.length} errors` : ""}`,
