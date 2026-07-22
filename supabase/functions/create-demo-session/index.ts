@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const DEMO_TTL_HOURS = 4;
+// build v2
 
 function randomId() {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
