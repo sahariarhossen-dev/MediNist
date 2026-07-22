@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { getLatestPosts } from "@/data/blogPosts";
 import { formatPostDate } from "@/lib/formatDate";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 /* ---------- shared bits ---------- */
 
@@ -306,7 +308,33 @@ const DashboardMockup = () => (
 
 /* ---------- hero ---------- */
 
-const Hero = () => (
+const Hero = () => {
+  const navigate = useNavigate();
+  const [launching, setLaunching] = useState(false);
+
+  const launchDemo = async () => {
+    if (launching) return;
+    setLaunching(true);
+    const t = toast.loading("Preparing your demo pharmacy…");
+    try {
+      await supabase.auth.signOut().catch(() => {});
+      const { data, error } = await supabase.functions.invoke("create-demo-session", { body: {} });
+      if (error || !data?.session) throw new Error(error?.message || data?.error || "Failed to start demo");
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      localStorage.setItem("medinist_demo", JSON.stringify({ pharmacy_id: data.pharmacy_id, expires_at: data.expires_at }));
+      toast.success("Welcome to the MediNist demo!", { id: t });
+      navigate("/dashboard");
+    } catch (err: any) {
+      console.error("[demo] launch failed", err);
+      toast.error(err?.message || "Could not start the demo. Please try again.", { id: t });
+      setLaunching(false);
+    }
+  };
+
+  return (
   <Section className="pb-16 sm:pt-32 sm:pb-24 pt-[64px]">
     <div className="grid items-center gap-12 lg:grid-cols-2">
       <div className="text-center lg:text-left">
@@ -337,13 +365,15 @@ const Hero = () => (
           >
             Try for Free <ArrowRight size={16} />
           </Link>
-          <a
-            href="#demo"
-            onClick={(e) => scrollToHash(e, "#demo")}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:border-brand hover:text-brand sm:w-auto"
+          <button
+            type="button"
+            onClick={launchDemo}
+            disabled={launching}
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-brand/30 bg-white px-6 text-sm font-semibold text-brand transition hover:border-brand hover:bg-brand-soft disabled:opacity-70 sm:w-auto"
           >
-            <PlayCircle size={18} /> Watch Demo
-          </a>
+            {launching ? <Loader2 size={18} className="animate-spin" /> : <Rocket size={18} />}
+            {launching ? "Launching demo…" : "Explore Live Demo"}
+          </button>
         </div>
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500 lg:justify-start">
           <div className="flex">
@@ -360,7 +390,8 @@ const Hero = () => (
       </div>
     </div>
   </Section>
-);
+  );
+};
 
 /* ---------- stats strip ---------- */
 
