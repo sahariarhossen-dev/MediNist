@@ -9,6 +9,7 @@ interface Profile {
   pharmacy_id: string | null;
   role: string | null;
   avatar_url: string | null;
+  is_demo?: boolean | null;
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
   pharmacyName: string | null;
   loading: boolean;
   isPasswordRecovery: boolean;
+  isDemo: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -27,6 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   pharmacyName: null,
   loading: true,
   isPasswordRecovery: false,
+  isDemo: false,
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -96,6 +99,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile]);
 
   const signOut = async () => {
+    const demoPharmacyId = profile?.is_demo ? profile.pharmacy_id : null;
+    if (demoPharmacyId) {
+      try {
+        const base = `https://hjqcvidezzzkfipcneit.supabase.co/functions/v1/cleanup-demo-sessions`;
+        await fetch(`${base}?pharmacy_id=${demoPharmacyId}`, { method: "POST" });
+      } catch {}
+    }
+    localStorage.removeItem("medinist_demo");
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -103,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, isPasswordRecovery, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, pharmacyName, loading, isPasswordRecovery, isDemo: !!profile?.is_demo, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1118,12 +1118,14 @@ export type Database = {
           cover_url: string | null
           created_at: string | null
           default_discount: number | null
+          demo_expires_at: string | null
           district: string | null
           division: string | null
           drug_license: string | null
           email: string | null
           id: string
           invoice_footer: string | null
+          is_demo: boolean
           last_popup_shown: string | null
           logo_url: string | null
           name: string
@@ -1140,12 +1142,14 @@ export type Database = {
           cover_url?: string | null
           created_at?: string | null
           default_discount?: number | null
+          demo_expires_at?: string | null
           district?: string | null
           division?: string | null
           drug_license?: string | null
           email?: string | null
           id?: string
           invoice_footer?: string | null
+          is_demo?: boolean
           last_popup_shown?: string | null
           logo_url?: string | null
           name: string
@@ -1162,12 +1166,14 @@ export type Database = {
           cover_url?: string | null
           created_at?: string | null
           default_discount?: number | null
+          demo_expires_at?: string | null
           district?: string | null
           division?: string | null
           drug_license?: string | null
           email?: string | null
           id?: string
           invoice_footer?: string | null
+          is_demo?: boolean
           last_popup_shown?: string | null
           logo_url?: string | null
           name?: string
@@ -1282,6 +1288,7 @@ export type Database = {
           avatar_url: string | null
           full_name: string | null
           id: string
+          is_demo: boolean
           last_seen: string | null
           last_trial_popup_date: string | null
           pharmacy_id: string | null
@@ -1295,6 +1302,7 @@ export type Database = {
           avatar_url?: string | null
           full_name?: string | null
           id: string
+          is_demo?: boolean
           last_seen?: string | null
           last_trial_popup_date?: string | null
           pharmacy_id?: string | null
@@ -1308,6 +1316,7 @@ export type Database = {
           avatar_url?: string | null
           full_name?: string | null
           id?: string
+          is_demo?: boolean
           last_seen?: string | null
           last_trial_popup_date?: string | null
           pharmacy_id?: string | null
@@ -1817,6 +1826,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      seed_demo_pharmacy: {
+        Args: { _pharmacy_id: string; _user_id: string }
+        Returns: undefined
       }
       submit_blind_closing: {
         Args: { _declared: number; _notes?: string }
