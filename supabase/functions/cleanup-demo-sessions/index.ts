@@ -66,12 +66,12 @@ Deno.serve(async (req) => {
         "shop_staff", "chat_messages", "chat_room_members", "chat_rooms", "notes",
       ];
       for (const t of tables) {
-        await admin.from(t).delete().eq("pharmacy_id", p.id).catch(() => {});
+        try { await admin.from(t).delete().eq("pharmacy_id", p.id); } catch {}
       }
 
       // Clear profile links and delete auth users
       for (const prof of profs ?? []) {
-        await admin.from("profiles").delete().eq("id", prof.id).catch(() => {});
+        try { await admin.from("profiles").delete().eq("id", prof.id); } catch {}
         await admin.auth.admin.deleteUser(prof.id).catch(() => {});
       }
 

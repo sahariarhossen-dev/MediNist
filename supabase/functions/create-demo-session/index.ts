@@ -60,34 +60,14 @@ Deno.serve(async (req) => {
     if (aErr || !auth?.user) throw new Error(`auth: ${aErr?.message}`);
     userId = auth.user.id;
 
-    // 3. Profile — bypass update guards
-    await admin.rpc("set_config" as any, {
-      setting_name: "app.bypass_profile_guards",
-      new_value: "on",
-      is_local: false,
-    }).catch(() => {});
-
-    const { error: profErr } = await admin
-      .from("profiles")
-      .update({
-        pharmacy_id: pharmacyId,
-        full_name: "Demo Pharmacist",
-        role: "admin",
-        is_demo: true,
-        terms_accepted: true,
-        terms_accepted_at: new Date().toISOString(),
-      })
-      .eq("id", userId);
-    if (profErr) throw new Error(`profile: ${profErr.message}`);
-
-    // 4. Seed data
+    // 3. Seed data (also promotes the profile to admin, sets is_demo, terms)
     const { error: seedErr } = await admin.rpc("seed_demo_pharmacy", {
       _pharmacy_id: pharmacyId,
       _user_id: userId,
     });
     if (seedErr) throw new Error(`seed: ${seedErr.message}`);
 
-    // 5. Sign in with anon client
+    // 4. Sign in with anon client
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -112,7 +92,9 @@ Deno.serve(async (req) => {
     console.error("create-demo-session failed:", err);
     // Rollback
     if (userId) await admin.auth.admin.deleteUser(userId).catch(() => {});
-    if (pharmacyId) await admin.from("pharmacies").delete().eq("id", pharmacyId).catch(() => {});
+    if (pharmacyId) {
+      try { await admin.from("pharmacies").delete().eq("id", pharmacyId); } catch {}
+    }
     return new Response(
       JSON.stringify({ error: (err as Error).message || "Failed to create demo session" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
