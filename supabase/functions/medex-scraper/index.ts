@@ -7,7 +7,8 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const BASE = "https://medex.com.bd";
 const UA = "Mozilla/5.0 (compatible; MediNistScraper/1.0)";
-const DETAIL_DELAY_MS = 1500;
+const DETAIL_DELAY_MS = 800;
+const MAX_LINKS_PER_RUN = 15;
 
 function textDecode(s: string): string {
   return s
@@ -133,6 +134,7 @@ Deno.serve(async (req) => {
     // Endpoint only writes public MedEx catalog data; no secret gate needed.
     const url = new URL(req.url);
     const forcePage = url.searchParams.get("page");
+    const startIdxParam = url.searchParams.get("start");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -147,9 +149,11 @@ Deno.serve(async (req) => {
     const page = forcePage ? parseInt(forcePage, 10) : progress?.next_page ?? 1;
 
     const indexHtml = await fetchHtml(`${BASE}/brands?page=${page}`);
-    const links = extractBrandLinks(indexHtml);
+    const allLinks = extractBrandLinks(indexHtml);
+    const startIdx = startIdxParam ? parseInt(startIdxParam, 10) : 0;
+    const links = allLinks.slice(startIdx, startIdx + MAX_LINKS_PER_RUN);
 
-    if (links.length === 0) {
+    if (allLinks.length === 0) {
       await supabase.from("medex_scrape_progress").update({
         finished: true,
         last_run_at: new Date().toISOString(),
@@ -184,11 +188,17 @@ Deno.serve(async (req) => {
       inserted = rows.length;
     }
 
+    // Advance cursor: if we consumed the tail of this page, move to next page; otherwise stay on the same page and continue from the next slice on the next run.
+    const consumedEnd = startIdx + links.length;
+    const pageDone = consumedEnd >= allLinks.length;
+    const nextPage = forcePage
+      ? (progress?.next_page ?? 1)
+      : pageDone ? page + 1 : page;
     await supabase.from("medex_scrape_progress").update({
-      next_page: (forcePage ? (progress?.next_page ?? 1) : page + 1),
+      next_page: nextPage,
       total_scraped: (progress?.total_scraped ?? 0) + inserted,
       last_run_at: new Date().toISOString(),
-      last_status: `page ${page}: ${inserted}/${links.length} scraped${errors.length ? `, ${errors.length} errors` : ""}`,
+      last_status: `page ${page} [${startIdx}-${consumedEnd}/${allLinks.length}]: ${inserted} scraped${errors.length ? `, ${errors.length} errors` : ""}`,
       last_error: errors.slice(0, 3).join(" | ") || null,
       updated_at: new Date().toISOString(),
     }).eq("id", 1);
