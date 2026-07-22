@@ -336,7 +336,8 @@ function strengthMatches(db: string | null | undefined, page: string | null | un
 
 function firstStrengthToken(s: string | null | undefined): string | null {
   if (!s) return null;
-  const cleaned = stripDenominators(s).replace(/[()]/g, " ");
+  // Drop any denominator suffix like "/5 ml", "/vial", "/puff" before extracting the first token.
+  const cleaned = s.replace(/\/\s*[^\s,+()]+/g, " ").replace(/[()]/g, " ");
   const m = cleaned.match(/(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|gm|iu|%|ml))/i);
   return m ? m[1].trim() : null;
 }
