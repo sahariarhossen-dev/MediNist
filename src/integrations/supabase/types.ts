@@ -980,6 +980,7 @@ export type Database = {
           last_run_at: string | null
           last_status: string | null
           next_page: number
+          page_offset: number
           total_scraped: number
           updated_at: string
         }
@@ -990,6 +991,7 @@ export type Database = {
           last_run_at?: string | null
           last_status?: string | null
           next_page?: number
+          page_offset?: number
           total_scraped?: number
           updated_at?: string
         }
@@ -1000,6 +1002,7 @@ export type Database = {
           last_run_at?: string | null
           last_status?: string | null
           next_page?: number
+          page_offset?: number
           total_scraped?: number
           updated_at?: string
         }
