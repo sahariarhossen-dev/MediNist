@@ -1287,6 +1287,8 @@ export type Database = {
           pharmacy_id: string | null
           phone: string | null
           role: string | null
+          terms_accepted: boolean
+          terms_accepted_at: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1298,6 +1300,8 @@ export type Database = {
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1309,6 +1313,8 @@ export type Database = {
           pharmacy_id?: string | null
           phone?: string | null
           role?: string | null
+          terms_accepted?: boolean
+          terms_accepted_at?: string | null
           updated_at?: string | null
         }
         Relationships: [

@@ -12,7 +12,14 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { shopName, fullName, phone, email, password, division, district, upazila, streetAddress } = body;
+    const { shopName, fullName, phone, email, password, division, district, upazila, streetAddress, terms_accepted } = body;
+
+    if (terms_accepted !== true) {
+      return new Response(
+        JSON.stringify({ error: "You must agree to the Terms of Service and Privacy Policy." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Validate required fields
     if (!shopName || !fullName || !phone || !email || !password || !division || !district || !upazila) {
@@ -125,6 +132,8 @@ Deno.serve(async (req) => {
         full_name: trimmedFullName,
         phone: trimmedPhone,
         role: "admin",
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
       })
       .eq("id", authData.user.id)
       .select("id, role, pharmacy_id")
