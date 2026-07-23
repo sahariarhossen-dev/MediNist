@@ -54,13 +54,33 @@ function parseBrandPage(url: string, html: string): Parsed | null {
   const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
   if (!titleMatch) return null;
   const title = textDecode(titleMatch[1]);
-  const parts = title.split("|").map((p) => p.trim());
-  // Expected: Brand | Strength | Type | (bn) | Manufacturer | ...
+  // MedEx title variations:
+  //   Brand | Strength | Type | [Bengali] | Manufacturer | Indications... | MedEx
+  //   Brand | Type | Manufacturer | Indications... | MedEx           (no strength)
+  //   Brand | Strength | Type | Manufacturer | Indications... | MedEx (no bengali)
+  // Strategy: drop the trailing "Indications..." + "MedEx" segments and any
+  // Bengali-script segments, then assign by position from the tail so the
+  // manufacturer never lands in the format column.
+  const FORMAT_WORDS = /^(tablet|capsule|syrup|suspension|injection|infusion|drop|drops|inhaler|inhalation|cream|ointment|gel|lotion|solution|spray|powder|shampoo|oil|liquid|nebuliser solution|nebulizer solution|nasal spray|eye drop|ear drop|pediatric drops|iv infusion|iv injection|im\/iv injection|sachet|suppository|pessary|vaginal|granules|effervescent|lozenge|paste|patch|mouthwash|enema)\b/i;
+  const hasBengali = (s: string) => /[\u0980-\u09FF]/.test(s);
+  const rawParts = title.split("|").map((p) => p.trim()).filter(Boolean);
+  const parts = rawParts.filter((p) =>
+    !hasBengali(p) &&
+    !/^MedEx$/i.test(p) &&
+    !/^Indications\b/i.test(p)
+  );
   const brand_name = parts[0] || "";
-  const strength = parts[1] || null;
-  const format = parts[2] || null;
-  const company = parts[4] || null;
   if (!brand_name) return null;
+  // Manufacturer is the last remaining segment.
+  const company = parts.length >= 2 ? parts[parts.length - 1] : null;
+  // Format is the last segment that looks like a dosage form.
+  let format: string | null = null;
+  for (let i = parts.length - 2; i >= 1; i--) {
+    if (FORMAT_WORDS.test(parts[i])) { format = parts[i]; break; }
+  }
+  // Strength = middle segment(s) that are neither brand, format, nor company.
+  const middle = parts.slice(1, parts.length - 1).filter((p) => p !== format);
+  const strength = middle.length ? middle.join(" | ") : null;
 
   // Generic — first /generics/{id}/{slug} link, text content
   let generic_name: string | null = null;
