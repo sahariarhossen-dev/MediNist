@@ -167,6 +167,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const page = forcePage ? parseInt(forcePage, 10) : progress?.next_page ?? 1;
+
+    // Idle mode: once a sweep is finished, do nothing until the nightly reset
+    // cron reopens a refresh cycle (finished = false). An explicit ?page=
+    // override still forces a run for manual checks.
+    if (!forcePage && progress?.finished) {
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, reason: "sweep finished — waiting for next daily refresh cycle", next_page: page }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const cursorOffset = startIdxParam
       ? parseInt(startIdxParam, 10)
       : (forcePage ? 0 : (progress?.page_offset ?? 0));
