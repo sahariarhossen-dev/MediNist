@@ -1934,6 +1934,17 @@ export type Database = {
         Args: { _amount: number; _days: number }
         Returns: string
       }
+      extend_subscription_admin: {
+        Args: {
+          _amount: number
+          _days: number
+          _invoice_id?: string
+          _pharmacy_id: string
+          _provider?: string
+          _user_id: string
+        }
+        Returns: string
+      }
       get_chat_inbox: {
         Args: never
         Returns: {
