@@ -56,12 +56,10 @@ const Register = () => {
     }
     setShopNameStatus("checking");
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from("pharmacies")
-        .select("id")
-        .ilike("name", form.shopName.trim())
-        .limit(1);
-      setShopNameStatus(data && data.length > 0 ? "taken" : "available");
+      const { data } = await supabase.functions.invoke("register-pharmacy", {
+        body: { action: "check_name", shopName: form.shopName.trim() },
+      });
+      setShopNameStatus(data?.available === false ? "taken" : "available");
     }, 500);
     return () => clearTimeout(timer);
   }, [form.shopName]);
