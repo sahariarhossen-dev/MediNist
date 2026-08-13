@@ -12,6 +12,32 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
+
+    // Lightweight shop-name availability check for the signup wizard.
+    // Runs with the service role so the `pharmacies` table stays private.
+    if (body?.action === "check_name") {
+      const name = typeof body.shopName === "string" ? body.shopName.trim() : "";
+      if (name.length < 2 || name.length > 255) {
+        return new Response(JSON.stringify({ error: "Invalid shop name" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const nameAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: existing } = await nameAdmin
+        .from("pharmacies")
+        .select("id")
+        .ilike("name", name)
+        .limit(1);
+      return new Response(JSON.stringify({ available: !(existing && existing.length > 0) }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { shopName, fullName, phone, email, password, division, district, upazila, streetAddress, terms_accepted } = body;
 
     if (terms_accepted !== true) {
