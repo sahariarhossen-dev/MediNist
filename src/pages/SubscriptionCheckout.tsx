@@ -44,14 +44,15 @@ export default function SubscriptionCheckout() {
     try {
       // Mock gateway processing delay
       await new Promise((r) => setTimeout(r, 1500));
-      const { error } = await supabase.rpc("extend_subscription", {
-        _days: PLAN_DAYS,
-        _amount: PLAN_PRICE,
+      // Days/amount are decided server-side; the client only picks a plan key.
+      const { data, error } = await supabase.functions.invoke("subscription-checkout", {
+        body: { planKey: "monthly", gateway: selected },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       fireConfetti();
       toast.success("Subscription Extended Successfully!", {
-        description: `+${PLAN_DAYS} days added to your plan.`,
+        description: `+${data?.days ?? PLAN_DAYS} days added to your plan.`,
       });
       setTimeout(() => navigate("/subscription"), 600);
     } catch (e: any) {
