@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType } from "@/lib/productType";
 import { classifyCatalogPack } from "@/lib/stockUtils";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface MasterMedicine {
   id: string;
@@ -26,46 +26,45 @@ interface MasterMedicine {
 const CatalogSearch = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
+  const [results, setResults] = useState<MasterMedicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState("");
   const [adding, setAdding] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const debouncedSearch = useDebounce(searchQuery.trim(), 300);
 
+  // Server-side search via RPC. Avoids PostgREST's 1000-row cap, which
+  // previously meant only the first 1000 catalog rows were ever searchable.
   useEffect(() => {
-    const fetchCatalog = async () => {
-      const { data, error } = await supabase
-        .from("master_medicines")
-        .select("*")
-        .order("brand_name", { ascending: true });
-
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
+      const { data, error } = await supabase.rpc("search_master_medicines", {
+        _query: debouncedSearch,
+        _companies: null,
+        _limit: 300,
+      });
+      if (cancelled) return;
       if (error) {
         toast.error("Failed to load catalog");
       } else {
-        setCatalog(data || []);
+        setResults((data as MasterMedicine[]) || []);
       }
       setLoading(false);
     };
-    fetchCatalog();
-  }, []);
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch]);
 
   useEffect(() => {
     if (searchRef.current) searchRef.current.focus();
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return catalog;
-    const q = normalizeForSearch(searchQuery);
-    if (!q) return catalog;
-    return catalog.filter(
-      (m) =>
-        normalizeForSearch(m.brand_name).includes(q) ||
-        (m.generic_name && normalizeForSearch(m.generic_name).includes(q)) ||
-        (m.company && normalizeForSearch(m.company).includes(q))
-    );
-  }, [catalog, searchQuery]);
+  const filtered = results;
 
   const handleExpand = useCallback(
     (id: string) => {
