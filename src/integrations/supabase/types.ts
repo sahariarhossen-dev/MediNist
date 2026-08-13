@@ -407,6 +407,66 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_actions: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          payload: Json | null
+          pharmacy_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          pharmacy_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          pharmacy_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_activity_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_ai_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_daily_sales"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_shop_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_override_requests: {
         Row: {
           action: string
@@ -1080,6 +1140,34 @@ export type Database = {
             foreignKeyName: "medicines_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_activity_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_ai_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_daily_sales"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_shop_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
@@ -1147,6 +1235,7 @@ export type Database = {
           id: string
           invoice_footer: string | null
           is_demo: boolean
+          is_suspended: boolean
           last_popup_shown: string | null
           logo_url: string | null
           name: string
@@ -1155,6 +1244,8 @@ export type Database = {
           subscription_expiry: string | null
           subscription_plan: string | null
           subscription_started_at: string | null
+          suspend_reason: string | null
+          suspended_at: string | null
           trade_license: string | null
           upazila: string | null
         }
@@ -1171,6 +1262,7 @@ export type Database = {
           id?: string
           invoice_footer?: string | null
           is_demo?: boolean
+          is_suspended?: boolean
           last_popup_shown?: string | null
           logo_url?: string | null
           name: string
@@ -1179,6 +1271,8 @@ export type Database = {
           subscription_expiry?: string | null
           subscription_plan?: string | null
           subscription_started_at?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
           trade_license?: string | null
           upazila?: string | null
         }
@@ -1195,6 +1289,7 @@ export type Database = {
           id?: string
           invoice_footer?: string | null
           is_demo?: boolean
+          is_suspended?: boolean
           last_popup_shown?: string | null
           logo_url?: string | null
           name?: string
@@ -1203,6 +1298,8 @@ export type Database = {
           subscription_expiry?: string | null
           subscription_plan?: string | null
           subscription_started_at?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
           trade_license?: string | null
           upazila?: string | null
         }
@@ -1352,6 +1449,34 @@ export type Database = {
             foreignKeyName: "profiles_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_activity_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_ai_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_daily_sales"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_shop_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
@@ -1442,6 +1567,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      shop_feature_flags: {
+        Row: {
+          enabled: boolean
+          flag_key: string
+          id: string
+          pharmacy_id: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          flag_key: string
+          id?: string
+          pharmacy_id: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          flag_key?: string
+          id?: string
+          pharmacy_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_activity_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_ai_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_daily_sales"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_shop_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shop_staff: {
         Row: {
@@ -1601,6 +1786,127 @@ export type Database = {
       }
     }
     Views: {
+      admin_activity_stats: {
+        Row: {
+          actions_30d: number | null
+          actions_7d: number | null
+          last_action_at: string | null
+          pharmacy_id: string | null
+        }
+        Insert: {
+          actions_30d?: never
+          actions_7d?: never
+          last_action_at?: never
+          pharmacy_id?: string | null
+        }
+        Update: {
+          actions_30d?: never
+          actions_7d?: never
+          last_action_at?: never
+          pharmacy_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_ai_daily: {
+        Row: {
+          day: string | null
+          messages: number | null
+          pharmacy_id: string | null
+        }
+        Relationships: []
+      }
+      admin_ai_stats: {
+        Row: {
+          conversations: number | null
+          last_message_at: string | null
+          messages: number | null
+          pharmacy_id: string | null
+        }
+        Insert: {
+          conversations?: never
+          last_message_at?: never
+          messages?: never
+          pharmacy_id?: string | null
+        }
+        Update: {
+          conversations?: never
+          last_message_at?: never
+          messages?: never
+          pharmacy_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_ai_topics: {
+        Row: {
+          occurrences: number | null
+          pharmacy_id: string | null
+          topic: string | null
+        }
+        Relationships: []
+      }
+      admin_daily_sales: {
+        Row: {
+          day: string | null
+          invoice_count: number | null
+          pharmacy_id: string | null
+          sales_total: number | null
+        }
+        Relationships: []
+      }
+      admin_page_engagement: {
+        Row: {
+          events: number | null
+          page: string | null
+          pharmacy_id: string | null
+        }
+        Relationships: []
+      }
+      admin_screen_time: {
+        Row: {
+          day: string | null
+          full_name: string | null
+          minutes: number | null
+          pharmacy_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      admin_shop_stats: {
+        Row: {
+          customers_count: number | null
+          last_sale_at: string | null
+          medicines_count: number | null
+          pharmacy_id: string | null
+          sales_30d: number | null
+          sales_count: number | null
+        }
+        Insert: {
+          customers_count?: never
+          last_sale_at?: never
+          medicines_count?: never
+          pharmacy_id?: string | null
+          sales_30d?: never
+          sales_count?: never
+        }
+        Update: {
+          customers_count?: never
+          last_sale_at?: never
+          medicines_count?: never
+          pharmacy_id?: string | null
+          sales_30d?: never
+          sales_count?: never
+        }
+        Relationships: []
+      }
+      admin_top_medicines: {
+        Row: {
+          medicine_name: string | null
+          pharmacy_id: string | null
+          qty_sold: number | null
+          revenue_bdt: number | null
+        }
+        Relationships: []
+      }
       unique_companies: {
         Row: {
           company: string | null
