@@ -11,6 +11,3 @@ verify_jwt = false
 
 [functions.cleanup-demo-sessions]
 verify_jwt = false
-
-[functions.medex-scraper]
-verify_jwt = false

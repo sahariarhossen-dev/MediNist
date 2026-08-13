@@ -14,399 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _backup_master_20260718: {
-        Row: {
-          box_size: string | null
-          brand_name: string | null
-          company: string | null
-          created_at: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          medex_status: string | null
-          medex_url: string | null
-          medex_verified_at: string | null
-          pack_size: string | null
-          pcs_per_strip: number | null
-          search_vector: unknown
-          strength: string | null
-          strip_per_pack: number | null
-          unit_price: number | null
-        }
-        Insert: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          medex_status?: string | null
-          medex_url?: string | null
-          medex_verified_at?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          search_vector?: unknown
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Update: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          medex_status?: string | null
-          medex_url?: string | null
-          medex_verified_at?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          search_vector?: unknown
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Relationships: []
-      }
-      _backup_master_pack_20260612: {
-        Row: {
-          box_size: string | null
-          brand_name: string | null
-          company: string | null
-          created_at: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          pack_size: string | null
-          search_vector: unknown
-          strength: string | null
-          unit_price: number | null
-        }
-        Insert: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          pack_size?: string | null
-          search_vector?: unknown
-          strength?: string | null
-          unit_price?: number | null
-        }
-        Update: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          pack_size?: string | null
-          search_vector?: unknown
-          strength?: string | null
-          unit_price?: number | null
-        }
-        Relationships: []
-      }
-      _backup_medicines_20260718: {
-        Row: {
-          box_size: string | null
-          company_name: string | null
-          created_at: string | null
-          expiry_date: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          name: string | null
-          pack_size: string | null
-          packaging_type: string | null
-          pcs_per_strip: number | null
-          pharmacy_id: string | null
-          price: number | null
-          product_size: string | null
-          product_type: string | null
-          stock_alert: number | null
-          stock_quantity: number | null
-          strength: string | null
-          strip_per_pack: number | null
-          unit_format: string | null
-        }
-        Insert: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Update: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Relationships: []
-      }
-      _backup_medicines_pack_20260612: {
-        Row: {
-          box_size: string | null
-          company_name: string | null
-          created_at: string | null
-          expiry_date: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          name: string | null
-          pack_size: string | null
-          packaging_type: string | null
-          pcs_per_strip: number | null
-          pharmacy_id: string | null
-          price: number | null
-          product_size: string | null
-          product_type: string | null
-          stock_alert: number | null
-          stock_quantity: number | null
-          strength: string | null
-          strip_per_pack: number | null
-          unit_format: string | null
-        }
-        Insert: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Update: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Relationships: []
-      }
-      _backup_spider_full_20260613: {
-        Row: {
-          box_size: string | null
-          brand_name: string | null
-          company: string | null
-          created_at: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          pack_size: string | null
-          pcs_per_strip: number | null
-          search_vector: unknown
-          strength: string | null
-          strip_per_pack: number | null
-          unit_price: number | null
-        }
-        Insert: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          search_vector?: unknown
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Update: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          created_at?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          search_vector?: unknown
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Relationships: []
-      }
-      _backup_spider_medicines_20260613: {
-        Row: {
-          box_size: string | null
-          company_name: string | null
-          created_at: string | null
-          expiry_date: string | null
-          format: string | null
-          generic_name: string | null
-          id: string | null
-          name: string | null
-          pack_size: string | null
-          packaging_type: string | null
-          pcs_per_strip: number | null
-          pharmacy_id: string | null
-          price: number | null
-          product_size: string | null
-          product_type: string | null
-          stock_alert: number | null
-          stock_quantity: number | null
-          strength: string | null
-          strip_per_pack: number | null
-          unit_format: string | null
-        }
-        Insert: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Update: {
-          box_size?: string | null
-          company_name?: string | null
-          created_at?: string | null
-          expiry_date?: string | null
-          format?: string | null
-          generic_name?: string | null
-          id?: string | null
-          name?: string | null
-          pack_size?: string | null
-          packaging_type?: string | null
-          pcs_per_strip?: number | null
-          pharmacy_id?: string | null
-          price?: number | null
-          product_size?: string | null
-          product_type?: string | null
-          stock_alert?: number | null
-          stock_quantity?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_format?: string | null
-        }
-        Relationships: []
-      }
-      _stg_medicines_new: {
-        Row: {
-          box_size: string | null
-          brand_name: string | null
-          company: string | null
-          format: string | null
-          generic_name: string | null
-          pack_size: string | null
-          pcs_per_strip: number | null
-          strength: string | null
-          strip_per_pack: number | null
-          unit_price: number | null
-        }
-        Insert: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          format?: string | null
-          generic_name?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Update: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          format?: string | null
-          generic_name?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Relationships: []
-      }
       admin_actions: {
         Row: {
           action: string
@@ -972,7 +579,6 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
-          medex_url: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
@@ -988,7 +594,6 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
-          medex_url?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -1004,7 +609,6 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
-          medex_url?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -1014,57 +618,42 @@ export type Database = {
         }
         Relationships: []
       }
-      medex_cache: {
+      master_medicines_import: {
         Row: {
-          fetched_at: string
-          name_key: string
-          payload: Json
+          box_size: string | null
+          brand_name: string | null
+          company: string | null
+          format: string | null
+          generic_name: string | null
+          pack_size: string | null
+          pcs_per_strip: number | null
+          strength: string | null
+          strip_per_pack: number | null
+          unit_price: number | null
         }
         Insert: {
-          fetched_at?: string
-          name_key: string
-          payload: Json
+          box_size?: string | null
+          brand_name?: string | null
+          company?: string | null
+          format?: string | null
+          generic_name?: string | null
+          pack_size?: string | null
+          pcs_per_strip?: number | null
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_price?: number | null
         }
         Update: {
-          fetched_at?: string
-          name_key?: string
-          payload?: Json
-        }
-        Relationships: []
-      }
-      medex_scrape_progress: {
-        Row: {
-          finished: boolean
-          id: number
-          last_error: string | null
-          last_run_at: string | null
-          last_status: string | null
-          next_page: number
-          page_offset: number
-          total_scraped: number
-          updated_at: string
-        }
-        Insert: {
-          finished?: boolean
-          id?: number
-          last_error?: string | null
-          last_run_at?: string | null
-          last_status?: string | null
-          next_page?: number
-          page_offset?: number
-          total_scraped?: number
-          updated_at?: string
-        }
-        Update: {
-          finished?: boolean
-          id?: number
-          last_error?: string | null
-          last_run_at?: string | null
-          last_status?: string | null
-          next_page?: number
-          page_offset?: number
-          total_scraped?: number
-          updated_at?: string
+          box_size?: string | null
+          brand_name?: string | null
+          company?: string | null
+          format?: string | null
+          generic_name?: string | null
+          pack_size?: string | null
+          pcs_per_strip?: number | null
+          strength?: string | null
+          strip_per_pack?: number | null
+          unit_price?: number | null
         }
         Relationships: []
       }
@@ -2081,7 +1670,6 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
-          medex_url: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
