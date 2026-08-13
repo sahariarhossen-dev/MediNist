@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.tg_cash_transactions_prevent_negative() FROM PUBLIC, anon, authenticated;
