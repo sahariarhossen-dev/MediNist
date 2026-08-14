@@ -618,45 +618,6 @@ export type Database = {
         }
         Relationships: []
       }
-      master_medicines_import: {
-        Row: {
-          box_size: string | null
-          brand_name: string | null
-          company: string | null
-          format: string | null
-          generic_name: string | null
-          pack_size: string | null
-          pcs_per_strip: number | null
-          strength: string | null
-          strip_per_pack: number | null
-          unit_price: number | null
-        }
-        Insert: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          format?: string | null
-          generic_name?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Update: {
-          box_size?: string | null
-          brand_name?: string | null
-          company?: string | null
-          format?: string | null
-          generic_name?: string | null
-          pack_size?: string | null
-          pcs_per_strip?: number | null
-          strength?: string | null
-          strip_per_pack?: number | null
-          unit_price?: number | null
-        }
-        Relationships: []
-      }
       medicines: {
         Row: {
           box_size: string | null
@@ -1736,12 +1697,13 @@ export type Database = {
         Args: { _pharmacy_id: string; _user_id: string }
         Returns: undefined
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       submit_blind_closing: {
         Args: { _declared: number; _notes?: string }
         Returns: Json
       }
       touch_last_seen: { Args: never; Returns: undefined }
-      truncate_master_import: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
