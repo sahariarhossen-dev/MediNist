@@ -1741,6 +1741,7 @@ export type Database = {
         Returns: Json
       }
       touch_last_seen: { Args: never; Returns: undefined }
+      truncate_master_import: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
