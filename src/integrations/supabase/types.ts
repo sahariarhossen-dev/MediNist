@@ -1071,6 +1071,27 @@ export type Database = {
           },
         ]
       }
+      registration_attempts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          ip_hash: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_hash: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_hash?: string
+        }
+        Relationships: []
+      }
       sale_items: {
         Row: {
           company_name: string | null
