@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
       try { await admin.from("pharmacies").delete().eq("id", pharmacyId); } catch {}
     }
     return new Response(
-      JSON.stringify({ error: (err as Error).message || "Failed to create demo session" }),
+      JSON.stringify({ error: "Failed to create demo session. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
