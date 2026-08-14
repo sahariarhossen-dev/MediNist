@@ -1519,10 +1519,6 @@ export type Database = {
         Args: { _avatar_url?: string; _member_ids: string[]; _name: string }
         Returns: string
       }
-      extend_subscription: {
-        Args: { _amount: number; _days: number }
-        Returns: string
-      }
       extend_subscription_admin: {
         Args: {
           _amount: number
