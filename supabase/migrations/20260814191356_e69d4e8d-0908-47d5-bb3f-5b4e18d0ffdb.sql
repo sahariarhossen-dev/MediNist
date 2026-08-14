@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.extend_subscription(integer, numeric);
