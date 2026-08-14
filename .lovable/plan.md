@@ -61,9 +61,9 @@ Single transaction:
 
 Nothing outside the catalog is affected: `medicines` (per-pharmacy stock), sales, and inventory rows are separate tables and are not referenced by `master_medicines` foreign keys.
 
-## Open decisions before I load staging
+## Cleaning decisions (confirmed)
 
-1. **Duplicates (616):** drop them during staging load, or keep every row exactly as uploaded?
-2. **Zero/negative prices (18 rows):** import as-is, store as NULL, or skip those rows?
+1. **Duplicates (616):** dropped during the staging load — only unique rows on brand + strength + company + pack size are kept.
+2. **Zero/negative prices (18 rows):** deleted — those rows are not loaded at all.
 
-Tell me how you want these two handled (or say "as-is") and I will run steps 1 through 4.
+Expected final staging count: **21,168 - 616 duplicates - up to 18 bad-price rows ≈ 20,534 rows** (exact number reported after the load).
