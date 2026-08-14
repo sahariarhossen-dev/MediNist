@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
     if (pharmacyError) {
       console.error("register-pharmacy: pharmacy insert failed:", pharmacyError);
       return new Response(
-        JSON.stringify({ error: `Failed to create pharmacy: ${pharmacyError.message}` }),
+        JSON.stringify({ error: "Failed to create pharmacy. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -175,8 +175,17 @@ Deno.serve(async (req) => {
       console.error("register-pharmacy: createUser failed:", authError);
       // Rollback pharmacy
       await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
+      // Only surface the allow-listed "already registered" case; everything
+      // else returns a generic message so internal details stay in the logs.
+      const authMsg = (authError.message ?? "").toLowerCase();
+      const alreadyExists =
+        authMsg.includes("already") || authMsg.includes("registered") || authMsg.includes("exists");
       return new Response(
-        JSON.stringify({ error: `Failed to create user account: ${authError.message}` }),
+        JSON.stringify({
+          error: alreadyExists
+            ? "An account with this email already exists. Please sign in instead."
+            : "Failed to create user account. Please try again.",
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -249,7 +258,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("register-pharmacy: unexpected error:", err);
     return new Response(
-      JSON.stringify({ error: `An unexpected error occurred: ${(err as Error)?.message ?? "unknown"}` }),
+      JSON.stringify({ error: "An unexpected error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

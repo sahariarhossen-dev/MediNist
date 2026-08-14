@@ -32,7 +32,10 @@ Deno.serve(async (req) => {
         return json({ error: "Invalid token" }, 400);
       }
       const { data, error } = await admin.rpc("get_invitation_by_token", { _token: token });
-      if (error) return json({ error: error.message }, 500);
+      if (error) {
+        console.error("[accept-invitation] Lookup error:", error.message);
+        return json({ error: "Unable to load this invitation. Please try again." }, 500);
+      }
       const invite = Array.isArray(data) ? data[0] : data;
       if (!invite) return json({ error: "Invitation not found" }, 404);
       return json({
@@ -67,7 +70,7 @@ Deno.serve(async (req) => {
     const { data: inviteRows, error: lookupErr } = await admin.rpc("get_invitation_by_token", { _token: token });
     if (lookupErr) {
       console.error("[accept-invitation] Lookup error:", lookupErr.message);
-      return json({ error: lookupErr.message }, 500);
+      return json({ error: "Unable to load this invitation. Please try again." }, 500);
     }
     const invite = Array.isArray(inviteRows) ? inviteRows[0] : inviteRows;
     if (!invite) {
@@ -101,7 +104,7 @@ Deno.serve(async (req) => {
       const looksExisting =
         msg.includes("already") || msg.includes("registered") || msg.includes("exists");
       if (!looksExisting) {
-        return json({ error: "Failed to create account: " + createErr.message }, 400);
+        return json({ error: "Failed to create account. Please try again." }, 400);
       }
       // An account with this email already exists. We intentionally do NOT
       // try to sign in with the password the invitee just typed: that would
@@ -130,7 +133,7 @@ Deno.serve(async (req) => {
     const { error: nameErr } = await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
     if (nameErr) {
       console.error("[accept-invitation] Profile name update failed:", nameErr.message);
-      return json({ error: "Failed to set profile name: " + nameErr.message }, 500);
+      return json({ error: "Failed to finish setting up your account. Please try again." }, 500);
     }
 
     // 4. Sign in to get session
@@ -150,8 +153,7 @@ Deno.serve(async (req) => {
       console.error("[accept-invitation] RPC error:", acceptErr.message, "details:", JSON.stringify(acceptErr));
       return json(
         {
-          error: "Failed to link account to pharmacy: " + acceptErr.message,
-          code: (acceptErr as { code?: string }).code ?? null,
+          error: "Failed to link your account to the pharmacy. Please try again.",
         },
         500
       );

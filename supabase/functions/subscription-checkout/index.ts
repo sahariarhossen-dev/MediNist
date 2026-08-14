@@ -85,7 +85,10 @@ Deno.serve(async (req) => {
       _provider: gateway,
       _invoice_id: providerRef,
     });
-    if (rpcErr) return json({ error: rpcErr.message }, 400);
+    if (rpcErr) {
+      console.error("subscription-checkout: extend failed:", rpcErr.message);
+      return json({ error: "Could not extend your subscription. Please try again." }, 400);
+    }
 
     return json({
       success: true,
@@ -96,6 +99,6 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("subscription-checkout error", err);
-    return json({ error: (err as Error).message ?? "Checkout failed" }, 500);
+    return json({ error: "Checkout failed. Please try again." }, 500);
   }
 });

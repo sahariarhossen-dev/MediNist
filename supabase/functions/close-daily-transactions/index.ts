@@ -166,9 +166,11 @@ Deno.serve(async (req) => {
       results.push({
         pharmacy_id: pharmacyId,
         ok: !upsert.error,
-        error: upsert.error?.message,
         net_balance: netBalance,
       });
+      if (upsert.error) {
+        console.error("close-daily-transactions upsert failed", pharmacyId, upsert.error.message);
+      }
     }
 
     return new Response(
@@ -181,7 +183,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("close-daily-transactions error", err);
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({ error: "Daily closing failed. Please try again." }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
