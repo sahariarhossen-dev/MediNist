@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { STAFF_PERMISSIONS, inviteRoleLabel, profileRoleToInviteRole, type InviteRole } from "@/lib/staffRoles";
+import ActivityFeed from "@/components/staff/ActivityFeed";
+import SecurityPanel from "@/components/staff/SecurityPanel";
+
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
