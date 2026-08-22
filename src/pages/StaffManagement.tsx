@@ -199,19 +199,11 @@ const StaffManagement = () => {
   const fetchBroadcast = async () => {
     const { data } = await supabase
       .from("pharmacy_broadcasts" as any)
-      .select("id, message")
+      .select("id, message, target_type, target_value, is_urgent, created_at")
       .eq("pharmacy_id", profile!.pharmacy_id!)
       .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    if (data && data.length > 0) {
-      const b = data[0] as unknown as { id: string; message: string };
-      setBroadcast(b);
-      setBroadcastDraft(b.message);
-    } else {
-      setBroadcast(null);
-      setBroadcastDraft("");
-    }
+      .order("created_at", { ascending: false });
+    setBroadcasts(((data as any[]) || []) as BroadcastRow[]);
   };
 
   const handleSaveBroadcast = async () => {
@@ -221,41 +213,50 @@ const StaffManagement = () => {
       toast({ title: "Notice is empty", variant: "destructive" });
       return;
     }
+    let target_value: string | null = null;
+    if (targetType === "role") target_value = roleTargetValue;
+    if (targetType === "user") {
+      if (!targetUser) {
+        toast({ title: "Pick a staff member", variant: "destructive" });
+        return;
+      }
+      target_value = targetUser;
+    }
     setSavingBroadcast(true);
-    await supabase
-      .from("pharmacy_broadcasts" as any)
-      .update({ is_active: false } as any)
-      .eq("pharmacy_id", profile.pharmacy_id)
-      .eq("is_active", true);
     const { error } = await supabase.from("pharmacy_broadcasts" as any).insert({
       pharmacy_id: profile.pharmacy_id,
       created_by: profile.id,
       message: msg,
       is_active: true,
+      target_type: targetType,
+      target_value,
+      is_urgent: isUrgent,
     });
     setSavingBroadcast(false);
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Notice posted to all staff" });
+    toast({ title: "Notice posted" });
+    setBroadcastDraft("");
+    setIsUrgent(false);
+    setTargetUserSearch("");
     fetchBroadcast();
   };
 
-  const handleClearBroadcast = async () => {
-    if (!broadcast) return;
+  const handleClearBroadcast = async (id: string) => {
     const { error } = await supabase
       .from("pharmacy_broadcasts" as any)
       .update({ is_active: false } as any)
-      .eq("id", broadcast.id);
+      .eq("id", id);
     if (error) {
       toast({ title: "Failed to clear", description: error.message, variant: "destructive" });
       return;
     }
-    setBroadcast(null);
-    setBroadcastDraft("");
+    setBroadcasts((prev) => prev.filter((b) => b.id !== id));
     toast({ title: "Notice cleared" });
   };
+
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
