@@ -109,6 +109,7 @@ const StaffManagement = () => {
   const [broadcastDraft, setBroadcastDraft] = useState("");
   const [savingBroadcast, setSavingBroadcast] = useState(false);
   const [targetType, setTargetType] = useState<BroadcastTarget>("all");
+  const [roleTargetValue, setRoleTargetValue] = useState<"salesman" | "manager">("salesman");
   const [targetUser, setTargetUser] = useState<string>("");
   const [targetUserSearch, setTargetUserSearch] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
