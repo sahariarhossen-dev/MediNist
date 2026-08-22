@@ -82,7 +82,7 @@ export function useNotifications() {
         .limit(25),
       supabase
         .from("pharmacy_broadcasts" as any)
-        .select("id, message, created_at, is_active")
+        .select("id, message, created_at, is_active, is_urgent")
         .eq("pharmacy_id", pharmacyId)
         .gte("created_at", since)
         .order("created_at", { ascending: false })
