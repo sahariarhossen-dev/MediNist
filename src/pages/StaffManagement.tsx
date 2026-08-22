@@ -78,14 +78,6 @@ interface StaffOverviewRow {
   last_seen: string | null;
 }
 
-interface ActivityRow {
-  id: string;
-  user_id: string;
-  action_type: string;
-  description: string | null;
-  amount: number | null;
-  created_at: string;
-}
 
 export type BroadcastTarget = "all" | "role" | "user";
 
@@ -155,7 +147,7 @@ const StaffManagement = () => {
       fetchBroadcast(),
       isAdmin ? fetchStaff() : Promise.resolve(),
       isAdmin ? fetchPermissions() : Promise.resolve(),
-      isAdmin ? fetchActivity() : Promise.resolve(),
+
     ]);
     setLoading(false);
   };
@@ -199,15 +191,6 @@ const StaffManagement = () => {
     setPermissions(map);
   };
 
-  const fetchActivity = async () => {
-    const { data } = await supabase
-      .from("staff_activity_logs" as any)
-      .select("id,user_id,action_type,description,amount,created_at")
-      .eq("pharmacy_id", profile!.pharmacy_id!)
-      .order("created_at", { ascending: false })
-      .limit(40);
-    if (data) setActivity(data as unknown as ActivityRow[]);
-  };
 
   const fetchBroadcast = async () => {
     const { data } = await supabase
