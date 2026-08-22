@@ -41,6 +41,13 @@ export type Database = {
             foreignKeyName: "admin_actions_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_active_sessions"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_activity_stats"
             referencedColumns: ["pharmacy_id"]
           },
@@ -62,8 +69,29 @@ export type Database = {
             foreignKeyName: "admin_actions_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_expiring_shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_new_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_shop_stats"
             referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "admin_actions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_tenants_directory"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "admin_actions_pharmacy_id_fkey"
@@ -579,6 +607,7 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
+          last_synced_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
@@ -594,6 +623,7 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          last_synced_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
@@ -609,12 +639,145 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          last_synced_at?: string | null
           pack_size?: string | null
           pcs_per_strip?: number | null
           search_vector?: unknown
           strength?: string | null
           strip_per_pack?: number | null
           unit_price?: number | null
+        }
+        Relationships: []
+      }
+      master_medicines_import: {
+        Row: {
+          brand_name: string
+          company: string | null
+          fetched_at: string
+          format: string | null
+          generic: string | null
+          id: string
+          pack_size: string | null
+          price: number | null
+          source: string
+          source_id: string | null
+          strength: string | null
+        }
+        Insert: {
+          brand_name: string
+          company?: string | null
+          fetched_at?: string
+          format?: string | null
+          generic?: string | null
+          id?: string
+          pack_size?: string | null
+          price?: number | null
+          source?: string
+          source_id?: string | null
+          strength?: string | null
+        }
+        Update: {
+          brand_name?: string
+          company?: string | null
+          fetched_at?: string
+          format?: string | null
+          generic?: string | null
+          id?: string
+          pack_size?: string | null
+          price?: number | null
+          source?: string
+          source_id?: string | null
+          strength?: string | null
+        }
+        Relationships: []
+      }
+      medicine_sync_queue: {
+        Row: {
+          brand_name: string
+          company: string | null
+          decided_at: string | null
+          detected_at: string
+          duplicate_match: Json | null
+          format: string | null
+          generic: string | null
+          id: string
+          kind: string
+          master_id: string | null
+          payload: Json
+          payload_hash: string | null
+          price: number | null
+          rejected_at: string | null
+          status: string
+          strength: string | null
+          suppressed_until: string | null
+        }
+        Insert: {
+          brand_name: string
+          company?: string | null
+          decided_at?: string | null
+          detected_at?: string
+          duplicate_match?: Json | null
+          format?: string | null
+          generic?: string | null
+          id?: string
+          kind: string
+          master_id?: string | null
+          payload?: Json
+          payload_hash?: string | null
+          price?: number | null
+          rejected_at?: string | null
+          status?: string
+          strength?: string | null
+          suppressed_until?: string | null
+        }
+        Update: {
+          brand_name?: string
+          company?: string | null
+          decided_at?: string | null
+          detected_at?: string
+          duplicate_match?: Json | null
+          format?: string | null
+          generic?: string | null
+          id?: string
+          kind?: string
+          master_id?: string | null
+          payload?: Json
+          payload_hash?: string | null
+          price?: number | null
+          rejected_at?: string | null
+          status?: string
+          strength?: string | null
+          suppressed_until?: string | null
+        }
+        Relationships: []
+      }
+      medicine_sync_runs: {
+        Row: {
+          duration_ms: number
+          id: string
+          items_scanned: number
+          note: string | null
+          started_at: string
+          trigger: string
+          verified: Json
+        }
+        Insert: {
+          duration_ms?: number
+          id?: string
+          items_scanned?: number
+          note?: string | null
+          started_at?: string
+          trigger?: string
+          verified?: Json
+        }
+        Update: {
+          duration_ms?: number
+          id?: string
+          items_scanned?: number
+          note?: string | null
+          started_at?: string
+          trigger?: string
+          verified?: Json
         }
         Relationships: []
       }
@@ -690,6 +853,13 @@ export type Database = {
             foreignKeyName: "medicines_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_active_sessions"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_activity_stats"
             referencedColumns: ["pharmacy_id"]
           },
@@ -711,8 +881,29 @@ export type Database = {
             foreignKeyName: "medicines_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_expiring_shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_new_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_shop_stats"
             referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "medicines_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_tenants_directory"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "medicines_pharmacy_id_fkey"
@@ -999,6 +1190,13 @@ export type Database = {
             foreignKeyName: "profiles_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_active_sessions"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_activity_stats"
             referencedColumns: ["pharmacy_id"]
           },
@@ -1020,8 +1218,29 @@ export type Database = {
             foreignKeyName: "profiles_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_expiring_shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_new_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_shop_stats"
             referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_tenants_directory"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "profiles_pharmacy_id_fkey"
@@ -1166,6 +1385,13 @@ export type Database = {
             foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_active_sessions"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_activity_stats"
             referencedColumns: ["pharmacy_id"]
           },
@@ -1187,8 +1413,29 @@ export type Database = {
             foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
+            referencedRelation: "admin_expiring_shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_new_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
             referencedRelation: "admin_shop_stats"
             referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_tenants_directory"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "shop_feature_flags_pharmacy_id_fkey"
@@ -1355,8 +1602,40 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
+      admin_active_sessions: {
+        Row: {
+          last_seen: string | null
+          pharmacy_id: string | null
+          profile_id: string | null
+          role: string | null
+          shop_name: string | null
+          staff_label: string | null
+        }
+        Relationships: []
+      }
       admin_activity_stats: {
         Row: {
           actions_30d: number | null
@@ -1424,11 +1703,109 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_dau_daily: {
+        Row: {
+          active_users: number | null
+          day: string | null
+          role: string | null
+        }
+        Relationships: []
+      }
+      admin_expiring_shops: {
+        Row: {
+          days_left: number | null
+          id: string | null
+          name: string | null
+          subscription_expiry: string | null
+          subscription_plan: string | null
+        }
+        Insert: {
+          days_left?: never
+          id?: string | null
+          name?: string | null
+          subscription_expiry?: string | null
+          subscription_plan?: string | null
+        }
+        Update: {
+          days_left?: never
+          id?: string | null
+          name?: string | null
+          subscription_expiry?: string | null
+          subscription_plan?: string | null
+        }
+        Relationships: []
+      }
+      admin_live_sessions: {
+        Row: {
+          sessions_15m: number | null
+          sessions_60m: number | null
+        }
+        Relationships: []
+      }
+      admin_new_registrations: {
+        Row: {
+          created_at: string | null
+          district: string | null
+          division: string | null
+          id: string | null
+          is_demo: boolean | null
+          name: string | null
+          subscription_plan: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          district?: string | null
+          division?: string | null
+          id?: string | null
+          is_demo?: never
+          name?: string | null
+          subscription_plan?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          district?: string | null
+          division?: string | null
+          id?: string | null
+          is_demo?: never
+          name?: string | null
+          subscription_plan?: string | null
+        }
+        Relationships: []
+      }
       admin_page_engagement: {
         Row: {
           events: number | null
           page: string | null
           pharmacy_id: string | null
+        }
+        Relationships: []
+      }
+      admin_platform_totals: {
+        Row: {
+          active_shops: number | null
+          demo_shops: number | null
+          suspended_shops: number | null
+          total_shops: number | null
+        }
+        Relationships: []
+      }
+      admin_recent_payments: {
+        Row: {
+          amount_bdt: number | null
+          created_at: string | null
+          duration_days: number | null
+          id: string | null
+          pharmacy_id: string | null
+          provider: string | null
+          shop_name: string | null
+        }
+        Relationships: []
+      }
+      admin_revenue_daily: {
+        Row: {
+          day: string | null
+          payment_count: number | null
+          revenue_bdt: number | null
         }
         Relationships: []
       }
@@ -1439,6 +1816,13 @@ export type Database = {
           minutes: number | null
           pharmacy_id: string | null
           user_id: string | null
+        }
+        Relationships: []
+      }
+      admin_shop_growth: {
+        Row: {
+          cumulative_shops: number | null
+          week_start: string | null
         }
         Relationships: []
       }
@@ -1466,6 +1850,160 @@ export type Database = {
           pharmacy_id?: string | null
           sales_30d?: never
           sales_count?: never
+        }
+        Relationships: []
+      }
+      admin_tenant_payments: {
+        Row: {
+          amount_bdt: number | null
+          created_at: string | null
+          duration_days: number | null
+          id: string | null
+          pharmacy_id: string | null
+          provider: string | null
+          status: string | null
+        }
+        Insert: {
+          amount_bdt?: number | null
+          created_at?: string | null
+          duration_days?: number | null
+          id?: string | null
+          pharmacy_id?: string | null
+          provider?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount_bdt?: number | null
+          created_at?: string | null
+          duration_days?: number | null
+          id?: string | null
+          pharmacy_id?: string | null
+          provider?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      admin_tenant_staff: {
+        Row: {
+          full_name: string | null
+          id: string | null
+          is_demo: boolean | null
+          last_seen: string | null
+          pharmacy_id: string | null
+          phone: string | null
+          role: string | null
+        }
+        Insert: {
+          full_name?: string | null
+          id?: string | null
+          is_demo?: boolean | null
+          last_seen?: string | null
+          pharmacy_id?: string | null
+          phone?: string | null
+          role?: string | null
+        }
+        Update: {
+          full_name?: string | null
+          id?: string | null
+          is_demo?: boolean | null
+          last_seen?: string | null
+          pharmacy_id?: string | null
+          phone?: string | null
+          role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_active_sessions"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_activity_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_ai_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_daily_sales"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_expiring_shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_new_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_shop_stats"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "admin_tenants_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_tenants_directory: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          demo_expires_at: string | null
+          district: string | null
+          division: string | null
+          email: string | null
+          id: string | null
+          is_demo: boolean | null
+          is_suspended: boolean | null
+          last_payment_amount: number | null
+          last_payment_at: string | null
+          last_payment_duration_days: number | null
+          last_seen: string | null
+          lifetime_revenue: number | null
+          logo_url: string | null
+          name: string | null
+          owner_name: string | null
+          owner_phone: string | null
+          phone: string | null
+          proprietor_name: string | null
+          staff_count: number | null
+          subscription_expiry: string | null
+          subscription_plan: string | null
+          subscription_started_at: string | null
+          upazila: string | null
         }
         Relationships: []
       }
@@ -1636,6 +2174,7 @@ export type Database = {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
       }
+      is_super_admin: { Args: never; Returns: boolean }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
       search_master_medicines: {
@@ -1648,6 +2187,7 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
+          last_synced_at: string | null
           pack_size: string | null
           pcs_per_strip: number | null
           search_vector: unknown
@@ -1706,7 +2246,7 @@ export type Database = {
       touch_last_seen: { Args: never; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "shop_owner" | "staff"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1833,6 +2373,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "shop_owner", "staff"],
+    },
   },
 } as const
