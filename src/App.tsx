@@ -19,6 +19,7 @@ import Invoice from "./pages/Invoice.tsx";
 import ShortItems from "./pages/ShortItems.tsx";
 import Profile from "./pages/Profile.tsx";
 import ShopProfile from "./pages/ShopProfile.tsx";
+import StaffManagement from "./pages/StaffManagement.tsx";
 import StaffPerformanceDetails from "./pages/StaffPerformanceDetails.tsx";
 import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
