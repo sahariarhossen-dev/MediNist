@@ -805,7 +805,10 @@ const StaffManagement = () => {
           {/* ---------------- ACTIVITY ---------------- */}
           {isAdmin && (
             <TabsContent value="activity" className="mt-4">
-              <ActivityFeed nameOf={nameOf} />
+              <ActivityFeed
+                nameOf={nameOf}
+                staffOptions={overview.map((r) => ({ user_id: r.user_id, full_name: r.full_name }))}
+              />
             </TabsContent>
           )}
 
