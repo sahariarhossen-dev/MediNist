@@ -140,7 +140,7 @@ export function useNotifications() {
       items.push({
         id: `bcast:${b.id}`,
         category: "broadcast",
-        title: "Shop Broadcast",
+        title: b.is_urgent ? "Urgent Notice" : "Shop Broadcast",
         message: b.message,
         createdAt: b.created_at,
         link: "/dashboard",
