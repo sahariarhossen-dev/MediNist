@@ -81,6 +81,17 @@ interface ActivityRow {
   created_at: string;
 }
 
+export type BroadcastTarget = "all" | "role" | "user";
+
+interface BroadcastRow {
+  id: string;
+  message: string;
+  target_type: BroadcastTarget;
+  target_value: string | null;
+  is_urgent: boolean;
+  created_at: string;
+}
+
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
 const StaffManagement = () => {
