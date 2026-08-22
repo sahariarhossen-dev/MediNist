@@ -81,6 +81,24 @@ interface ActivityRow {
   created_at: string;
 }
 
+export type BroadcastTarget = "all" | "role" | "user";
+
+interface BroadcastRow {
+  id: string;
+  message: string;
+  target_type: BroadcastTarget;
+  target_value: string | null;
+  is_urgent: boolean;
+  created_at: string;
+}
+
+const SEND_TO_OPTIONS: { label: string; type: BroadcastTarget; role?: "salesman" | "manager" }[] = [
+  { label: "All Staff", type: "all" },
+  { label: "Salesmen Only", type: "role", role: "salesman" },
+  { label: "Managers Only", type: "role", role: "manager" },
+  { label: "Specific Person", type: "user" },
+];
+
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
 const StaffManagement = () => {
@@ -94,9 +112,14 @@ const StaffManagement = () => {
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [broadcast, setBroadcast] = useState<{ id: string; message: string } | null>(null);
+  const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([]);
   const [broadcastDraft, setBroadcastDraft] = useState("");
   const [savingBroadcast, setSavingBroadcast] = useState(false);
+  const [targetType, setTargetType] = useState<BroadcastTarget>("all");
+  const [roleTargetValue, setRoleTargetValue] = useState<"salesman" | "manager">("salesman");
+  const [targetUser, setTargetUser] = useState<string>("");
+  const [targetUserSearch, setTargetUserSearch] = useState("");
+  const [isUrgent, setIsUrgent] = useState(false);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<InviteRole>("salesman");
@@ -184,19 +207,11 @@ const StaffManagement = () => {
   const fetchBroadcast = async () => {
     const { data } = await supabase
       .from("pharmacy_broadcasts" as any)
-      .select("id, message")
+      .select("id, message, target_type, target_value, is_urgent, created_at")
       .eq("pharmacy_id", profile!.pharmacy_id!)
       .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    if (data && data.length > 0) {
-      const b = data[0] as unknown as { id: string; message: string };
-      setBroadcast(b);
-      setBroadcastDraft(b.message);
-    } else {
-      setBroadcast(null);
-      setBroadcastDraft("");
-    }
+      .order("created_at", { ascending: false });
+    setBroadcasts(((data as any[]) || []) as BroadcastRow[]);
   };
 
   const handleSaveBroadcast = async () => {
@@ -206,41 +221,66 @@ const StaffManagement = () => {
       toast({ title: "Notice is empty", variant: "destructive" });
       return;
     }
+    let target_value: string | null = null;
+    if (targetType === "role") target_value = roleTargetValue;
+    if (targetType === "user") {
+      if (!targetUser) {
+        toast({ title: "Pick a staff member", variant: "destructive" });
+        return;
+      }
+      target_value = targetUser;
+    }
     setSavingBroadcast(true);
-    await supabase
-      .from("pharmacy_broadcasts" as any)
-      .update({ is_active: false } as any)
-      .eq("pharmacy_id", profile.pharmacy_id)
-      .eq("is_active", true);
     const { error } = await supabase.from("pharmacy_broadcasts" as any).insert({
       pharmacy_id: profile.pharmacy_id,
       created_by: profile.id,
       message: msg,
       is_active: true,
+      target_type: targetType,
+      target_value,
+      is_urgent: isUrgent,
     });
     setSavingBroadcast(false);
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "Notice posted to all staff" });
+    toast({ title: "Notice posted" });
+    setBroadcastDraft("");
+    setIsUrgent(false);
+    setTargetUserSearch("");
     fetchBroadcast();
   };
 
-  const handleClearBroadcast = async () => {
-    if (!broadcast) return;
+  const handleClearBroadcast = async (id: string) => {
     const { error } = await supabase
       .from("pharmacy_broadcasts" as any)
       .update({ is_active: false } as any)
-      .eq("id", broadcast.id);
+      .eq("id", id);
     if (error) {
       toast({ title: "Failed to clear", description: error.message, variant: "destructive" });
       return;
     }
-    setBroadcast(null);
-    setBroadcastDraft("");
+    setBroadcasts((prev) => prev.filter((b) => b.id !== id));
     toast({ title: "Notice cleared" });
   };
+
+  const pickableStaff = useMemo(() => {
+    const q = targetUserSearch.trim().toLowerCase();
+    return overview
+      .filter((s) => !s.is_suspended && s.user_id !== profile?.id)
+      .filter((s) => !q || (s.full_name || "").toLowerCase().includes(q));
+  }, [overview, targetUserSearch, profile?.id]);
+
+  const audienceLabel = (b: BroadcastRow) => {
+    if (b.target_type === "role") return b.target_value === "manager" ? "Managers" : "Salesmen";
+    if (b.target_type === "user") {
+      const m = overview.find((s) => s.user_id === b.target_value);
+      return m?.full_name || "Staff member";
+    }
+    return "All Staff";
+  };
+
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
@@ -444,27 +484,118 @@ const StaffManagement = () => {
                   <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Internal Broadcast</p>
                 </div>
                 <Textarea
-                  placeholder="Post a notice for all staff (e.g., Meeting at 5 PM)"
+                  placeholder="Post a notice (e.g., Meeting at 5 PM)"
                   value={broadcastDraft}
                   onChange={(e) => setBroadcastDraft(e.target.value)}
                   className="rounded-xl bg-white border-amber-200 text-sm min-h-[60px]"
                 />
-                <div className="flex gap-2 mt-2">
+
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mt-3 mb-1.5">Send to</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SEND_TO_OPTIONS.map((opt) => {
+                    const active =
+                      opt.type === targetType &&
+                      (opt.type !== "role" || opt.role === roleTargetValue);
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => {
+                          setTargetType(opt.type);
+                          if (opt.role) setRoleTargetValue(opt.role);
+                          if (opt.type !== "user") setTargetUser("");
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                          active
+                            ? "bg-amber-600 border-amber-600 text-white"
+                            : "bg-white border-amber-200 text-amber-800"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {targetType === "user" && (
+                  <div className="mt-2 rounded-xl bg-white border border-amber-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-100">
+                      <Search size={13} className="text-amber-600" />
+                      <input
+                        value={targetUserSearch}
+                        onChange={(e) => setTargetUserSearch(e.target.value)}
+                        placeholder="Search staff by name"
+                        className="flex-1 text-sm outline-none bg-transparent"
+                      />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto">
+                      {pickableStaff.length === 0 && (
+                        <p className="px-3 py-3 text-xs text-muted-foreground">No matching staff.</p>
+                      )}
+                      {pickableStaff.map((s) => (
+                        <button
+                          key={s.user_id}
+                          type="button"
+                          onClick={() => setTargetUser(s.user_id)}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${
+                            targetUser === s.user_id ? "bg-amber-100 font-semibold text-amber-900" : ""
+                          }`}
+                        >
+                          <span className="truncate">{s.full_name || "Unnamed"}</span>
+                          <span className="text-[10px] uppercase text-muted-foreground ml-2 shrink-0">
+                            {inviteRoleLabel(profileRoleToInviteRole(s.role))}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 mt-3">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-800">
+                    <Switch checked={isUrgent} onCheckedChange={setIsUrgent} />
+                    Urgent
+                  </label>
                   <Button
                     onClick={handleSaveBroadcast}
                     disabled={savingBroadcast || !broadcastDraft.trim()}
                     className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white h-9 flex-1 gap-2"
                   >
-                    <Send size={14} /> {savingBroadcast ? "Posting..." : broadcast ? "Update" : "Post"}
+                    <Send size={14} /> {savingBroadcast ? "Posting..." : "Post"}
                   </Button>
-                  {broadcast && (
-                    <Button onClick={handleClearBroadcast} variant="outline" className="rounded-xl h-9 border-amber-200 text-amber-700">
-                      Clear
-                    </Button>
-                  )}
                 </div>
+
+                {broadcasts.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Active notices</p>
+                    {broadcasts.map((b) => (
+                      <div key={b.id} className="rounded-xl bg-white border border-amber-200 p-3">
+                        <div className="flex items-start gap-2">
+                          <p className="flex-1 text-sm text-amber-900 whitespace-pre-wrap break-words">{b.message}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleClearBroadcast(b.id)}
+                            className="p-1 rounded-lg hover:bg-amber-50 shrink-0"
+                            aria-label="Clear notice"
+                          >
+                            <Trash2 size={14} className="text-amber-700" />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 hover:bg-amber-100">
+                            To: {audienceLabel(b)}
+                          </Badge>
+                          {b.is_urgent && (
+                            <Badge variant="destructive" className="text-[10px]">Urgent</Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
+
 
             {/* Top performer */}
             {overview.length > 0 && overview[0].month_sales > 0 && (

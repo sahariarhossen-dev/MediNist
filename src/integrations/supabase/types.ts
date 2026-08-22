@@ -1052,8 +1052,11 @@ export type Database = {
           created_by: string
           id: string
           is_active: boolean
+          is_urgent: boolean
           message: string
           pharmacy_id: string
+          target_type: string
+          target_value: string | null
           updated_at: string
         }
         Insert: {
@@ -1061,8 +1064,11 @@ export type Database = {
           created_by: string
           id?: string
           is_active?: boolean
+          is_urgent?: boolean
           message: string
           pharmacy_id: string
+          target_type?: string
+          target_value?: string | null
           updated_at?: string
         }
         Update: {
@@ -1070,8 +1076,11 @@ export type Database = {
           created_by?: string
           id?: string
           is_active?: boolean
+          is_urgent?: boolean
           message?: string
           pharmacy_id?: string
+          target_type?: string
+          target_value?: string | null
           updated_at?: string
         }
         Relationships: []
