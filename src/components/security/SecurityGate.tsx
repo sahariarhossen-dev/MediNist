@@ -1,5 +1,6 @@
 import { useShiftTracker } from "@/hooks/useShiftTracker";
 import { useScreenLock } from "@/hooks/useScreenLock";
+import { useIpGuard } from "@/hooks/useIpGuard";
 import LockOverlay from "./LockOverlay";
 
 /**
@@ -8,6 +9,7 @@ import LockOverlay from "./LockOverlay";
  */
 const SecurityGate = () => {
   useShiftTracker();
+  useIpGuard();
   const { locked, unlock, needsSetup, onPinCreated } = useScreenLock();
 
   if (needsSetup) {
