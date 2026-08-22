@@ -268,11 +268,10 @@ const StaffManagement = () => {
   };
 
   const pickableStaff = useMemo(() => {
-    const q = targetUserSearch.trim().toLowerCase();
     return overview
       .filter((s) => !s.is_suspended && s.user_id !== profile?.id)
-      .filter((s) => !q || (s.full_name || "").toLowerCase().includes(q));
-  }, [overview, targetUserSearch, profile?.id]);
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+  }, [overview, profile?.id]);
 
   const audienceLabel = (b: BroadcastRow) => {
     if (b.target_type === "role") return b.target_value === "manager" ? "Managers" : "Salesmen";
