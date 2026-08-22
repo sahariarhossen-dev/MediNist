@@ -474,7 +474,13 @@ const StaffManagement = () => {
                 <Activity size={14} /> Activity
               </TabsTrigger>
             )}
+            {isAdmin && (
+              <TabsTrigger value="security" className="flex-1 rounded-xl gap-1.5">
+                <ShieldCheck size={14} /> Security
+              </TabsTrigger>
+            )}
           </TabsList>
+
 
           {/* ---------------- TEAM ---------------- */}
           <TabsContent value="team" className="mt-4 space-y-3">
@@ -813,30 +819,17 @@ const StaffManagement = () => {
           {/* ---------------- ACTIVITY ---------------- */}
           {isAdmin && (
             <TabsContent value="activity" className="mt-4">
-              <div className="space-y-2">
-                {activity.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-6">No staff activity recorded yet</p>
-                )}
-                {activity.map((a) => (
-                  <div key={a.id} className="p-3 bg-card rounded-2xl border border-border">
-                    <div className="flex items-start gap-2">
-                      <ShieldCheck size={14} className="text-emerald-600 mt-0.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-foreground">
-                          <span className="font-semibold">{nameOf(a.user_id)}</span>{" "}
-                          <span className="text-muted-foreground">{a.description || a.action_type.replace(/_/g, " ")}</span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground tabular-nums">
-                          {new Date(a.created_at).toLocaleString("en-GB")}
-                          {a.amount ? ` · ${money(Number(a.amount))}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ActivityFeed nameOf={nameOf} />
             </TabsContent>
           )}
+
+          {/* ---------------- SECURITY ---------------- */}
+          {isAdmin && (
+            <TabsContent value="security" className="mt-4">
+              <SecurityPanel nameOf={nameOf} />
+            </TabsContent>
+          )}
+
         </Tabs>
       </div>
 
