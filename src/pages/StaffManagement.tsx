@@ -121,7 +121,6 @@ const StaffManagement = () => {
   const [targetType, setTargetType] = useState<BroadcastTarget>("all");
   const [roleTargetValue, setRoleTargetValue] = useState<"salesman" | "manager">("salesman");
   const [targetUser, setTargetUser] = useState<string>("");
-  const [targetUserSearch, setTargetUserSearch] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
 
   const [inviteEmail, setInviteEmail] = useState("");
