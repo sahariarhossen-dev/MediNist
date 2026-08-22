@@ -2,25 +2,28 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck, Users,
+  Activity, AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck, User, Users,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDuration } from "@/lib/deviceInfo";
 import { relativeTime } from "@/lib/relativeTime";
+import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
 
 const PAGE = 25;
 
 export type Severity = "info" | "shift" | "audit" | "high_risk";
 
-interface Row {
+interface FeedItem {
   id: string;
   user_id: string;
   action_type: string;
   description: string | null;
   amount: number | null;
-  severity: Severity | null;
+  severity: Severity;
   created_at: string;
 }
 
@@ -29,6 +32,11 @@ interface Kpis {
   avg_shift_seconds: number;
   idle_seconds_today: number;
   high_risk_today: number;
+}
+
+export interface FeedStaffOption {
+  user_id: string;
+  full_name: string | null;
 }
 
 const FILTERS: { key: "all" | Severity; label: string }[] = [
@@ -79,11 +87,19 @@ const KpiTile = ({ icon, label, value }: { icon: React.ReactNode; label: string;
   </div>
 );
 
-const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
+const ActivityFeed = ({
+  nameOf,
+  staffOptions = [],
+}: {
+  nameOf: (id: string) => string;
+  staffOptions?: FeedStaffOption[];
+}) => {
   const { profile } = useAuth();
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<FeedItem[]>([]);
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [filter, setFilter] = useState<"all" | Severity>("all");
+  const [userFilter, setUserFilter] = useState<string>("all");
+  const [includeSales, setIncludeSales] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
@@ -93,22 +109,69 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
   const fetchPage = useCallback(
     async (before: string | null, replace: boolean) => {
       if (!profile?.pharmacy_id) return;
-      let q = supabase
-        .from("staff_activity_logs" as any)
-        .select("id,user_id,action_type,description,amount,severity,created_at")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .order("created_at", { ascending: false })
-        .limit(PAGE);
-      if (filter !== "all") q = q.eq("severity", filter);
-      if (before) q = q.lt("created_at", before);
 
-      const { data } = await q;
-      const page = ((data as any[]) || []) as Row[];
-      setExhausted(page.length < PAGE);
+      const wantLogs = filter !== "shift";
+      const wantShifts = filter === "all" || filter === "shift";
+
+      const logsPromise = (async (): Promise<FeedItem[]> => {
+        if (!wantLogs) return [];
+        let q = supabase
+          .from("staff_activity_logs" as any)
+          .select("id,user_id,action_type,description,amount,severity,created_at")
+          .eq("pharmacy_id", profile.pharmacy_id)
+          .order("created_at", { ascending: false })
+          .limit(PAGE);
+        if (filter !== "all") q = q.eq("severity", filter);
+        if (userFilter !== "all") q = q.eq("user_id", userFilter);
+        if (before) q = q.lt("created_at", before);
+        // Hide routine (info-level) sale entries unless explicitly requested
+        if (!includeSales) q = q.or("action_type.neq.sale,severity.neq.info");
+        const { data } = await q;
+        return ((data as any[]) || []).map((r) => ({
+          id: r.id,
+          user_id: r.user_id,
+          action_type: r.action_type,
+          description: r.description,
+          amount: r.amount,
+          severity: (r.severity || "info") as Severity,
+          created_at: r.created_at,
+        }));
+      })();
+
+      const shiftsPromise = (async (): Promise<FeedItem[]> => {
+        if (!wantShifts) return [];
+        let q = supabase
+          .from("staff_shifts" as any)
+          .select("id,user_id,started_at,device_label,active_seconds,idle_seconds")
+          .eq("pharmacy_id", profile.pharmacy_id)
+          .order("started_at", { ascending: false })
+          .limit(PAGE);
+        if (userFilter !== "all") q = q.eq("user_id", userFilter);
+        if (before) q = q.lt("started_at", before);
+        const { data } = await q;
+        return ((data as any[]) || []).map((r) => ({
+          id: `shift-${r.id}`,
+          user_id: r.user_id,
+          action_type: "shift_start",
+          description: `Clocked in${r.device_label ? ` · ${r.device_label}` : ""} · ${formatDuration(
+            Number(r.active_seconds || 0),
+          )} active, ${formatDuration(Number(r.idle_seconds || 0))} idle`,
+          amount: null,
+          severity: "shift" as Severity,
+          created_at: r.started_at,
+        }));
+      })();
+
+      const [logs, shifts] = await Promise.all([logsPromise, shiftsPromise]);
+      const page = [...logs, ...shifts].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+      const noMore =
+        (!wantLogs || logs.length < PAGE) && (!wantShifts || shifts.length < PAGE);
+      setExhausted(noMore || page.length === 0);
       setCursor(page.length ? page[page.length - 1].created_at : before);
       setRows((prev) => (replace ? page : [...prev, ...page]));
     },
-    [profile?.pharmacy_id, filter],
+    [profile?.pharmacy_id, filter, userFilter, includeSales],
   );
 
   useEffect(() => {
@@ -118,15 +181,17 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
       await fetchPage(null, true);
       setLoading(false);
     })();
-  }, [profile?.pharmacy_id, filter, fetchPage]);
+  }, [profile?.pharmacy_id, fetchPage]);
 
   useEffect(() => {
     if (!profile?.pharmacy_id) return;
     void (async () => {
-      const { data } = await supabase.rpc("get_staff_activity_kpis" as any);
+      const { data } = await supabase.rpc("get_staff_activity_kpis" as any, {
+        _user_id: userFilter === "all" ? null : userFilter,
+      });
       if (data) setKpis(data as unknown as Kpis);
     })();
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, userFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -140,7 +205,7 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
   }, [rows, search, nameOf]);
 
   const grouped = useMemo(() => {
-    const out: { label: string; items: Row[] }[] = [];
+    const out: { label: string; items: FeedItem[] }[] = [];
     filtered.forEach((r) => {
       const label = dayLabel(r.created_at);
       const last = out[out.length - 1];
@@ -176,6 +241,8 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
         />
       </div>
 
+      <StaffPresenceStrip userFilter={userFilter} />
+
       {/* Filters */}
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
         {FILTERS.map((f) => (
@@ -194,15 +261,38 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
         ))}
       </div>
 
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search person or action"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
-        />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search person or action"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
+          />
+        </div>
+        <Select value={userFilter} onValueChange={setUserFilter}>
+          <SelectTrigger className="w-[140px] rounded-xl h-10 text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <User size={13} className="text-muted-foreground shrink-0" />
+              <SelectValue placeholder="All Staff" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Staff</SelectItem>
+            {staffOptions.map((s) => (
+              <SelectItem key={s.user_id} value={s.user_id}>
+                {s.full_name || "Member"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      <label className="flex items-center gap-2 px-1">
+        <Switch checked={includeSales} onCheckedChange={setIncludeSales} />
+        <span className="text-xs text-muted-foreground">Include routine sales</span>
+      </label>
 
       {loading && <p className="text-sm text-muted-foreground text-center py-6">Loading activity…</p>}
       {!loading && filtered.length === 0 && (
@@ -213,7 +303,7 @@ const ActivityFeed = ({ nameOf }: { nameOf: (id: string) => string }) => {
         <div key={group.label} className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground pt-1">{group.label}</p>
           {group.items.map((a) => {
-            const sev = (a.severity || "info") as Severity;
+            const sev = a.severity;
             const b = badgeFor(sev);
             return (
               <div key={a.id} className="relative overflow-hidden p-3 pl-4 bg-card rounded-2xl border border-border">
