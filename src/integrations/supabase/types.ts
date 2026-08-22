@@ -2389,7 +2389,22 @@ export type Database = {
           role: string
         }[]
       }
-      get_staff_activity_kpis: { Args: never; Returns: Json }
+      get_staff_activity_kpis:
+        | { Args: never; Returns: Json }
+        | { Args: { _user_id?: string }; Returns: Json }
+      get_staff_presence_today: {
+        Args: never
+        Returns: {
+          active_seconds: number
+          avatar_url: string
+          clock_in: string
+          full_name: string
+          idle_seconds: number
+          last_heartbeat_at: string
+          role: string
+          user_id: string
+        }[]
+      }
       get_user_pharmacy_id: { Args: never; Returns: string }
       has_staff_permission: {
         Args: { _key: string; _user_id: string }
