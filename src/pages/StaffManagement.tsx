@@ -107,7 +107,7 @@ const StaffManagement = () => {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [overview, setOverview] = useState<StaffOverviewRow[]>([]);
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
-  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  
   const [loading, setLoading] = useState(true);
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([]);
