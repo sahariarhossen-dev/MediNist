@@ -7,6 +7,7 @@ interface Broadcast {
   id: string;
   message: string;
   created_at: string;
+  is_urgent?: boolean | null;
 }
 
 const DISMISS_KEY = "medinist:broadcast:dismissed";
