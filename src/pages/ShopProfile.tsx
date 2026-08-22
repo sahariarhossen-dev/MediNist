@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Store, Users, FileText, Percent, ChevronRight } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Store, FileText, Percent } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -260,22 +260,6 @@ const ShopProfile = () => {
             </AccordionContent>
           </AccordionItem>
 
-          {/* Staff Management now lives on its own page: /staff-management */}
-          {isAdmin && (
-            <button
-              onClick={() => navigate("/staff-management")}
-              className="w-full bg-card rounded-3xl border border-emerald-100 shadow-sm px-5 py-4 flex items-center gap-3 text-left"
-            >
-              <div className="p-2 rounded-xl bg-emerald-50">
-                <Users size={18} className="text-emerald-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-base font-bold text-foreground">Manage Staff</span>
-                <p className="text-xs text-muted-foreground">Roles, permissions and performance</p>
-              </div>
-              <ChevronRight size={18} className="text-muted-foreground shrink-0" />
-            </button>
-          )}
 
 
           {/* Billing Customization */}
