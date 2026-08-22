@@ -99,12 +99,8 @@ const ShopProfile = () => {
   useEffect(() => {
     if (profile?.pharmacy_id) {
       fetchPharmacy();
-      if (isAdmin) {
-        fetchStaff();
-      }
-      fetchOverview();
-      fetchBroadcast();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.pharmacy_id, isAdmin]);
 
   const fetchPharmacy = async () => {
