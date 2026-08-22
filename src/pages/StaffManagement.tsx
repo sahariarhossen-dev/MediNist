@@ -265,6 +265,22 @@ const StaffManagement = () => {
     toast({ title: "Notice cleared" });
   };
 
+  const pickableStaff = useMemo(() => {
+    const q = targetUserSearch.trim().toLowerCase();
+    return overview
+      .filter((s) => !s.is_suspended && s.user_id !== profile?.id)
+      .filter((s) => !q || (s.full_name || "").toLowerCase().includes(q));
+  }, [overview, targetUserSearch, profile?.id]);
+
+  const audienceLabel = (b: BroadcastRow) => {
+    if (b.target_type === "role") return `${inviteRoleLabel(b.target_value)}s`;
+    if (b.target_type === "user") {
+      const m = overview.find((s) => s.user_id === b.target_value);
+      return m?.full_name || "Staff member";
+    }
+    return "All Staff";
+  };
+
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
