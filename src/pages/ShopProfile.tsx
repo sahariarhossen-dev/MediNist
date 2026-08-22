@@ -562,35 +562,6 @@ const ShopProfile = () => {
         </Accordion>
       </div>
 
-      {/* Invitation Link Dialog */}
-      <Dialog open={linkDialog.open} onOpenChange={(o) => setLinkDialog((d) => ({ ...d, open: o }))}>
-        <DialogContent className="rounded-3xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold">Invitation Link Ready</DialogTitle>
-            <DialogDescription className="text-xs">
-              Share this link with <span className="font-medium text-foreground">{linkDialog.email}</span> ({linkDialog.role}). It expires in 7 days.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-2 p-3 rounded-2xl bg-muted border border-emerald-100 break-all text-xs text-foreground font-mono select-all">
-            {linkDialog.url}
-          </div>
-          <DialogFooter className="flex-row gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setLinkDialog((d) => ({ ...d, open: false }))}
-              className="rounded-xl flex-1"
-            >
-              Close
-            </Button>
-            <Button
-              onClick={() => handleCopyLink(linkDialog.url)}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1"
-            >
-              <Copy size={14} /> Copy Link
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
