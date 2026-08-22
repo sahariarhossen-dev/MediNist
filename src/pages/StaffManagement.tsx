@@ -273,7 +273,7 @@ const StaffManagement = () => {
   }, [overview, targetUserSearch, profile?.id]);
 
   const audienceLabel = (b: BroadcastRow) => {
-    if (b.target_type === "role") return `${inviteRoleLabel(b.target_value)}s`;
+    if (b.target_type === "role") return b.target_value === "manager" ? "Managers" : "Salesmen";
     if (b.target_type === "user") {
       const m = overview.find((s) => s.user_id === b.target_value);
       return m?.full_name || "Staff member";
