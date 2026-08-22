@@ -92,6 +92,13 @@ interface BroadcastRow {
   created_at: string;
 }
 
+const SEND_TO_OPTIONS: { label: string; type: BroadcastTarget; role?: "salesman" | "manager" }[] = [
+  { label: "All Staff", type: "all" },
+  { label: "Salesmen Only", type: "role", role: "salesman" },
+  { label: "Managers Only", type: "role", role: "manager" },
+  { label: "Specific Person", type: "user" },
+];
+
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
 const StaffManagement = () => {
