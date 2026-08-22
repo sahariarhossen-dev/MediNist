@@ -2,35 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent, Link2, Copy, Megaphone, Trophy, ChevronRight } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Store, Users, FileText, Percent, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-async function extractInvokeError(error: any, data: any): Promise<string> {
-  if (data?.error) return data.error;
-  const ctx = error?.context;
-  if (ctx && typeof ctx.json === "function") {
-    try {
-      const body = await ctx.clone().json();
-      if (body?.error) return body.error;
-    } catch {
-      try {
-        const text = await ctx.clone().text();
-        if (text) return text;
-      } catch {}
-    }
-  }
-  return error?.message || "Something went wrong. Please try again.";
-}
 
 interface PharmacyData {
   id: string;
@@ -47,36 +25,10 @@ interface PharmacyData {
   default_discount: number | null;
 }
 
-interface StaffMember {
-  id: string;
-  email: string;
-  role: string;
-  status: string;
-  created_at: string;
-  expires_at?: string | null;
-  user_id?: string | null;
-}
-
-interface StaffOverviewRow {
-  user_id: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  phone: string | null;
-  role: string | null;
-  month_sales: number;
-  month_count: number;
-  monthly_target: number;
-}
-
 const ShopProfile = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [overview, setOverview] = useState<StaffOverviewRow[]>([]);
-  const [broadcast, setBroadcast] = useState<{ id: string; message: string } | null>(null);
-  const [broadcastDraft, setBroadcastDraft] = useState("");
-  const [savingBroadcast, setSavingBroadcast] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "", proprietor_name: "", address: "", phone: "", email: "",
@@ -84,15 +36,9 @@ const ShopProfile = () => {
   });
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [defaultDiscount, setDefaultDiscount] = useState("10");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("salesman");
-  const [inviting, setInviting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
-  const [linkDialog, setLinkDialog] = useState<{ open: boolean; email: string; role: string; url: string }>({
-    open: false, email: "", role: "", url: "",
-  });
 
   const isAdmin = profile?.role === "admin";
 
