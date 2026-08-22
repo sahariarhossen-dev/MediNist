@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { STAFF_PERMISSIONS, inviteRoleLabel, profileRoleToInviteRole, type InviteRole } from "@/lib/staffRoles";
+import ActivityFeed from "@/components/staff/ActivityFeed";
+import SecurityPanel from "@/components/staff/SecurityPanel";
+
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -75,14 +78,6 @@ interface StaffOverviewRow {
   last_seen: string | null;
 }
 
-interface ActivityRow {
-  id: string;
-  user_id: string;
-  action_type: string;
-  description: string | null;
-  amount: number | null;
-  created_at: string;
-}
 
 export type BroadcastTarget = "all" | "role" | "user";
 
@@ -112,7 +107,7 @@ const StaffManagement = () => {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [overview, setOverview] = useState<StaffOverviewRow[]>([]);
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
-  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  
   const [loading, setLoading] = useState(true);
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([]);
@@ -152,7 +147,7 @@ const StaffManagement = () => {
       fetchBroadcast(),
       isAdmin ? fetchStaff() : Promise.resolve(),
       isAdmin ? fetchPermissions() : Promise.resolve(),
-      isAdmin ? fetchActivity() : Promise.resolve(),
+
     ]);
     setLoading(false);
   };
@@ -196,15 +191,6 @@ const StaffManagement = () => {
     setPermissions(map);
   };
 
-  const fetchActivity = async () => {
-    const { data } = await supabase
-      .from("staff_activity_logs" as any)
-      .select("id,user_id,action_type,description,amount,created_at")
-      .eq("pharmacy_id", profile!.pharmacy_id!)
-      .order("created_at", { ascending: false })
-      .limit(40);
-    if (data) setActivity(data as unknown as ActivityRow[]);
-  };
 
   const fetchBroadcast = async () => {
     const { data } = await supabase
@@ -474,7 +460,13 @@ const StaffManagement = () => {
                 <Activity size={14} /> Activity
               </TabsTrigger>
             )}
+            {isAdmin && (
+              <TabsTrigger value="security" className="flex-1 rounded-xl gap-1.5">
+                <ShieldCheck size={14} /> Security
+              </TabsTrigger>
+            )}
           </TabsList>
+
 
           {/* ---------------- TEAM ---------------- */}
           <TabsContent value="team" className="mt-4 space-y-3">
@@ -813,30 +805,17 @@ const StaffManagement = () => {
           {/* ---------------- ACTIVITY ---------------- */}
           {isAdmin && (
             <TabsContent value="activity" className="mt-4">
-              <div className="space-y-2">
-                {activity.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-6">No staff activity recorded yet</p>
-                )}
-                {activity.map((a) => (
-                  <div key={a.id} className="p-3 bg-card rounded-2xl border border-border">
-                    <div className="flex items-start gap-2">
-                      <ShieldCheck size={14} className="text-emerald-600 mt-0.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-foreground">
-                          <span className="font-semibold">{nameOf(a.user_id)}</span>{" "}
-                          <span className="text-muted-foreground">{a.description || a.action_type.replace(/_/g, " ")}</span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground tabular-nums">
-                          {new Date(a.created_at).toLocaleString("en-GB")}
-                          {a.amount ? ` · ${money(Number(a.amount))}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ActivityFeed nameOf={nameOf} />
             </TabsContent>
           )}
+
+          {/* ---------------- SECURITY ---------------- */}
+          {isAdmin && (
+            <TabsContent value="security" className="mt-4">
+              <SecurityPanel nameOf={nameOf} />
+            </TabsContent>
+          )}
+
         </Tabs>
       </div>
 

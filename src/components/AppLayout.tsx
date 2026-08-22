@@ -5,7 +5,9 @@ import { useSubscription } from "@/hooks/useSubscription";
 import SubscriptionExpiredOverlay from "./subscription/SubscriptionExpiredOverlay";
 import { useLocation } from "react-router-dom";
 import DemoBanner from "./DemoBanner";
+import SecurityGate from "./security/SecurityGate";
 import { useAuth } from "@/contexts/AuthContext";
+
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
   useRootBackHandler();
@@ -18,7 +20,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       <DemoBanner />
       {children}
       <BottomNav />
+      <SecurityGate />
       {isExpired && !allowDuringExpiry && !isDemo && <SubscriptionExpiredOverlay />}
+
     </ScrollContainerProvider>
   );
 };
