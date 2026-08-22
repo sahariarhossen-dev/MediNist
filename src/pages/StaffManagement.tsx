@@ -94,9 +94,13 @@ const StaffManagement = () => {
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [broadcast, setBroadcast] = useState<{ id: string; message: string } | null>(null);
+  const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([]);
   const [broadcastDraft, setBroadcastDraft] = useState("");
   const [savingBroadcast, setSavingBroadcast] = useState(false);
+  const [targetType, setTargetType] = useState<BroadcastTarget>("all");
+  const [targetUser, setTargetUser] = useState<string>("");
+  const [targetUserSearch, setTargetUserSearch] = useState("");
+  const [isUrgent, setIsUrgent] = useState(false);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<InviteRole>("salesman");
