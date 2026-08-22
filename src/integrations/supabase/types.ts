@@ -1488,6 +1488,42 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_access: {
+        Row: {
+          created_at: string
+          id: string
+          is_suspended: boolean
+          pharmacy_id: string
+          suspend_reason: string | null
+          suspended_at: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_suspended?: boolean
+          pharmacy_id: string
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_suspended?: boolean
+          pharmacy_id?: string
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       staff_activity_logs: {
         Row: {
           action_type: string
@@ -1523,6 +1559,39 @@ export type Database = {
           id?: string
           metadata?: Json
           pharmacy_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      staff_permissions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          permission_key: string
+          pharmacy_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          permission_key: string
+          pharmacy_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          permission_key?: string
+          pharmacy_id?: string
+          updated_at?: string
+          updated_by?: string | null
           user_id?: string
         }
         Relationships: []
@@ -2133,7 +2202,11 @@ export type Database = {
         Args: never
         Returns: {
           avatar_url: string
+          basic_salary: number
+          commission_percent: number
           full_name: string
+          is_suspended: boolean
+          last_seen: string
           month_count: number
           month_sales: number
           monthly_target: number
@@ -2154,6 +2227,10 @@ export type Database = {
         }[]
       }
       get_user_pharmacy_id: { Args: never; Returns: string }
+      has_staff_permission: {
+        Args: { _key: string; _user_id: string }
+        Returns: boolean
+      }
       increment_product_target_progress: {
         Args: {
           _medicine_id: string
@@ -2174,6 +2251,7 @@ export type Database = {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
       }
+      is_staff_suspended: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
