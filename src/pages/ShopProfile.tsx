@@ -2,35 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Trash2, Send, Store, Plus, AlertTriangle, Users, FileText, Percent, Link2, Copy, Megaphone, Trophy, ChevronRight } from "lucide-react";
+import { ArrowLeft, Pencil, Check, Camera, Store, Users, FileText, Percent, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-async function extractInvokeError(error: any, data: any): Promise<string> {
-  if (data?.error) return data.error;
-  const ctx = error?.context;
-  if (ctx && typeof ctx.json === "function") {
-    try {
-      const body = await ctx.clone().json();
-      if (body?.error) return body.error;
-    } catch {
-      try {
-        const text = await ctx.clone().text();
-        if (text) return text;
-      } catch {}
-    }
-  }
-  return error?.message || "Something went wrong. Please try again.";
-}
 
 interface PharmacyData {
   id: string;
@@ -47,36 +25,10 @@ interface PharmacyData {
   default_discount: number | null;
 }
 
-interface StaffMember {
-  id: string;
-  email: string;
-  role: string;
-  status: string;
-  created_at: string;
-  expires_at?: string | null;
-  user_id?: string | null;
-}
-
-interface StaffOverviewRow {
-  user_id: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  phone: string | null;
-  role: string | null;
-  month_sales: number;
-  month_count: number;
-  monthly_target: number;
-}
-
 const ShopProfile = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [overview, setOverview] = useState<StaffOverviewRow[]>([]);
-  const [broadcast, setBroadcast] = useState<{ id: string; message: string } | null>(null);
-  const [broadcastDraft, setBroadcastDraft] = useState("");
-  const [savingBroadcast, setSavingBroadcast] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "", proprietor_name: "", address: "", phone: "", email: "",
@@ -84,27 +36,17 @@ const ShopProfile = () => {
   });
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [defaultDiscount, setDefaultDiscount] = useState("10");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("salesman");
-  const [inviting, setInviting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
-  const [linkDialog, setLinkDialog] = useState<{ open: boolean; email: string; role: string; url: string }>({
-    open: false, email: "", role: "", url: "",
-  });
 
   const isAdmin = profile?.role === "admin";
 
   useEffect(() => {
     if (profile?.pharmacy_id) {
       fetchPharmacy();
-      if (isAdmin) {
-        fetchStaff();
-      }
-      fetchOverview();
-      fetchBroadcast();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.pharmacy_id, isAdmin]);
 
   const fetchPharmacy = async () => {
@@ -156,91 +98,6 @@ const ShopProfile = () => {
     }
   };
 
-  const fetchStaff = async () => {
-    const { data } = await supabase
-      .from("shop_staff")
-      .select("id,email,role,status,created_at,expires_at,user_id,pharmacy_id,invited_by,accepted_at")
-      .eq("pharmacy_id", profile!.pharmacy_id!)
-      .order("created_at", { ascending: false });
-    if (data) setStaff(data as unknown as StaffMember[]);
-  };
-
-  const fetchOverview = async () => {
-    const { data } = await supabase.rpc("get_pharmacy_staff_overview" as any);
-    if (data) {
-      const rows = (data as unknown as StaffOverviewRow[])
-        .map((r) => ({
-          ...r,
-          month_sales: Number(r.month_sales || 0),
-          monthly_target: Number(r.monthly_target || 0),
-          month_count: Number(r.month_count || 0),
-        }))
-        .sort((a, b) => b.month_sales - a.month_sales);
-      setOverview(rows);
-    }
-  };
-
-  const fetchBroadcast = async () => {
-    const { data } = await supabase
-      .from("pharmacy_broadcasts" as any)
-      .select("id, message")
-      .eq("pharmacy_id", profile!.pharmacy_id!)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    if (data && data.length > 0) {
-      const b = data[0] as unknown as { id: string; message: string };
-      setBroadcast(b);
-      setBroadcastDraft(b.message);
-    } else {
-      setBroadcast(null);
-      setBroadcastDraft("");
-    }
-  };
-
-  const handleSaveBroadcast = async () => {
-    if (!profile?.pharmacy_id || !profile?.id) return;
-    const msg = broadcastDraft.trim();
-    if (!msg) {
-      toast({ title: "Notice is empty", variant: "destructive" });
-      return;
-    }
-    setSavingBroadcast(true);
-    // Deactivate existing active broadcasts first
-    await supabase
-      .from("pharmacy_broadcasts" as any)
-      .update({ is_active: false } as any)
-      .eq("pharmacy_id", profile.pharmacy_id)
-      .eq("is_active", true);
-    const { error } = await supabase.from("pharmacy_broadcasts" as any).insert({
-      pharmacy_id: profile.pharmacy_id,
-      created_by: profile.id,
-      message: msg,
-      is_active: true,
-    });
-    setSavingBroadcast(false);
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Notice posted to all staff" });
-    fetchBroadcast();
-  };
-
-  const handleClearBroadcast = async () => {
-    if (!broadcast) return;
-    const { error } = await supabase
-      .from("pharmacy_broadcasts" as any)
-      .update({ is_active: false } as any)
-      .eq("id", broadcast.id);
-    if (error) {
-      toast({ title: "Failed to clear", description: error.message, variant: "destructive" });
-      return;
-    }
-    setBroadcast(null);
-    setBroadcastDraft("");
-    toast({ title: "Notice cleared" });
-  };
 
   const handleImageUpload = async (type: "logo" | "cover", e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -301,78 +158,6 @@ const ShopProfile = () => {
     toast({ title: "Default discount saved!" });
   };
 
-  const handleInvite = async () => {
-    const email = inviteEmail.trim().toLowerCase();
-    if (!email) return;
-    if (!EMAIL_RE.test(email) || email.length > 255) {
-      toast({
-        title: "Invalid email",
-        description: "Enter a valid email address like name@example.com.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setInviting(true);
-    const { data, error } = await supabase.functions.invoke("invite-staff", {
-      body: { email, role: inviteRole },
-    });
-    setInviting(false);
-    if (error || data?.error) {
-      const description = await extractInvokeError(error, data);
-      toast({ title: "Invitation failed", description, variant: "destructive" });
-      return;
-    }
-    setLinkDialog({
-      open: true,
-      email: data?.email ?? email,
-      role: data?.role ?? inviteRole,
-      url: data?.acceptUrl ?? "",
-    });
-    setInviteEmail("");
-    fetchStaff();
-  };
-
-  const handleRemoveStaff = async (id: string) => {
-    const { error } = await supabase.from("shop_staff").delete().eq("id", id);
-    if (error) { toast({ title: "Remove failed", variant: "destructive" }); return; }
-    setStaff(staff.filter((s) => s.id !== id));
-    toast({ title: "Staff member removed" });
-  };
-
-  const handleRevokeInvite = async (id: string) => {
-    const { error } = await supabase.from("shop_staff").update({ status: "revoked" } as any).eq("id", id);
-    if (error) { toast({ title: "Revoke failed", description: error.message, variant: "destructive" }); return; }
-    setStaff(staff.map((s) => (s.id === id ? { ...s, status: "revoked" } : s)));
-    toast({ title: "Invitation revoked" });
-  };
-
-  const handleResendInvite = async (email: string, role: string) => {
-    const { data, error } = await supabase.functions.invoke("invite-staff", { body: { email, role } });
-    if (error || data?.error) {
-      const description = await extractInvokeError(error, data);
-      toast({ title: "Resend failed", description, variant: "destructive" });
-      return;
-    }
-    setLinkDialog({
-      open: true,
-      email: data?.email ?? email,
-      role: data?.role ?? role,
-      url: data?.acceptUrl ?? "",
-    });
-    fetchStaff();
-  };
-
-  const buildAcceptUrl = (token: string) => `${window.location.origin}/accept-invitation?token=${token}`;
-
-
-  const handleCopyLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast({ title: "Link copied!", description: "Share it with the invitee." });
-    } catch {
-      toast({ title: "Copy failed", description: "Select and copy the link manually.", variant: "destructive" });
-    }
-  };
 
 
   const infoFields = [
@@ -475,218 +260,23 @@ const ShopProfile = () => {
             </AccordionContent>
           </AccordionItem>
 
-          {/* Staff Management */}
+          {/* Staff Management now lives on its own page: /staff-management */}
           {isAdmin && (
-          <AccordionItem value="staff" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
-            <AccordionTrigger className="px-5 py-4 hover:no-underline">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50">
-                  <Users size={18} className="text-emerald-600" />
-                </div>
+            <button
+              onClick={() => navigate("/staff-management")}
+              className="w-full bg-card rounded-3xl border border-emerald-100 shadow-sm px-5 py-4 flex items-center gap-3 text-left"
+            >
+              <div className="p-2 rounded-xl bg-emerald-50">
+                <Users size={18} className="text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
                 <span className="text-base font-bold text-foreground">Manage Staff</span>
+                <p className="text-xs text-muted-foreground">Roles, permissions and performance</p>
               </div>
-            </AccordionTrigger>
-            <AccordionContent className="px-5 pb-5">
-              {/* Internal Broadcast (admin) */}
-              {isAdmin && (
-                <div className="mb-5 p-4 rounded-2xl bg-amber-50 border border-amber-100">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Megaphone size={14} className="text-amber-700" />
-                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Internal Broadcast</p>
-                  </div>
-                  <Textarea
-                    placeholder="Post a notice for all staff (e.g., Meeting at 5 PM)"
-                    value={broadcastDraft}
-                    onChange={(e) => setBroadcastDraft(e.target.value)}
-                    className="rounded-xl bg-white border-amber-200 text-sm min-h-[60px]"
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      onClick={handleSaveBroadcast}
-                      disabled={savingBroadcast || !broadcastDraft.trim()}
-                      className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white h-9 flex-1 gap-2"
-                    >
-                      <Send size={14} /> {savingBroadcast ? "Posting..." : broadcast ? "Update" : "Post"}
-                    </Button>
-                    {broadcast && (
-                      <Button
-                        onClick={handleClearBroadcast}
-                        variant="outline"
-                        className="rounded-xl h-9 border-amber-200 text-amber-700"
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Top Performer */}
-              {overview.length > 0 && overview[0].month_sales > 0 && (
-                <div
-                  onClick={() => navigate(`/staff/${overview[0].user_id}`)}
-                  className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 cursor-pointer hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-amber-200/70">
-                      <Trophy size={20} className="text-amber-700" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Top Performer · This Month</p>
-                      <p className="text-sm font-bold text-gray-900 truncate">{overview[0].full_name || "Unnamed"}</p>
-                      <p className="text-xs text-amber-800 tabular-nums">৳{Math.round(overview[0].month_sales).toLocaleString("en-IN")} in sales</p>
-                    </div>
-                    <ChevronRight size={18} className="text-amber-700 shrink-0" />
-                  </div>
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="space-y-3 mb-5">
-                  <Input
-                    placeholder="Staff email address"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
-                  />
-                  <div className="flex gap-2 items-start">
-                    <select
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value)}
-                      className="flex-1 h-10 rounded-xl border border-emerald-200 bg-background px-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                      <option value="salesman">Salesman</option>
-                      <option value="manager">Manager</option>
-                    </select>
-                    <Button
-                      onClick={handleInvite}
-                      disabled={inviting || !inviteEmail.trim()}
-                      className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                    >
-                      <Send size={14} /> {inviting ? "Sending..." : "Send"}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Invitations expire after 7 days.</p>
-                </div>
-              )}
-
-              {/* Active staff cards (with metrics) */}
-              <div className="space-y-2">
-                {overview.length === 0 && staff.filter((s) => s.status === "pending" || s.status === "revoked").length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No staff members yet</p>
-                )}
-                {overview.map((row, idx) => {
-                  const isTop = idx === 0 && row.month_sales > 0;
-                  const pct = row.monthly_target > 0
-                    ? Math.min(100, (row.month_sales / row.monthly_target) * 100)
-                    : 0;
-                  const dotColor = isTop
-                    ? "bg-emerald-500"
-                    : pct >= 60
-                    ? "bg-yellow-400"
-                    : "bg-gray-300";
-                  const dotLabel = isTop ? "Top performer" : pct >= 60 ? "On track" : "Building up";
-                  const initials = (row.full_name || row.role || "?")
-                    .split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
-                  return (
-                    <button
-                      key={row.user_id}
-                      onClick={() => navigate(`/staff/${row.user_id}`)}
-                      className="w-full text-left p-3 bg-white rounded-2xl border border-gray-100 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Avatar className="h-11 w-11">
-                            <AvatarImage src={row.avatar_url || undefined} />
-                            <AvatarFallback className="bg-emerald-100 text-emerald-700 text-sm font-semibold">{initials}</AvatarFallback>
-                          </Avatar>
-                          <span
-                            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${dotColor}`}
-                            title={dotLabel}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{row.full_name || "Unnamed"}</p>
-                            <Badge variant="secondary" className="text-[9px] capitalize rounded-md py-0 h-4">{row.role}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-                            ৳{Math.round(row.month_sales).toLocaleString("en-IN")} this month
-                          </p>
-                          {row.monthly_target > 0 && (
-                            <div className="mt-2 flex items-center gap-2">
-                              <Progress value={pct} className="h-1.5 flex-1" />
-                              <span className="text-[10px] font-medium text-muted-foreground tabular-nums w-9 text-right">
-                                {Math.round(pct)}%
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <ChevronRight size={16} className="text-gray-300 shrink-0" />
-                      </div>
-                    </button>
-                  );
-                })}
-
-                {/* Pending / revoked invitations */}
-                {staff
-                  .filter((s) => s.status !== "accepted" && s.status !== "active")
-                  .map((s) => (
-                    <div key={s.id} className="flex items-center gap-3 p-3 bg-muted rounded-2xl">
-                      <span className="w-2.5 h-2.5 rounded-full bg-gray-300 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{s.email}</p>
-                        <div className="flex gap-1.5 mt-1 flex-wrap">
-                          <Badge variant="secondary" className="text-[10px] capitalize rounded-lg">{s.role}</Badge>
-                          <Badge
-                            className={`text-[10px] rounded-lg capitalize ${
-                              s.status === "pending"
-                                ? "bg-amber-100 text-amber-700 border-amber-200"
-                                : s.status === "revoked"
-                                ? "bg-gray-200 text-gray-600 border-gray-300"
-                                : "bg-rose-100 text-rose-700 border-rose-200"
-                            }`}
-                          >
-                            {s.status}
-                          </Badge>
-                        </div>
-                      </div>
-                      {isAdmin && (
-                        <div className="flex items-center gap-1">
-                          {s.status === "pending" && (
-                            <button
-                              onClick={() => handleResendInvite(s.email, s.role)}
-                              className="p-2 rounded-full hover:bg-emerald-100"
-                              title="Generate new link"
-                            >
-                              <Send size={14} className="text-emerald-600" />
-                            </button>
-                          )}
-                          {s.status === "pending" && (
-                            <button
-                              onClick={() => handleRevokeInvite(s.id)}
-                              className="p-2 rounded-full hover:bg-amber-100"
-                              title="Revoke invitation"
-                            >
-                              <AlertTriangle size={14} className="text-amber-600" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleRemoveStaff(s.id)}
-                            className="p-2 rounded-full hover:bg-destructive/10"
-                            title="Remove"
-                          >
-                            <Trash2 size={16} className="text-destructive" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+              <ChevronRight size={18} className="text-muted-foreground shrink-0" />
+            </button>
           )}
+
 
           {/* Billing Customization */}
           <AccordionItem value="billing" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
@@ -757,35 +347,6 @@ const ShopProfile = () => {
         </Accordion>
       </div>
 
-      {/* Invitation Link Dialog */}
-      <Dialog open={linkDialog.open} onOpenChange={(o) => setLinkDialog((d) => ({ ...d, open: o }))}>
-        <DialogContent className="rounded-3xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold">Invitation Link Ready</DialogTitle>
-            <DialogDescription className="text-xs">
-              Share this link with <span className="font-medium text-foreground">{linkDialog.email}</span> ({linkDialog.role}). It expires in 7 days.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-2 p-3 rounded-2xl bg-muted border border-emerald-100 break-all text-xs text-foreground font-mono select-all">
-            {linkDialog.url}
-          </div>
-          <DialogFooter className="flex-row gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setLinkDialog((d) => ({ ...d, open: false }))}
-              className="rounded-xl flex-1"
-            >
-              Close
-            </Button>
-            <Button
-              onClick={() => handleCopyLink(linkDialog.url)}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1"
-            >
-              <Copy size={14} /> Copy Link
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

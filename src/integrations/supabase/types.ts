@@ -2101,7 +2101,12 @@ export type Database = {
           role: string
         }[]
       }
+      admin_remove_staff: { Args: { _user_id: string }; Returns: undefined }
       admin_resync_medicines_pack_info: { Args: never; Returns: number }
+      admin_set_staff_role: {
+        Args: { _role: string; _user_id: string }
+        Returns: undefined
+      }
       admin_truncate_master_medicines: { Args: never; Returns: undefined }
       complete_sale: { Args: { _payload: Json }; Returns: string }
       create_group_room: {
