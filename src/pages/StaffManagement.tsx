@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft, Send, AlertTriangle, Trash2, Copy, Megaphone, Trophy, ChevronRight,
   Search, MoreVertical, ShieldCheck, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
-  Activity, Users,
+  Activity, Users, Zap,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +25,9 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
   AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { STAFF_PERMISSIONS, inviteRoleLabel, profileRoleToInviteRole, type InviteRole } from "@/lib/staffRoles";
 
@@ -118,7 +121,6 @@ const StaffManagement = () => {
   const [targetType, setTargetType] = useState<BroadcastTarget>("all");
   const [roleTargetValue, setRoleTargetValue] = useState<"salesman" | "manager">("salesman");
   const [targetUser, setTargetUser] = useState<string>("");
-  const [targetUserSearch, setTargetUserSearch] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
 
   const [inviteEmail, setInviteEmail] = useState("");
@@ -248,7 +250,7 @@ const StaffManagement = () => {
     toast({ title: "Notice posted" });
     setBroadcastDraft("");
     setIsUrgent(false);
-    setTargetUserSearch("");
+    setTargetUser("");
     fetchBroadcast();
   };
 
@@ -266,11 +268,10 @@ const StaffManagement = () => {
   };
 
   const pickableStaff = useMemo(() => {
-    const q = targetUserSearch.trim().toLowerCase();
     return overview
       .filter((s) => !s.is_suspended && s.user_id !== profile?.id)
-      .filter((s) => !q || (s.full_name || "").toLowerCase().includes(q));
-  }, [overview, targetUserSearch, profile?.id]);
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+  }, [overview, profile?.id]);
 
   const audienceLabel = (b: BroadcastRow) => {
     if (b.target_type === "role") return b.target_value === "manager" ? "Managers" : "Salesmen";
@@ -490,79 +491,79 @@ const StaffManagement = () => {
                   className="rounded-xl bg-white border-amber-200 text-sm min-h-[60px]"
                 />
 
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mt-3 mb-1.5">Send to</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {SEND_TO_OPTIONS.map((opt) => {
-                    const active =
-                      opt.type === targetType &&
-                      (opt.type !== "role" || opt.role === roleTargetValue);
-                    return (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => {
-                          setTargetType(opt.type);
-                          if (opt.role) setRoleTargetValue(opt.role);
-                          if (opt.type !== "user") setTargetUser("");
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                          active
-                            ? "bg-amber-600 border-amber-600 text-white"
-                            : "bg-white border-amber-200 text-amber-800"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={
+                        targetType === "all"
+                          ? "all"
+                          : targetType === "role"
+                          ? `role:${roleTargetValue}`
+                          : "user"
+                      }
+                      onValueChange={(value) => {
+                        if (value === "all") {
+                          setTargetType("all");
+                          setTargetUser("");
+                        } else if (value.startsWith("role:")) {
+                          setTargetType("role");
+                          setRoleTargetValue(value.replace("role:", "") as "salesman" | "manager");
+                          setTargetUser("");
+                        } else if (value === "user") {
+                          setTargetType("user");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1 min-w-[7rem] rounded-xl border-amber-200 bg-white text-xs focus:ring-amber-500">
+                        <div className="flex items-center gap-1.5">
+                          <Users size={13} className="text-amber-600 shrink-0" />
+                          <SelectValue placeholder="Target audience" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-amber-200">
+                        <SelectItem value="all" className="text-xs">All Staff</SelectItem>
+                        <SelectItem value="role:salesman" className="text-xs">Salesmen Only</SelectItem>
+                        <SelectItem value="role:manager" className="text-xs">Managers Only</SelectItem>
+                        <SelectItem value="user" className="text-xs">Specific Person…</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                {targetType === "user" && (
-                  <div className="mt-2 rounded-xl bg-white border border-amber-200 overflow-hidden">
-                    <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-100">
-                      <Search size={13} className="text-amber-600" />
-                      <input
-                        value={targetUserSearch}
-                        onChange={(e) => setTargetUserSearch(e.target.value)}
-                        placeholder="Search staff by name"
-                        className="flex-1 text-sm outline-none bg-transparent"
+                    <label className="flex items-center gap-1.5 shrink-0 px-2 py-1.5 rounded-lg bg-white/60 border border-amber-200 text-[11px] font-medium text-amber-800">
+                      <Switch
+                        checked={isUrgent}
+                        onCheckedChange={setIsUrgent}
+                        className="data-[state=checked]:bg-amber-600 scale-90"
                       />
-                    </div>
-                    <div className="max-h-40 overflow-y-auto">
-                      {pickableStaff.length === 0 && (
-                        <p className="px-3 py-3 text-xs text-muted-foreground">No matching staff.</p>
-                      )}
-                      {pickableStaff.map((s) => (
-                        <button
-                          key={s.user_id}
-                          type="button"
-                          onClick={() => setTargetUser(s.user_id)}
-                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${
-                            targetUser === s.user_id ? "bg-amber-100 font-semibold text-amber-900" : ""
-                          }`}
-                        >
-                          <span className="truncate">{s.full_name || "Unnamed"}</span>
-                          <span className="text-[10px] uppercase text-muted-foreground ml-2 shrink-0">
-                            {inviteRoleLabel(profileRoleToInviteRole(s.role))}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      <Zap size={12} className="text-amber-600" />
+                      Urgent
+                    </label>
 
-                <div className="flex items-center gap-2 mt-3">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-800">
-                    <Switch checked={isUrgent} onCheckedChange={setIsUrgent} />
-                    Urgent
-                  </label>
-                  <Button
-                    onClick={handleSaveBroadcast}
-                    disabled={savingBroadcast || !broadcastDraft.trim()}
-                    className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white h-9 flex-1 gap-2"
-                  >
-                    <Send size={14} /> {savingBroadcast ? "Posting..." : "Post"}
-                  </Button>
+                    <Button
+                      onClick={handleSaveBroadcast}
+                      disabled={savingBroadcast || !broadcastDraft.trim()}
+                      className="h-9 rounded-xl bg-amber-600 hover:bg-amber-700 text-white gap-1.5 px-4 shrink-0"
+                    >
+                      <Send size={13} /> {savingBroadcast ? "..." : "Post"}
+                    </Button>
+                  </div>
+
+                  {targetType === "user" && (
+                    <Select value={targetUser} onValueChange={setTargetUser}>
+                      <SelectTrigger className="h-9 w-full rounded-xl border-amber-200 bg-white text-xs focus:ring-amber-500">
+                        <SelectValue placeholder="Pick a staff member" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-amber-200">
+                        {pickableStaff.length === 0 && (
+                          <SelectItem value="" disabled className="text-xs">No active staff</SelectItem>
+                        )}
+                        {pickableStaff.map((s) => (
+                          <SelectItem key={s.user_id} value={s.user_id} className="text-xs">
+                            {s.full_name || "Unnamed"} · {inviteRoleLabel(profileRoleToInviteRole(s.role))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 {broadcasts.length > 0 && (
