@@ -250,7 +250,7 @@ const StaffManagement = () => {
     toast({ title: "Notice posted" });
     setBroadcastDraft("");
     setIsUrgent(false);
-    setTargetUserSearch("");
+    setTargetUser("");
     fetchBroadcast();
   };
 
