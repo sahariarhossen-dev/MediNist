@@ -179,17 +179,8 @@ const ActivityFeed = ({
       await fetchPage(null, true);
       setLoading(false);
     })();
-  }, [profile?.pharmacy_id, fetchPage]);
+  }, [profile?.pharmacy_id, fetchPage, refreshKey]);
 
-  useEffect(() => {
-    if (!profile?.pharmacy_id) return;
-    void (async () => {
-      const { data } = await supabase.rpc("get_staff_activity_kpis" as any, {
-        _user_id: userFilter === "all" ? null : userFilter,
-      });
-      if (data) setKpis(data as unknown as Kpis);
-    })();
-  }, [profile?.pharmacy_id, userFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
