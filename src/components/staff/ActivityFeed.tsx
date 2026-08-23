@@ -214,32 +214,6 @@ const ActivityFeed = ({
 
   return (
     <div className="space-y-3">
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-2">
-        <KpiTile
-          icon={<Users size={12} className="text-emerald-600" />}
-          label="Active now"
-          value={String(kpis?.active_now ?? 0)}
-        />
-        <KpiTile
-          icon={<Clock size={12} className="text-sky-600" />}
-          label="Avg shift today"
-          value={formatDuration(Number(kpis?.avg_shift_seconds ?? 0))}
-        />
-        <KpiTile
-          icon={<Activity size={12} className="text-amber-600" />}
-          label="Idle today"
-          value={formatDuration(Number(kpis?.idle_seconds_today ?? 0))}
-        />
-        <KpiTile
-          icon={<AlertOctagon size={12} className="text-destructive" />}
-          label="High-risk today"
-          value={String(kpis?.high_risk_today ?? 0)}
-        />
-      </div>
-
-      <StaffPresenceStrip userFilter={userFilter} />
-
       {/* Filters */}
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
         {FILTERS.map((f) => (
@@ -258,38 +232,21 @@ const ActivityFeed = ({
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search person or action"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
-          />
-        </div>
-        <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="w-[140px] rounded-xl h-10 text-xs">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <User size={13} className="text-muted-foreground shrink-0" />
-              <SelectValue placeholder="All Staff" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Staff</SelectItem>
-            {staffOptions.map((s) => (
-              <SelectItem key={s.user_id} value={s.user_id}>
-                {s.full_name || "Member"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search person or action"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
+        />
       </div>
 
       <label className="flex items-center gap-2 px-1">
         <Switch checked={includeSales} onCheckedChange={setIncludeSales} />
         <span className="text-xs text-muted-foreground">Include routine sales</span>
       </label>
+
 
       {loading && <p className="text-sm text-muted-foreground text-center py-6">Loading activity…</p>}
       {!loading && filtered.length === 0 && (
