@@ -429,12 +429,20 @@ const Inventory = () => {
     });
   };
 
+  const isOwner = profile?.role === "admin";
+
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
     const med = medicines.find((m) => m.id === deleteConfirmId);
-    const { error } = await supabase.from("medicines").delete().eq("id", deleteConfirmId);
+    const { data, error } = await supabase.rpc("request_medicine_deletion" as any, {
+      _medicine_id: deleteConfirmId,
+      _reason: null,
+    });
     if (error) {
-      toast.error("Failed to delete product");
+      toast.error(error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to delete product");
+    } else if ((data as any)?.status === "pending") {
+      toast.success("Deletion request sent to the shop owner");
+      setMedicines((prev) => prev.filter((m) => m.id !== deleteConfirmId));
     } else {
       toast.success(`${med?.name || "Product"} deleted`);
       setMedicines((prev) => prev.filter((m) => m.id !== deleteConfirmId));
@@ -442,6 +450,7 @@ const Inventory = () => {
     setDeleteConfirmId(null);
     setLongPressId(null);
   };
+
 
   const longPressMed = longPressId ? medicines.find((m) => m.id === longPressId) : null;
 
