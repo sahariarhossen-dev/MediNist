@@ -24,12 +24,8 @@ interface FeedItem {
   created_at: string;
 }
 
-interface Kpis {
-  active_now: number;
-  avg_shift_seconds: number;
-  idle_seconds_today: number;
-  high_risk_today: number;
-}
+
+
 
 export interface FeedStaffOption {
   user_id: string;
@@ -140,7 +136,7 @@ const ActivityFeed = ({
         if (!wantShifts) return [];
         let q = supabase
           .from("staff_shifts" as any)
-          .select("id,user_id,started_at,device_label,active_seconds,idle_seconds")
+          .select("id,user_id,started_at,ended_at,device_label,active_seconds")
           .eq("pharmacy_id", profile.pharmacy_id)
           .order("started_at", { ascending: false })
           .limit(PAGE);
@@ -151,13 +147,14 @@ const ActivityFeed = ({
           id: `shift-${r.id}`,
           user_id: r.user_id,
           action_type: "shift_start",
-          description: `Clocked in${r.device_label ? ` · ${r.device_label}` : ""} · ${formatDuration(
-            Number(r.active_seconds || 0),
-          )} active, ${formatDuration(Number(r.idle_seconds || 0))} idle`,
+          description: `Duty started${r.device_label ? ` · ${r.device_label}` : ""}${
+            r.ended_at ? ` · ${formatDuration(Number(r.active_seconds || 0))} on duty` : " · on duty now"
+          }`,
           amount: null,
           severity: "shift" as Severity,
           created_at: r.started_at,
         }));
+
       })();
 
       const [logs, shifts] = await Promise.all([logsPromise, shiftsPromise]);
