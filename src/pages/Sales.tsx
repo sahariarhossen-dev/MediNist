@@ -162,11 +162,22 @@ const Sales = () => {
                         className={`text-[10px] px-2 py-0.5 font-semibold ${
                           sale.status === "completed"
                             ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                            : "bg-gray-100 text-gray-500 border-gray-200"
+                            : sale.status === "pending_approval"
+                              ? "bg-amber-100 text-amber-800 border-amber-200"
+                              : sale.status === "voided"
+                                ? "bg-red-100 text-red-700 border-red-200"
+                                : "bg-gray-100 text-gray-500 border-gray-200"
                         }`}
                       >
-                        {sale.status === "completed" ? "Complete" : "Draft"}
+                        {sale.status === "completed"
+                          ? "Complete"
+                          : sale.status === "pending_approval"
+                            ? "Awaiting approval"
+                            : sale.status === "voided"
+                              ? "Voided"
+                              : "Draft"}
                       </Badge>
+
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatTime(sale.created_at)}</p>
                   </div>
