@@ -786,6 +786,8 @@ export type Database = {
           box_size: string | null
           company_name: string | null
           created_at: string | null
+          deletion_requested_at: string | null
+          deletion_requested_by: string | null
           expiry_date: string | null
           format: string | null
           generic_name: string | null
@@ -808,6 +810,8 @@ export type Database = {
           box_size?: string | null
           company_name?: string | null
           created_at?: string | null
+          deletion_requested_at?: string | null
+          deletion_requested_by?: string | null
           expiry_date?: string | null
           format?: string | null
           generic_name?: string | null
@@ -830,6 +834,8 @@ export type Database = {
           box_size?: string | null
           company_name?: string | null
           created_at?: string | null
+          deletion_requested_at?: string | null
+          deletion_requested_by?: string | null
           expiry_date?: string | null
           format?: string | null
           generic_name?: string | null
@@ -1087,17 +1093,23 @@ export type Database = {
       }
       pharmacy_settings: {
         Row: {
+          max_discount_percent: number
           pharmacy_id: string
+          require_discount_approval: boolean
           starting_cash_balance: number
           updated_at: string
         }
         Insert: {
+          max_discount_percent?: number
           pharmacy_id: string
+          require_discount_approval?: boolean
           starting_cash_balance?: number
           updated_at?: string
         }
         Update: {
+          max_discount_percent?: number
           pharmacy_id?: string
+          require_discount_approval?: boolean
           starting_cash_balance?: number
           updated_at?: string
         }
@@ -2473,6 +2485,18 @@ export type Database = {
       is_super_admin: { Args: never; Returns: boolean }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
+      request_medicine_deletion: {
+        Args: { _medicine_id: string; _reason?: string }
+        Returns: Json
+      }
+      resolve_medicine_deletion: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: Json
+      }
+      resolve_sale_discount: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: Json
+      }
       revoke_staff_session: {
         Args: { _session_id: string }
         Returns: undefined
@@ -2508,6 +2532,8 @@ export type Database = {
           box_size: string | null
           company_name: string | null
           created_at: string | null
+          deletion_requested_at: string | null
+          deletion_requested_by: string | null
           expiry_date: string | null
           format: string | null
           generic_name: string | null
