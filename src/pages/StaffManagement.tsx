@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { STAFF_PERMISSIONS, inviteRoleLabel, profileRoleToInviteRole, type InviteRole } from "@/lib/staffRoles";
-import ActivityFeed from "@/components/staff/ActivityFeed";
+import DutyControlCenter from "@/components/staff/DutyControlCenter";
 import SecurityPanel from "@/components/staff/SecurityPanel";
 
 
@@ -805,10 +805,12 @@ const StaffManagement = () => {
           {/* ---------------- ACTIVITY ---------------- */}
           {isAdmin && (
             <TabsContent value="activity" className="mt-4">
-              <ActivityFeed
+              <DutyControlCenter
                 nameOf={nameOf}
+                canControl={isAdmin}
                 staffOptions={overview.map((r) => ({ user_id: r.user_id, full_name: r.full_name }))}
               />
+
             </TabsContent>
           )}
 

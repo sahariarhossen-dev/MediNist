@@ -104,12 +104,16 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
-      const medsRes = await supabase
+      const medsQuery = supabase
         .from("medicines")
         .select("*")
         .eq("pharmacy_id", profile.pharmacy_id)
         .order("name", { ascending: true });
+      // Products awaiting the owner's deletion decision are hidden from staff
+      if (profile.role !== "admin") medsQuery.is("deletion_requested_at" as any, null);
+      const medsRes = await medsQuery;
       setMedicines(medsRes.data || []);
+
       setLoading(false);
 
       // Fetch full distinct company list from master_medicines.
@@ -138,7 +142,7 @@ const Inventory = () => {
       }
     };
     fetchData();
-  }, [profile?.pharmacy_id, refreshToken]);
+  }, [profile?.pharmacy_id, profile?.role, refreshToken]);
 
   useEffect(() => {
     if (searchOpen && searchRef.current) {
@@ -425,12 +429,20 @@ const Inventory = () => {
     });
   };
 
+  const isOwner = profile?.role === "admin";
+
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
     const med = medicines.find((m) => m.id === deleteConfirmId);
-    const { error } = await supabase.from("medicines").delete().eq("id", deleteConfirmId);
+    const { data, error } = await supabase.rpc("request_medicine_deletion" as any, {
+      _medicine_id: deleteConfirmId,
+      _reason: null,
+    });
     if (error) {
-      toast.error("Failed to delete product");
+      toast.error(error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to delete product");
+    } else if ((data as any)?.status === "pending") {
+      toast.success("Deletion request sent to the shop owner");
+      setMedicines((prev) => prev.filter((m) => m.id !== deleteConfirmId));
     } else {
       toast.success(`${med?.name || "Product"} deleted`);
       setMedicines((prev) => prev.filter((m) => m.id !== deleteConfirmId));
@@ -438,6 +450,7 @@ const Inventory = () => {
     setDeleteConfirmId(null);
     setLongPressId(null);
   };
+
 
   const longPressMed = longPressId ? medicines.find((m) => m.id === longPressId) : null;
 
@@ -855,14 +868,23 @@ const Inventory = () => {
                 <Trash2 size={24} className="text-destructive" />
               </div>
             </div>
-            <p className="text-sm font-bold text-foreground text-center mb-1">Delete Product?</p>
+            <p className="text-sm font-bold text-foreground text-center mb-1">
+              {isOwner ? "Delete Product?" : "Request Deletion?"}
+            </p>
             <p className="text-xs text-muted-foreground text-center mb-5">
-              Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.
+              {isOwner ? (
+                <>Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.</>
+              ) : (
+                <><span className="font-semibold text-foreground">{longPressMed.name}</span> will be hidden and sent to the shop owner for approval.</>
+              )}
             </p>
             <div className="flex gap-3">
               <button onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }} className="flex-1 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-accent transition-colors">Cancel</button>
-              <button onClick={handleDeleteConfirm} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors">Delete</button>
+              <button onClick={handleDeleteConfirm} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors">
+                {isOwner ? "Delete" : "Request"}
+              </button>
             </div>
+
           </div>
         </div>
       )}

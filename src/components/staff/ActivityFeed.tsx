@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  Activity, AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck, User, Users,
-} from "lucide-react";
+import { AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDuration } from "@/lib/deviceInfo";
 import { relativeTime } from "@/lib/relativeTime";
-import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
 
 const PAGE = 25;
+
 
 export type Severity = "info" | "shift" | "audit" | "high_risk";
 
@@ -27,12 +24,8 @@ interface FeedItem {
   created_at: string;
 }
 
-interface Kpis {
-  active_now: number;
-  avg_shift_seconds: number;
-  idle_seconds_today: number;
-  high_risk_today: number;
-}
+
+
 
 export interface FeedStaffOption {
   user_id: string;
@@ -77,34 +70,28 @@ const dayLabel = (iso: string) => {
 
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
-const KpiTile = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
-  <div className="p-3 rounded-2xl bg-card border border-border">
-    <div className="flex items-center gap-1.5 mb-1">
-      {icon}
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground truncate">{label}</p>
-    </div>
-    <p className="text-base font-bold text-foreground tabular-nums">{value}</p>
-  </div>
-);
+
+
 
 const ActivityFeed = ({
   nameOf,
-  staffOptions = [],
+  userFilter = "all",
+  refreshKey = 0,
 }: {
   nameOf: (id: string) => string;
-  staffOptions?: FeedStaffOption[];
+  userFilter?: string;
+  refreshKey?: number;
 }) => {
   const { profile } = useAuth();
   const [rows, setRows] = useState<FeedItem[]>([]);
-  const [kpis, setKpis] = useState<Kpis | null>(null);
   const [filter, setFilter] = useState<"all" | Severity>("all");
-  const [userFilter, setUserFilter] = useState<string>("all");
   const [includeSales, setIncludeSales] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+
 
   const fetchPage = useCallback(
     async (before: string | null, replace: boolean) => {
@@ -142,7 +129,7 @@ const ActivityFeed = ({
         if (!wantShifts) return [];
         let q = supabase
           .from("staff_shifts" as any)
-          .select("id,user_id,started_at,device_label,active_seconds,idle_seconds")
+          .select("id,user_id,started_at,ended_at,device_label,active_seconds")
           .eq("pharmacy_id", profile.pharmacy_id)
           .order("started_at", { ascending: false })
           .limit(PAGE);
@@ -153,13 +140,14 @@ const ActivityFeed = ({
           id: `shift-${r.id}`,
           user_id: r.user_id,
           action_type: "shift_start",
-          description: `Clocked in${r.device_label ? ` · ${r.device_label}` : ""} · ${formatDuration(
-            Number(r.active_seconds || 0),
-          )} active, ${formatDuration(Number(r.idle_seconds || 0))} idle`,
+          description: `Duty started${r.device_label ? ` · ${r.device_label}` : ""}${
+            r.ended_at ? ` · ${formatDuration(Number(r.active_seconds || 0))} on duty` : " · on duty now"
+          }`,
           amount: null,
           severity: "shift" as Severity,
           created_at: r.started_at,
         }));
+
       })();
 
       const [logs, shifts] = await Promise.all([logsPromise, shiftsPromise]);
@@ -181,17 +169,8 @@ const ActivityFeed = ({
       await fetchPage(null, true);
       setLoading(false);
     })();
-  }, [profile?.pharmacy_id, fetchPage]);
+  }, [profile?.pharmacy_id, fetchPage, refreshKey]);
 
-  useEffect(() => {
-    if (!profile?.pharmacy_id) return;
-    void (async () => {
-      const { data } = await supabase.rpc("get_staff_activity_kpis" as any, {
-        _user_id: userFilter === "all" ? null : userFilter,
-      });
-      if (data) setKpis(data as unknown as Kpis);
-    })();
-  }, [profile?.pharmacy_id, userFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -217,32 +196,6 @@ const ActivityFeed = ({
 
   return (
     <div className="space-y-3">
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-2">
-        <KpiTile
-          icon={<Users size={12} className="text-emerald-600" />}
-          label="Active now"
-          value={String(kpis?.active_now ?? 0)}
-        />
-        <KpiTile
-          icon={<Clock size={12} className="text-sky-600" />}
-          label="Avg shift today"
-          value={formatDuration(Number(kpis?.avg_shift_seconds ?? 0))}
-        />
-        <KpiTile
-          icon={<Activity size={12} className="text-amber-600" />}
-          label="Idle today"
-          value={formatDuration(Number(kpis?.idle_seconds_today ?? 0))}
-        />
-        <KpiTile
-          icon={<AlertOctagon size={12} className="text-destructive" />}
-          label="High-risk today"
-          value={String(kpis?.high_risk_today ?? 0)}
-        />
-      </div>
-
-      <StaffPresenceStrip userFilter={userFilter} />
-
       {/* Filters */}
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
         {FILTERS.map((f) => (
@@ -261,38 +214,21 @@ const ActivityFeed = ({
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search person or action"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
-          />
-        </div>
-        <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="w-[140px] rounded-xl h-10 text-xs">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <User size={13} className="text-muted-foreground shrink-0" />
-              <SelectValue placeholder="All Staff" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Staff</SelectItem>
-            {staffOptions.map((s) => (
-              <SelectItem key={s.user_id} value={s.user_id}>
-                {s.full_name || "Member"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search person or action"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
+        />
       </div>
 
       <label className="flex items-center gap-2 px-1">
         <Switch checked={includeSales} onCheckedChange={setIncludeSales} />
         <span className="text-xs text-muted-foreground">Include routine sales</span>
       </label>
+
 
       {loading && <p className="text-sm text-muted-foreground text-center py-6">Loading activity…</p>}
       {!loading && filtered.length === 0 && (

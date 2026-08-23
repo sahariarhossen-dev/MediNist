@@ -395,7 +395,7 @@ const CreateSale = () => {
           .insert(items.map((it) => ({ ...it, sale_id: saleId })));
         if (itemsError) throw itemsError;
       } else {
-        const { error: rpcError } = await supabase.rpc(
+        const { data: newSaleId, error: rpcError } = await supabase.rpc(
           "complete_sale" as never,
           { _payload: salePayload } as never,
         );
@@ -408,11 +408,31 @@ const CreateSale = () => {
               `Not enough stock for "${out?.medicine.name ?? "an item"}". Refresh and try again.`,
             );
           }
+          if (/ACCESS_READ_ONLY/i.test(msg)) throw new Error("App blocked by shop owner");
+          if (/ACCESS_SUSPENDED/i.test(msg)) throw new Error("Your access has been suspended");
           throw new Error(msg);
+        }
+        if (newSaleId) {
+          const { data: saved } = await supabase
+            .from("sales")
+            .select("status")
+            .eq("id", newSaleId as unknown as string)
+            .maybeSingle();
+          if (saved?.status === "pending_approval") {
+            toast.warning("Discount above shop limit — waiting for owner approval");
+            setCartItems([]);
+            setSearchQuery("");
+            setSearchResults([]);
+            setExpandedId(null);
+            setDraftId(null);
+            navigate("/sales");
+            return;
+          }
         }
       }
 
       toast.success(status === "draft" ? "Sale saved as draft" : "Sale completed!");
+
       setCartItems([]);
       setSearchQuery("");
       setSearchResults([]);
