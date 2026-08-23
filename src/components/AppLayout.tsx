@@ -6,6 +6,7 @@ import SubscriptionExpiredOverlay from "./subscription/SubscriptionExpiredOverla
 import { useLocation } from "react-router-dom";
 import DemoBanner from "./DemoBanner";
 import SecurityGate from "./security/SecurityGate";
+import ReadOnlyBanner from "./ReadOnlyBanner";
 import { useAuth } from "@/contexts/AuthContext";
 
 
@@ -18,10 +19,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <ScrollContainerProvider>
       <DemoBanner />
+      <ReadOnlyBanner />
       {children}
       <BottomNav />
       <SecurityGate />
       {isExpired && !allowDuringExpiry && !isDemo && <SubscriptionExpiredOverlay />}
+
 
     </ScrollContainerProvider>
   );
