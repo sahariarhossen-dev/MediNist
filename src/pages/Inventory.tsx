@@ -104,12 +104,16 @@ const Inventory = () => {
         setLoading(false);
         return;
       }
-      const medsRes = await supabase
+      const medsQuery = supabase
         .from("medicines")
         .select("*")
         .eq("pharmacy_id", profile.pharmacy_id)
         .order("name", { ascending: true });
+      // Products awaiting the owner's deletion decision are hidden from staff
+      if (profile.role !== "admin") medsQuery.is("deletion_requested_at" as any, null);
+      const medsRes = await medsQuery;
       setMedicines(medsRes.data || []);
+
       setLoading(false);
 
       // Fetch full distinct company list from master_medicines.
