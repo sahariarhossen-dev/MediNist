@@ -868,14 +868,23 @@ const Inventory = () => {
                 <Trash2 size={24} className="text-destructive" />
               </div>
             </div>
-            <p className="text-sm font-bold text-foreground text-center mb-1">Delete Product?</p>
+            <p className="text-sm font-bold text-foreground text-center mb-1">
+              {isOwner ? "Delete Product?" : "Request Deletion?"}
+            </p>
             <p className="text-xs text-muted-foreground text-center mb-5">
-              Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.
+              {isOwner ? (
+                <>Are you sure you want to delete <span className="font-semibold text-foreground">{longPressMed.name}</span>? This action cannot be undone.</>
+              ) : (
+                <><span className="font-semibold text-foreground">{longPressMed.name}</span> will be hidden and sent to the shop owner for approval.</>
+              )}
             </p>
             <div className="flex gap-3">
               <button onClick={() => { setDeleteConfirmId(null); setLongPressId(null); }} className="flex-1 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-accent transition-colors">Cancel</button>
-              <button onClick={handleDeleteConfirm} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors">Delete</button>
+              <button onClick={handleDeleteConfirm} className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:bg-destructive/90 transition-colors">
+                {isOwner ? "Delete" : "Request"}
+              </button>
             </div>
+
           </div>
         </div>
       )}
