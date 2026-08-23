@@ -2372,6 +2372,22 @@ export type Database = {
         Args: { _other_user: string }
         Returns: string
       }
+      get_pending_approvals: {
+        Args: { _user_id?: string }
+        Returns: {
+          action: string
+          amount: number
+          created_at: string
+          discount_percent: number
+          entity_id: string
+          entity_type: string
+          id: string
+          reason: string
+          requested_by: string
+          requester_name: string
+          title: string
+        }[]
+      }
       get_pharmacy_member_directory: {
         Args: never
         Returns: {
@@ -2431,6 +2447,7 @@ export type Database = {
       get_staff_activity_kpis:
         | { Args: never; Returns: Json }
         | { Args: { _user_id?: string }; Returns: Json }
+      get_staff_duty_summary: { Args: { _user_id?: string }; Returns: Json }
       get_staff_presence_today: {
         Args: never
         Returns: {
