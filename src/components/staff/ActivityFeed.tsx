@@ -86,22 +86,23 @@ const KpiTile = ({ icon, label, value }: { icon: React.ReactNode; label: string;
 
 const ActivityFeed = ({
   nameOf,
-  staffOptions = [],
+  userFilter = "all",
+  refreshKey = 0,
 }: {
   nameOf: (id: string) => string;
-  staffOptions?: FeedStaffOption[];
+  userFilter?: string;
+  refreshKey?: number;
 }) => {
   const { profile } = useAuth();
   const [rows, setRows] = useState<FeedItem[]>([]);
-  const [kpis, setKpis] = useState<Kpis | null>(null);
   const [filter, setFilter] = useState<"all" | Severity>("all");
-  const [userFilter, setUserFilter] = useState<string>("all");
   const [includeSales, setIncludeSales] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+
 
   const fetchPage = useCallback(
     async (before: string | null, replace: boolean) => {
