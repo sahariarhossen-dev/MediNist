@@ -142,7 +142,7 @@ const Inventory = () => {
       }
     };
     fetchData();
-  }, [profile?.pharmacy_id, refreshToken]);
+  }, [profile?.pharmacy_id, profile?.role, refreshToken]);
 
   useEffect(() => {
     if (searchOpen && searchRef.current) {
