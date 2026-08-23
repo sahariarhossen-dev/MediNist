@@ -70,15 +70,8 @@ const dayLabel = (iso: string) => {
 
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
-const KpiTile = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
-  <div className="p-3 rounded-2xl bg-card border border-border">
-    <div className="flex items-center gap-1.5 mb-1">
-      {icon}
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground truncate">{label}</p>
-    </div>
-    <p className="text-base font-bold text-foreground tabular-nums">{value}</p>
-  </div>
-);
+
+
 
 const ActivityFeed = ({
   nameOf,
