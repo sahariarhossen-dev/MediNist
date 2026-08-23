@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  Activity, AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck, User, Users,
-} from "lucide-react";
+import { AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDuration } from "@/lib/deviceInfo";
 import { relativeTime } from "@/lib/relativeTime";
-import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
 
 const PAGE = 25;
+
 
 export type Severity = "info" | "shift" | "audit" | "high_risk";
 
