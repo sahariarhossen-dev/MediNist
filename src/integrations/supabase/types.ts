@@ -1501,8 +1501,11 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_read_only: boolean
           is_suspended: boolean
           pharmacy_id: string
+          read_only_reason: string | null
+          read_only_since: string | null
           suspend_reason: string | null
           suspended_at: string | null
           updated_at: string
@@ -1512,8 +1515,11 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_read_only?: boolean
           is_suspended?: boolean
           pharmacy_id: string
+          read_only_reason?: string | null
+          read_only_since?: string | null
           suspend_reason?: string | null
           suspended_at?: string | null
           updated_at?: string
@@ -1523,8 +1529,11 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_read_only?: boolean
           is_suspended?: boolean
           pharmacy_id?: string
+          read_only_reason?: string | null
+          read_only_since?: string | null
           suspend_reason?: string | null
           suspended_at?: string | null
           updated_at?: string
@@ -1749,40 +1758,52 @@ export type Database = {
       staff_shifts: {
         Row: {
           active_seconds: number
+          close_reason: string | null
+          closed_by: string | null
           created_at: string
           device_label: string | null
           ended_at: string | null
           id: string
           idle_seconds: number
           last_heartbeat_at: string
+          opened_by: string | null
           pharmacy_id: string
           session_id: string | null
+          source: string
           started_at: string
           user_id: string
         }
         Insert: {
           active_seconds?: number
+          close_reason?: string | null
+          closed_by?: string | null
           created_at?: string
           device_label?: string | null
           ended_at?: string | null
           id?: string
           idle_seconds?: number
           last_heartbeat_at?: string
+          opened_by?: string | null
           pharmacy_id: string
           session_id?: string | null
+          source?: string
           started_at?: string
           user_id: string
         }
         Update: {
           active_seconds?: number
+          close_reason?: string | null
+          closed_by?: string | null
           created_at?: string
           device_label?: string | null
           ended_at?: string | null
           id?: string
           idle_seconds?: number
           last_heartbeat_at?: string
+          opened_by?: string | null
           pharmacy_id?: string
           session_id?: string | null
+          source?: string
           started_at?: string
           user_id?: string
         }
@@ -2260,10 +2281,16 @@ export type Database = {
       admin_remove_staff: { Args: { _user_id: string }; Returns: undefined }
       admin_reset_staff_pin: { Args: { _user_id: string }; Returns: undefined }
       admin_resync_medicines_pack_info: { Args: never; Returns: number }
+      admin_set_staff_read_only: {
+        Args: { _on: boolean; _reason?: string; _user_id: string }
+        Returns: undefined
+      }
       admin_set_staff_role: {
         Args: { _role: string; _user_id: string }
         Returns: undefined
       }
+      admin_start_shift: { Args: { _user_id: string }; Returns: string }
+      admin_stop_shift: { Args: { _user_id: string }; Returns: string }
       admin_truncate_master_medicines: { Args: never; Returns: undefined }
       close_stale_shifts: { Args: never; Returns: number }
       complete_sale: { Args: { _payload: Json }; Returns: string }
@@ -2441,6 +2468,7 @@ export type Database = {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
       }
+      is_staff_read_only: { Args: { _user_id: string }; Returns: boolean }
       is_staff_suspended: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
