@@ -10,6 +10,7 @@ import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/f
 import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
+import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
 
 interface Medicine {
   id: string;
@@ -408,7 +409,10 @@ const CreateSale = () => {
               `Not enough stock for "${out?.medicine.name ?? "an item"}". Refresh and try again.`,
             );
           }
-          if (/ACCESS_READ_ONLY/i.test(msg)) throw new Error("App blocked by shop owner");
+          if (/ACCESS_READ_ONLY/i.test(msg)) {
+            reportReadOnlyBlock(msg, "sales");
+            throw new Error("App blocked by shop owner");
+          }
           if (/ACCESS_SUSPENDED/i.test(msg)) throw new Error("Your access has been suspended");
           throw new Error(msg);
         }
