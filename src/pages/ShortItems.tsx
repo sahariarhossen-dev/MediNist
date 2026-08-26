@@ -27,7 +27,6 @@ interface LowStockItem {
 }
 
 const ShortItems = () => {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const [items, setItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);

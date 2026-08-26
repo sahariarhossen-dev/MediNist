@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import MessageItem from "@/components/messaging/MessageItem";
@@ -15,7 +15,6 @@ const initials = (n: string | null | undefined) =>
 
 const ChatRoom = () => {
   const { roomId } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { room, members, messages, typingUserIds, sendMessage, markRead, broadcastTyping, loading, reload } =
     useChatRoom(roomId);

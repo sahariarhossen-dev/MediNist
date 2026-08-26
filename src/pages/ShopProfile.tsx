@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Pencil, Check, Camera, Store, FileText, Percent } from "lucide-react";
@@ -26,7 +26,6 @@ interface PharmacyData {
 }
 
 const ShopProfile = () => {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
   const [editing, setEditing] = useState(false);

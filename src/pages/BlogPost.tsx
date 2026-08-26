@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { ArrowLeft } from "lucide-react";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { getPostBySlug, getSortedPosts, type BlogPost } from "@/data/blogPosts";
 import { formatPostDate } from "@/lib/formatDate";

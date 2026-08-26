@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { format } from "date-fns";
 import { Plus, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,7 +29,6 @@ const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
 
 const AllTransactions = () => {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [txs, setTxs] = useState<CashTx[]>([]);
