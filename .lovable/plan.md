@@ -1,54 +1,44 @@
-# Security Tab Redesign — Assessment & Proposal
+# Remove Security Tab, PIN Lock & Network Restriction
 
-## 1. Assessment of your 4-step plan
+Strips the PIN lock overlay, IP/network restriction and the whole Security tab out of the client, while keeping duty tracking and the Activity (Duty & Fraud Control) tab fully intact.
 
-All four steps are right, and step 1 is the single biggest win. Notes per step:
+## Important dependency
 
-- **Human-readable Wi-Fi (step 1)** — agreed, but this needs a small data change. Today `staff_security_settings.allowed_ip_hashes` is a plain `text[]`, so there is nowhere to store a name like "Main Counter Network". We should move to a labelled shape (a `jsonb` list of `{hash, label, added_at, added_by}`) and migrate existing hashes in with an auto label ("Shop network 1"). Hashes then never appear in the UI at all.
-- **Health summary banner (step 2)** — agreed. Make it computed, not decorative: one score derived from real signals (PIN lock on, at least one network bound, no stale/unknown devices, no recent security red flags). If it can be "Protected" while something is actually open, owners stop trusting it.
-- **Card layout + microcopy (step 3)** — agreed. Each card gets a plain "why" line and, importantly, a "what happens to my staff" line, since these toggles can lock people out. The current copy explains the mechanism, not the consequence.
-- **Visual devices + remote sign-out (step 4)** — agreed, with one guardrail: remote sign-out should confirm before firing ("Sign out Rakib's phone? He'll need to log in again."), and show the device's last-seen shift context so the owner isn't kicking someone mid-sale.
+`SecurityGate` currently does three things: shift heartbeat tracking, IP guard, and PIN lock. The heartbeat (`useShiftTracker` -> `heartbeat_shift`) is what feeds duty presence and the Activity tab's shift rows, so it must survive. It gets remounted on its own instead of being deleted with the gate.
 
-One risk to fix while we're here: turning on network restriction with zero networks added currently silently allows everyone (the edge function treats an empty list as "allow all"). The UI should never present that state as protected — it should read "Not active yet — add this network".
+## Frontend changes
 
-## 2. Recommended additions (with business value)
+1. `src/components/AppLayout.tsx`
+   - Replace `<SecurityGate />` with a new lightweight `<ShiftTracker />` (renders nothing, calls `useShiftTracker()` only).
+2. New `src/components/staff/ShiftTracker.tsx` — heartbeat-only mount.
+3. Delete:
+   - `src/components/security/SecurityGate.tsx`
+   - `src/components/security/LockOverlay.tsx`
+   - `src/hooks/useScreenLock.ts`
+   - `src/hooks/useIpGuard.ts`
+   - `src/components/staff/SecurityPanel.tsx`
+   - the `src/components/security/` folder once empty
+4. `src/pages/StaffManagement.tsx`
+   - Remove the `Security` tab trigger and its `TabsContent`, plus the `SecurityPanel` import. Tabs become `Team`, `Invites`, `Activity`; the tab strip widths/grid adjust to the remaining three.
+   - If `security` is ever the default/active tab value or arrives via a URL param, fall back to `team`.
+5. Keep `src/lib/deviceInfo.ts` (`getSessionId`, `detectDevice`) — still used by the heartbeat.
 
-1. **Guided "Lock down my shop" setup (2 taps)** — one button that enables PIN lock, adds the current Wi-Fi as "Shop Wi-Fi", and shows a summary. *Why:* security features die from setup friction; owners who never finish setup get zero protection. This converts the tab from a settings screen into an outcome.
-2. **Per-staff PIN status list** — who has a PIN set, who is currently locked out from failed attempts, and a "Reset PIN" action. *Why:* today the owner has no way to see or fix a staff member stuck at the lock screen, so the first lockout becomes a support call and the feature gets switched off.
-3. **Recent security events strip (last 7 days)** — 3-5 latest `security`/`high_risk` rows already being logged (failed PINs, blocked network attempts, remote sign-outs), with "See all" jumping into the Activity tab's Security filter. *Why:* proof the protection is working. Without visible output, owners assume nothing is happening and disable it.
-4. **Unknown-device / new-network alert** — when a device signs in from a network that is not on the allowed list (even while restriction is off, in "watch" mode), surface it as a card the owner can either approve as a new network or sign out. *Why:* this catches the real-world case — a staff member using the POS from home — without requiring the owner to pre-configure anything.
-5. **Stale device cleanup** — group devices not seen in 14+ days under "Old devices" with a single "Sign out all old devices" action. *Why:* the list grows with every phone and browser; a long list makes anomalies invisible.
+After the edits: confirm nothing references `LockOverlay`, `useScreenLock`, `useIpGuard`, `SecurityGate` or `SecurityPanel`, and run a TypeScript check.
 
-Deliberately *not* recommending: 2FA/OTP on staff login (adds daily friction for counter staff for little gain here), geofencing (unreliable indoors and battery-hostile), and per-device permission overrides (duplicates the existing staff permission model).
+## Backend / edge function
 
-## 3. Proposed structure of the redesigned tab
+- Delete the `session-guard` edge function and its `supabase/config.toml` entry — it existed only for IP hashing and the network check.
+- **No database drops.** `staff_pins`, `staff_sessions`, `staff_security_settings` and the PIN RPCs stay in place but become unreferenced by the client. Reasons: the security-event audit logging added last week writes `pin_failed` / `session_revoked` style rows and `revoke_staff_session` is referenced by existing log history, and dropping tables is irreversible. They cost nothing while idle.
+- Safety switch: set `pin_lock_enabled = false` and `ip_restriction_enabled = false` on every `staff_security_settings` row, so no already-enabled shop can be affected by any stale client.
 
-```text
-┌──────────────────────────────────────────┐
-│ Security status: Protected               │  computed banner
-│ PIN lock on · 1 network bound · 3 devices│
-│ [Fix: add this network]  (when needed)   │
-└──────────────────────────────────────────┘
-  Screen PIN lock          [card, toggle, grace period]
-  Shop network             [card, toggle, named badges]
-  Staff PIN status         [list: set / locked out / reset]
-  Active devices           [device cards, Sign out]
-  Old devices (2)          [collapsed, bulk sign-out]
-  Recent security events   [3 rows → Activity/Security]
-```
+If you would rather fully drop the three tables and PIN/session functions, say so and that becomes a second migration.
 
-## 4. Technical notes
+## Untouched
 
-- **Migration:** add `allowed_networks jsonb default '[]'` to `staff_security_settings`, backfill from `allowed_ip_hashes` with generated labels, keep the old column readable during transition; update the `session-guard` edge function to read hashes out of the new shape. Empty-list semantics change from "allow all" to "restriction not yet active" (surfaced in the UI, not silently permissive).
-- **PIN status:** needs a new owner-only `SECURITY DEFINER` RPC returning `{user_id, has_pin, locked_until}` from `staff_pins` — never the hash.
-- **Unknown-device detection:** compare `staff_sessions.ip_hash` (already stored) against the allowed list client-side for the owner; no new writes needed.
-- **Security events strip:** reads `staff_activity_logs` filtered to `severity in ('security','high_risk')` — all these events are already being written by the audit work just shipped.
-- **Frontend:** split `SecurityPanel.tsx` into `SecurityStatusBanner`, `PinLockCard`, `ShopNetworkCard`, `StaffPinStatusList`, `DeviceList`, `SecurityEventsStrip`. Semantic tokens only, no raw hashes rendered anywhere.
-- No changes to POS, inventory or billing paths.
+POS billing, inventory, sales, customer ledger, the Activity tab (Duty card, deletion approvals, high-discount approvals, audit/high-risk feed, red flag banner, export) and `ReadOnlyBanner` / remote read-only lock — that is a staff-permission feature, not a PIN feature.
 
-## 5. Suggested build order
+## Verification
 
-1. Migration + `session-guard` update + PIN status RPC.
-2. Banner, PIN card, network card with named badges.
-3. Device list rework (confirm dialog, old-device grouping, unknown-device alert).
-4. Staff PIN status list + security events strip + guided setup button.
+- Load `/staff-management` as owner: exactly three tabs, Activity renders unchanged.
+- Reload the app and background the tab past the old grace period: no PIN overlay, no network toast.
+- Confirm a duty/presence row still updates (heartbeat alive).
