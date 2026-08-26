@@ -460,11 +460,6 @@ const StaffManagement = () => {
                 <Activity size={14} /> Activity
               </TabsTrigger>
             )}
-            {isAdmin && (
-              <TabsTrigger value="security" className="flex-1 rounded-xl gap-1.5">
-                <ShieldCheck size={14} /> Security
-              </TabsTrigger>
-            )}
           </TabsList>
 
 
@@ -814,12 +809,6 @@ const StaffManagement = () => {
             </TabsContent>
           )}
 
-          {/* ---------------- SECURITY ---------------- */}
-          {isAdmin && (
-            <TabsContent value="security" className="mt-4">
-              <SecurityPanel nameOf={nameOf} />
-            </TabsContent>
-          )}
 
         </Tabs>
       </div>
