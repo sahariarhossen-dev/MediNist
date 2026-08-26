@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Play, Square, Lock, Receipt, Clock } from "lucide-react";
+import { Play, Square, Lock, Receipt, Clock, Pause, Coffee } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { formatDuration } from "@/lib/deviceInfo";
@@ -13,12 +13,17 @@ export interface DutySummary {
   sales_amount_month: number;
   duty_seconds_today: number;
   duty_seconds_month: number;
+  break_seconds_today: number;
+  break_seconds_month: number;
   pending_deletions: number;
   pending_discounts: number;
   is_read_only: boolean;
   shift_open: boolean;
   shift_started_at: string | null;
+  on_break: boolean;
+  break_started_at: string | null;
 }
+
 
 const timeOf = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—";
