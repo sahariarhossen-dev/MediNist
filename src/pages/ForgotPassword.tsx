@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
@@ -85,7 +85,6 @@ const ForgotPassword = () => {
               </Button>
 
               <Link to="/login" className="flex items-center justify-center gap-1 text-sm text-gray-500 hover:text-blue-600 mt-2">
-                <ArrowLeft size={16} />
                 Back to Sign In
               </Link>
             </form>

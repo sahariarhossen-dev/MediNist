@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { FileSignature, Cloud, Scale, ArrowLeft } from "lucide-react";
+import { FileSignature, Cloud, Scale } from "lucide-react";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +83,6 @@ const Terms = () => {
               to="/"
               className="group inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-all hover:border-brand hover:text-brand hover:shadow-sm md:text-sm"
             >
-              <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
               Back to Home
             </Link>
           </div>

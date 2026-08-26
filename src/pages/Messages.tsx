@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MessageSquarePlus, Search } from "lucide-react";
+import { MessageSquarePlus, Search } from "lucide-react";
 import InboxRow from "@/components/messaging/InboxRow";
 import NewChatSheet from "@/components/messaging/NewChatSheet";
 import { useChatInbox } from "@/hooks/useChatInbox";
@@ -58,13 +58,6 @@ const Messages = () => {
   return (
     <div className="min-h-[calc(100vh-72px)] bg-gray-50 pb-20">
       <div className="bg-white border-b border-gray-200 px-3 py-3 flex items-center gap-2 sticky top-0 z-10">
-        <button
-          onClick={() => navigate("/dashboard", { replace: true })}
-          className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-5 w-5 text-gray-700" />
-        </button>
         <h1 className="text-lg font-bold text-gray-900 flex-1">Messages</h1>
       </div>
       <div className="px-3 py-2 bg-white">

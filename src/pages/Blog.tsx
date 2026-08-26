@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { getSortedPosts, type BlogPost } from "@/data/blogPosts";
 import { formatPostDate } from "@/lib/formatDate";
@@ -131,7 +131,6 @@ const Blog = () => {
             to="/"
             className="group inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 transition hover:text-brand"
           >
-            <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-0.5" />
             Back to Home
           </Link>
         </div>

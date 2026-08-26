@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import MessageItem from "@/components/messaging/MessageItem";
 import ChatInput from "@/components/messaging/ChatInput";
@@ -59,13 +59,6 @@ const ChatRoom = () => {
   return (
     <div className="flex flex-col h-screen bg-[#efeae2]">
       <header className="flex items-center gap-3 bg-white border-b border-gray-200 px-3 py-2 shrink-0">
-        <button
-          onClick={() => navigate("/messages", { replace: true })}
-          className="h-9 w-9 rounded-full hover:bg-gray-100 flex items-center justify-center"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-5 w-5 text-gray-700" />
-        </button>
         <button
           onClick={openHeader}
           className="flex items-center gap-3 flex-1 min-w-0 -mx-1 px-1 py-1 rounded-md hover:bg-gray-50 text-left"
