@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertOctagon, ChevronRight, Clock, Search, ShieldAlert, ShieldCheck, KeyRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { formatDuration } from "@/lib/deviceInfo";
 import { relativeTime } from "@/lib/relativeTime";
+import LogDiffDrawer, { type DiffChange, type DiffLog } from "@/components/staff/LogDiffDrawer";
 
 const PAGE = 25;
 
 
-export type Severity = "info" | "shift" | "audit" | "high_risk";
+export type Severity = "info" | "shift" | "audit" | "high_risk" | "security";
 
 interface FeedItem {
   id: string;
@@ -22,6 +23,7 @@ interface FeedItem {
   amount: number | null;
   severity: Severity;
   created_at: string;
+  changes: DiffChange[];
 }
 
 
@@ -36,6 +38,7 @@ const FILTERS: { key: "all" | Severity; label: string }[] = [
   { key: "all", label: "All" },
   { key: "high_risk", label: "High risk" },
   { key: "audit", label: "Audit" },
+  { key: "security", label: "Security" },
   { key: "shift", label: "Shifts" },
 ];
 
@@ -45,6 +48,8 @@ const badgeFor = (s: Severity) => {
       return { label: "High Risk", cls: "bg-destructive/10 text-destructive border-destructive/20", rail: "bg-destructive" };
     case "audit":
       return { label: "Audit Alert", cls: "bg-amber-100 text-amber-800 border-amber-200", rail: "bg-amber-500" };
+    case "security":
+      return { label: "Security", cls: "bg-violet-100 text-violet-800 border-violet-200", rail: "bg-violet-500" };
     case "shift":
       return { label: "Shift Log", cls: "bg-sky-100 text-sky-800 border-sky-200", rail: "bg-sky-500" };
     default:
@@ -55,6 +60,7 @@ const badgeFor = (s: Severity) => {
 const iconFor = (s: Severity) =>
   s === "high_risk" ? <AlertOctagon size={14} className="text-destructive" />
   : s === "audit" ? <ShieldAlert size={14} className="text-amber-600" />
+  : s === "security" ? <KeyRound size={14} className="text-violet-600" />
   : s === "shift" ? <Clock size={14} className="text-sky-600" />
   : <ShieldCheck size={14} className="text-emerald-600" />;
 
@@ -70,49 +76,69 @@ const dayLabel = (iso: string) => {
 
 const money = (n: number) => `৳${Math.round(n).toLocaleString("en-IN")}`;
 
-
+const changesOf = (metadata: unknown): DiffChange[] => {
+  const raw = (metadata as { changes?: unknown } | null)?.changes;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((c) => c && typeof c === "object")
+    .map((c) => {
+      const o = c as Record<string, unknown>;
+      return {
+        field: String(o.field ?? "Field"),
+        old: o.old == null ? null : String(o.old),
+        new: o.new == null ? null : String(o.new),
+      };
+    });
+};
 
 
 const ActivityFeed = ({
   nameOf,
   userFilter = "all",
   refreshKey = 0,
+  filter,
+  onFilterChange,
 }: {
   nameOf: (id: string) => string;
   userFilter?: string;
   refreshKey?: number;
+  filter?: "all" | Severity;
+  onFilterChange?: (f: "all" | Severity) => void;
 }) => {
   const { profile } = useAuth();
   const [rows, setRows] = useState<FeedItem[]>([]);
-  const [filter, setFilter] = useState<"all" | Severity>("all");
-  
+  const [innerFilter, setInnerFilter] = useState<"all" | Severity>("all");
+  const activeFilter = filter ?? innerFilter;
+  const setFilter = (f: "all" | Severity) => (onFilterChange ? onFilterChange(f) : setInnerFilter(f));
+
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  const [openLog, setOpenLog] = useState<DiffLog | null>(null);
 
 
   const fetchPage = useCallback(
     async (before: string | null, replace: boolean) => {
       if (!profile?.pharmacy_id) return;
 
-      const wantLogs = filter !== "shift";
-      const wantShifts = filter === "all" || filter === "shift";
+      const wantLogs = activeFilter !== "shift";
+      const wantShifts = activeFilter === "all" || activeFilter === "shift";
 
       const logsPromise = (async (): Promise<FeedItem[]> => {
         if (!wantLogs) return [];
         let q = supabase
           .from("staff_activity_logs" as any)
-          .select("id,user_id,action_type,description,amount,severity,created_at")
+          .select("id,user_id,action_type,description,amount,severity,created_at,metadata")
           .eq("pharmacy_id", profile.pharmacy_id)
           .order("created_at", { ascending: false })
           .limit(PAGE);
-        if (filter !== "all") q = q.eq("severity", filter);
+        if (activeFilter !== "all") q = q.eq("severity", activeFilter);
         if (userFilter !== "all") q = q.eq("user_id", userFilter);
         if (before) q = q.lt("created_at", before);
         // Routine (info-level) sale entries are never shown in this feed
-        q = q.or("action_type.neq.sale,severity.neq.info");
+        q = q.or("action_type.neq.sale_create,severity.neq.info");
         const { data } = await q;
         return ((data as any[]) || []).map((r) => ({
           id: r.id,
@@ -122,6 +148,7 @@ const ActivityFeed = ({
           amount: r.amount,
           severity: (r.severity || "info") as Severity,
           created_at: r.created_at,
+          changes: changesOf(r.metadata),
         }));
       })();
 
@@ -146,6 +173,7 @@ const ActivityFeed = ({
           amount: null,
           severity: "shift" as Severity,
           created_at: r.started_at,
+          changes: [],
         }));
 
       })();
@@ -159,7 +187,7 @@ const ActivityFeed = ({
       setCursor(page.length ? page[page.length - 1].created_at : before);
       setRows((prev) => (replace ? page : [...prev, ...page]));
     },
-    [profile?.pharmacy_id, filter, userFilter],
+    [profile?.pharmacy_id, activeFilter, userFilter],
   );
 
   useEffect(() => {
@@ -204,7 +232,7 @@ const ActivityFeed = ({
             type="button"
             onClick={() => setFilter(f.key)}
             className={`px-3 h-8 rounded-xl text-xs font-medium whitespace-nowrap border transition ${
-              filter === f.key
+              activeFilter === f.key
                 ? "bg-emerald-600 text-white border-emerald-600"
                 : "bg-card text-muted-foreground border-border"
             }`}
@@ -237,8 +265,30 @@ const ActivityFeed = ({
           {group.items.map((a) => {
             const sev = a.severity;
             const b = badgeFor(sev);
+            const hasDiff = a.changes.length > 0;
             return (
-              <div key={a.id} className="relative overflow-hidden p-3 pl-4 bg-card rounded-2xl border border-border">
+              <div
+                key={a.id}
+                role={hasDiff ? "button" : undefined}
+                tabIndex={hasDiff ? 0 : undefined}
+                onClick={
+                  hasDiff
+                    ? () =>
+                        setOpenLog({
+                          id: a.id,
+                          staffName: nameOf(a.user_id),
+                          action_type: a.action_type,
+                          description: a.description,
+                          amount: a.amount,
+                          created_at: a.created_at,
+                          changes: a.changes,
+                        })
+                    : undefined
+                }
+                className={`relative overflow-hidden p-3 pl-4 bg-card rounded-2xl border border-border ${
+                  hasDiff ? "cursor-pointer active:scale-[0.99] transition" : ""
+                }`}
+              >
                 <span className={`absolute left-0 top-0 bottom-0 w-1 ${b.rail}`} />
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0">{iconFor(sev)}</span>
@@ -257,6 +307,9 @@ const ActivityFeed = ({
                       {a.amount ? ` · ${money(Number(a.amount))}` : ""}
                     </p>
                   </div>
+                  {hasDiff && (
+                    <ChevronRight size={15} className="text-muted-foreground shrink-0 mt-0.5" />
+                  )}
                 </div>
               </div>
             );
@@ -278,6 +331,8 @@ const ActivityFeed = ({
           {more ? "Loading…" : "Load more"}
         </Button>
       )}
+
+      <LogDiffDrawer log={openLog} onOpenChange={(o) => !o && setOpenLog(null)} />
     </div>
   );
 };
