@@ -4,7 +4,6 @@ import { User } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DutyCard, { type DutySummary } from "@/components/staff/DutyCard";
 import ApprovalQueue from "@/components/staff/ApprovalQueue";
-import MonthlySummaryCard from "@/components/staff/MonthlySummaryCard";
 import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
 import ActivityFeed, { type FeedStaffOption, type Severity } from "@/components/staff/ActivityFeed";
 import RedFlagBanner from "@/components/staff/RedFlagBanner";
@@ -40,22 +39,30 @@ const DutyControlCenter = ({
 
   return (
     <div className="space-y-3">
-      <Select value={userFilter} onValueChange={setUserFilter}>
-        <SelectTrigger className="w-full rounded-xl h-10 text-sm">
-          <div className="flex items-center gap-2 min-w-0">
-            <User size={14} className="text-muted-foreground shrink-0" />
-            <SelectValue placeholder="Select staff member" />
-          </div>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Staff</SelectItem>
-          {staffOptions.map((s) => (
-            <SelectItem key={s.user_id} value={s.user_id}>
-              {s.full_name || "Member"}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* Top header: staff selector + export */}
+      <div className="flex gap-2">
+        <Select value={userFilter} onValueChange={setUserFilter}>
+          <SelectTrigger className="flex-1 rounded-xl h-10 text-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <User size={14} className="text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Select staff member" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Staff</SelectItem>
+            {staffOptions.map((s) => (
+              <SelectItem key={s.user_id} value={s.user_id}>
+                {s.full_name || "Member"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <ExportAuditSheet
+          userFilter={userFilter}
+          staffName={selected ? nameOf(userFilter) : "Whole team"}
+          compact
+        />
+      </div>
 
       <RedFlagBanner
         userFilter={userFilter}
@@ -63,22 +70,14 @@ const DutyControlCenter = ({
         onSelect={() => setFeedFilter("high_risk")}
       />
 
-      <ExportAuditSheet
-        userFilter={userFilter}
-        staffName={selected ? nameOf(userFilter) : "Whole team"}
-      />
-
       <DutyCard
         summary={summary}
-        staffName={selected ? nameOf(userFilter) : "Whole team"}
         userId={selected ? userFilter : null}
         canControl={canControl}
         onChanged={bump}
       />
 
       <ApprovalQueue userFilter={userFilter} refreshKey={refreshKey} onResolved={bump} />
-
-      {selected && <MonthlySummaryCard summary={summary} />}
 
       {!selected && <StaffPresenceStrip userFilter={userFilter} />}
 

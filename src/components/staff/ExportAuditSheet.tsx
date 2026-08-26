@@ -37,9 +37,11 @@ const monthAgo = () => {
 const ExportAuditSheet = ({
   userFilter,
   staffName,
+  compact = false,
 }: {
   userFilter: string;
   staffName: string;
+  compact?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(monthAgo());
@@ -126,10 +128,21 @@ const ExportAuditSheet = ({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="outline" className="w-full rounded-xl gap-1.5">
-          <Download size={14} />
-          Export Duty &amp; Audit Report
-        </Button>
+        {compact ? (
+          <Button
+            variant="outline"
+            className="shrink-0 rounded-xl h-10 px-3 gap-1.5"
+            title={`Export report — ${staffName}`}
+          >
+            <Download size={14} />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+        ) : (
+          <Button variant="outline" className="w-full rounded-xl gap-1.5">
+            <Download size={14} />
+            Export Duty &amp; Audit Report
+          </Button>
+        )}
       </SheetTrigger>
       <SheetContent side="bottom" className="rounded-t-2xl">
         <SheetHeader className="text-left">
