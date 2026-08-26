@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft, Send, AlertTriangle, Trash2, Copy, Megaphone, Trophy, ChevronRight,
-  Search, MoreVertical, ShieldCheck, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
+  Search, MoreVertical, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
   Activity, Users, Zap,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
