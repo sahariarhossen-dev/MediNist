@@ -1093,22 +1093,31 @@ export type Database = {
       }
       pharmacy_settings: {
         Row: {
+          closing_discrepancy_limit: number
+          large_cash_out_threshold: number
           max_discount_percent: number
           pharmacy_id: string
+          price_drop_alert_percent: number
           require_discount_approval: boolean
           starting_cash_balance: number
           updated_at: string
         }
         Insert: {
+          closing_discrepancy_limit?: number
+          large_cash_out_threshold?: number
           max_discount_percent?: number
           pharmacy_id: string
+          price_drop_alert_percent?: number
           require_discount_approval?: boolean
           starting_cash_balance?: number
           updated_at?: string
         }
         Update: {
+          closing_discrepancy_limit?: number
+          large_cash_out_threshold?: number
           max_discount_percent?: number
           pharmacy_id?: string
+          price_drop_alert_percent?: number
           require_discount_approval?: boolean
           starting_cash_balance?: number
           updated_at?: string
