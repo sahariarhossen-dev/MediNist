@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useScrollFocusedInput } from "@/hooks/useScrollFocusedInput";
+import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
 
 const baseSchema = z.object({
   party_name: z
