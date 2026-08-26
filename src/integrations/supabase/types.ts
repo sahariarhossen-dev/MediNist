@@ -2330,6 +2330,10 @@ export type Database = {
         }
         Returns: string
       }
+      get_audit_report: {
+        Args: { _from?: string; _to?: string; _user_id?: string }
+        Returns: Json
+      }
       get_chat_inbox: {
         Args: never
         Returns: {
@@ -2509,6 +2513,11 @@ export type Database = {
       is_staff_read_only: { Args: { _user_id: string }; Returns: boolean }
       is_staff_suspended: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      log_blocked_ip_attempt: {
+        Args: { _ip_hash: string; _pharmacy_id: string; _user_id: string }
+        Returns: undefined
+      }
+      log_read_only_block: { Args: { _entity?: string }; Returns: undefined }
       mark_room_read: { Args: { _room_id: string }; Returns: undefined }
       realtime_room_topic_uuid: { Args: { _topic: string }; Returns: string }
       request_medicine_deletion: {
