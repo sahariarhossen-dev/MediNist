@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Plus, X, User as UserIcon } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
@@ -49,7 +48,6 @@ const Customers = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
-      <AppHeader />
 
       <div className="flex items-center justify-between px-page pt-3 pb-2">
         <button onClick={() => navigate("/more")} className="flex items-center gap-2 text-gray-800">

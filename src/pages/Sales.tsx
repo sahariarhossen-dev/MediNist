@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, isToday, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import AppHeader from "@/components/AppHeader";
 import { formatMoney } from "@/lib/formatUtils";
 
 const sparklineData = [
@@ -79,7 +78,6 @@ const Sales = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 w-full max-w-md mx-auto pb-28">
-      <AppHeader />
       <div className="px-page pt-6 pb-2">
         <h1 className="text-fluid-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
         <p className="text-fluid-sm text-gray-400 mt-0.5">Manage your daily transactions</p>

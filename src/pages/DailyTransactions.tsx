@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isSameDay, subDays } from "date-fns";
 import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -214,7 +213,6 @@ const DailyTransactions = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
-      <AppHeader />
 
       {/* Title row */}
       <div className="flex items-center justify-between px-page pt-3 pb-2">

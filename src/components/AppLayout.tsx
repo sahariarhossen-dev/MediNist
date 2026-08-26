@@ -1,4 +1,5 @@
 import BottomNav from "./BottomNav";
+import AppHeader from "./AppHeader";
 import { ScrollContainerProvider } from "@/contexts/ScrollContainerContext";
 import { useRootBackHandler } from "@/hooks/useRootBackHandler";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -10,7 +11,7 @@ import ReadOnlyBanner from "./ReadOnlyBanner";
 import { useAuth } from "@/contexts/AuthContext";
 
 
-const AppLayout = ({ children }: { children: React.ReactNode }) => {
+const AppLayout = ({ children, showHeader = true }: { children: React.ReactNode; showHeader?: boolean }) => {
   useRootBackHandler();
   const { isExpired } = useSubscription();
   const { isDemo } = useAuth();
@@ -20,6 +21,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     <ScrollContainerProvider>
       <DemoBanner />
       <ReadOnlyBanner />
+      {showHeader && <AppHeader />}
       {children}
       <BottomNav />
       <ShiftTracker />

@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Package, Settings, ChevronRight, Store, Wallet, Users, StickyNote, CreditCard, UserCog } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import AppHeader from "@/components/AppHeader";
 
 const allMenuItems = [
   { label: "Add Inventory", icon: Package, path: "/inventory", color: "text-blue-600" },
@@ -49,7 +48,6 @@ const More = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
-      <AppHeader />
 
       {/* Static Identity Card – Shop logo, user name, shop name */}
       <div className="mx-page mt-2 bg-white rounded-2xl p-4 shadow-sm">

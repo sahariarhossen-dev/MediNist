@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, Search, Pill, Plus, X, Check, Pencil, Trash2, Loader2, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import AppHeader from "@/components/AppHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -459,7 +458,6 @@ const Inventory = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
       {/* Top Header */}
-      <AppHeader />
 
       {/* Search Bar */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
