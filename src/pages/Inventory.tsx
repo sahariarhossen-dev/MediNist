@@ -15,6 +15,7 @@ import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
 import { useDebounce } from "@/hooks/useDebounce";
+import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
 
 interface Medicine {
   id: string;
@@ -439,6 +440,7 @@ const Inventory = () => {
       _reason: null,
     });
     if (error) {
+      reportReadOnlyBlock(error.message, "medicines");
       toast.error(error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to delete product");
     } else if ((data as any)?.status === "pending") {
       toast.success("Deletion request sent to the shop owner");
