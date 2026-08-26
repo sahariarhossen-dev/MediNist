@@ -439,6 +439,7 @@ const Inventory = () => {
       _reason: null,
     });
     if (error) {
+      reportReadOnlyBlock(error.message, "medicines");
       toast.error(error.message.replace(/^[A-Z_]+:\s*/, "") || "Failed to delete product");
     } else if ((data as any)?.status === "pending") {
       toast.success("Deletion request sent to the shop owner");

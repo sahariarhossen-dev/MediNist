@@ -118,6 +118,7 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, cas
 
     if (error) {
       const msg = error.message || "";
+      reportReadOnlyBlock(msg, "cash_transactions");
       if (msg.includes("INSUFFICIENT_CASH")) {
         toast({
           title: "Insufficient Cash in Hand",
