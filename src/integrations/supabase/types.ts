@@ -1779,9 +1779,11 @@ export type Database = {
       staff_shifts: {
         Row: {
           active_seconds: number
+          break_seconds: number
           close_reason: string | null
           closed_by: string | null
           created_at: string
+          current_break_started_at: string | null
           device_label: string | null
           ended_at: string | null
           id: string
@@ -1796,9 +1798,11 @@ export type Database = {
         }
         Insert: {
           active_seconds?: number
+          break_seconds?: number
           close_reason?: string | null
           closed_by?: string | null
           created_at?: string
+          current_break_started_at?: string | null
           device_label?: string | null
           ended_at?: string | null
           id?: string
@@ -1813,9 +1817,11 @@ export type Database = {
         }
         Update: {
           active_seconds?: number
+          break_seconds?: number
           close_reason?: string | null
           closed_by?: string | null
           created_at?: string
+          current_break_started_at?: string | null
           device_label?: string | null
           ended_at?: string | null
           id?: string
@@ -2299,8 +2305,10 @@ export type Database = {
           role: string
         }[]
       }
+      admin_pause_shift: { Args: { _user_id: string }; Returns: string }
       admin_remove_staff: { Args: { _user_id: string }; Returns: undefined }
       admin_reset_staff_pin: { Args: { _user_id: string }; Returns: undefined }
+      admin_resume_shift: { Args: { _user_id: string }; Returns: string }
       admin_resync_medicines_pack_info: { Args: never; Returns: number }
       admin_set_staff_read_only: {
         Args: { _on: boolean; _reason?: string; _user_id: string }
