@@ -92,25 +92,25 @@ const App = () => (
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
             <Route path="/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />
-            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-            <Route path="/add-product" element={<ProtectedRoute><AddProduct /></ProtectedRoute>} />
-            <Route path="/add-company" element={<ProtectedRoute><AddCompany /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
+            <Route path="/add-product" element={<ProtectedRoute><AppLayout><AddProduct /></AppLayout></ProtectedRoute>} />
+            <Route path="/add-company" element={<ProtectedRoute><AppLayout><AddCompany /></AppLayout></ProtectedRoute>} />
             <Route path="/create-sale" element={<ProtectedRoute><CreateSale /></ProtectedRoute>} />
             <Route path="/invoice/:saleId" element={<ProtectedRoute><Invoice /></ProtectedRoute>} />
-            <Route path="/short-items" element={<ProtectedRoute><ShortItems /></ProtectedRoute>} />
-            <Route path="/catalog-search" element={<ProtectedRoute><CatalogSearch /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/shop-profile" element={<ProtectedRoute><ShopProfile /></ProtectedRoute>} />
-            <Route path="/staff-management" element={<ProtectedRoute><StaffManagement /></ProtectedRoute>} />
-            <Route path="/staff/:userId" element={<ProtectedRoute><StaffPerformanceDetails /></ProtectedRoute>} />
-            <Route path="/more/daily-transactions" element={<ProtectedRoute><BlockSalesman><DailyTransactions /></BlockSalesman></ProtectedRoute>} />
-            <Route path="/more/all-transactions" element={<ProtectedRoute><BlockSalesman><AllTransactions /></BlockSalesman></ProtectedRoute>} />
-            <Route path="/personal-report" element={<ProtectedRoute><BlockSalesman><PersonalReport /></BlockSalesman></ProtectedRoute>} />
-            <Route path="/more/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-            <Route path="/more/customers/:id" element={<ProtectedRoute><CustomerProfile /></ProtectedRoute>} />
-            <Route path="/more/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
+            <Route path="/short-items" element={<ProtectedRoute><AppLayout><ShortItems /></AppLayout></ProtectedRoute>} />
+            <Route path="/catalog-search" element={<ProtectedRoute><AppLayout><CatalogSearch /></AppLayout></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><AppLayout><Profile /></AppLayout></ProtectedRoute>} />
+            <Route path="/shop-profile" element={<ProtectedRoute><AppLayout><ShopProfile /></AppLayout></ProtectedRoute>} />
+            <Route path="/staff-management" element={<ProtectedRoute><AppLayout><StaffManagement /></AppLayout></ProtectedRoute>} />
+            <Route path="/staff/:userId" element={<ProtectedRoute><AppLayout><StaffPerformanceDetails /></AppLayout></ProtectedRoute>} />
+            <Route path="/more/daily-transactions" element={<ProtectedRoute><BlockSalesman><AppLayout><DailyTransactions /></AppLayout></BlockSalesman></ProtectedRoute>} />
+            <Route path="/more/all-transactions" element={<ProtectedRoute><BlockSalesman><AppLayout><AllTransactions /></AppLayout></BlockSalesman></ProtectedRoute>} />
+            <Route path="/personal-report" element={<ProtectedRoute><BlockSalesman><AppLayout><PersonalReport /></AppLayout></BlockSalesman></ProtectedRoute>} />
+            <Route path="/more/customers" element={<ProtectedRoute><AppLayout><Customers /></AppLayout></ProtectedRoute>} />
+            <Route path="/more/customers/:id" element={<ProtectedRoute><AppLayout><CustomerProfile /></AppLayout></ProtectedRoute>} />
+            <Route path="/more/notes" element={<ProtectedRoute><AppLayout><Notes /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
-            <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+            <Route path="/messages" element={<ProtectedRoute><AppLayout><Messages /></AppLayout></ProtectedRoute>} />
             <Route path="/messages/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute><AppLayout><Subscription /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription/checkout" element={<ProtectedRoute><AppLayout><SubscriptionCheckout /></AppLayout></ProtectedRoute>} />
