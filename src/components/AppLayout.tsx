@@ -5,7 +5,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import SubscriptionExpiredOverlay from "./subscription/SubscriptionExpiredOverlay";
 import { useLocation } from "react-router-dom";
 import DemoBanner from "./DemoBanner";
-import SecurityGate from "./security/SecurityGate";
+import ShiftTracker from "./staff/ShiftTracker";
 import ReadOnlyBanner from "./ReadOnlyBanner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -22,7 +22,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       <ReadOnlyBanner />
       {children}
       <BottomNav />
-      <SecurityGate />
+      <ShiftTracker />
       {isExpired && !allowDuringExpiry && !isDemo && <SubscriptionExpiredOverlay />}
 
 

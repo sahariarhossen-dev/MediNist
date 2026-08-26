@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft, Send, AlertTriangle, Trash2, Copy, Megaphone, Trophy, ChevronRight,
-  Search, MoreVertical, ShieldCheck, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
+  Search, MoreVertical, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
   Activity, Users, Zap,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { STAFF_PERMISSIONS, inviteRoleLabel, profileRoleToInviteRole, type InviteRole } from "@/lib/staffRoles";
 import DutyControlCenter from "@/components/staff/DutyControlCenter";
-import SecurityPanel from "@/components/staff/SecurityPanel";
 
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -460,11 +459,6 @@ const StaffManagement = () => {
                 <Activity size={14} /> Activity
               </TabsTrigger>
             )}
-            {isAdmin && (
-              <TabsTrigger value="security" className="flex-1 rounded-xl gap-1.5">
-                <ShieldCheck size={14} /> Security
-              </TabsTrigger>
-            )}
           </TabsList>
 
 
@@ -814,12 +808,6 @@ const StaffManagement = () => {
             </TabsContent>
           )}
 
-          {/* ---------------- SECURITY ---------------- */}
-          {isAdmin && (
-            <TabsContent value="security" className="mt-4">
-              <SecurityPanel nameOf={nameOf} />
-            </TabsContent>
-          )}
 
         </Tabs>
       </div>
