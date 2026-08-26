@@ -1,59 +1,57 @@
-# Activity Filter Chips — Audit Coverage Review & Proposed Log Expansion
+# Activity, Security & Audit System — Full Implementation
 
-## Part 1: What populates each chip today (verified in DB)
+Builds on the audit review: closes the logging coverage gaps, adds a Security chip, and ships four owner-facing UX features. `staff_activity_logs.severity` has no CHECK constraint, so a new `security` severity is safe to introduce.
 
-The feed in `src/components/staff/ActivityFeed.tsx` merges two sources: rows from `staff_activity_logs` (filtered by `severity`) and synthetic rows built from `staff_shifts` (always rendered as severity `shift`). Routine sales (`action_type='sale_create'` at `info`) are excluded by the `or("action_type.neq.sale,severity.neq.info")` guard — note this guard tests `sale`, not `sale_create`, so info-level `sale_create` rows currently still pass the filter.
+## Phase 1 — Migration A: audit thresholds & inventory/ledger logging
 
-### Shifts (`severity='shift'`)
-- Synthetic rows from `staff_shifts` (one per shift row, "Duty started … / on duty now"). Shift rows are created by the `heartbeat_shift` RPC (browser telemetry) and by manual owner control.
-- `shift_start` — inserted by `admin_start_shift` ("Shift started by owner/manager").
-- `shift_end` — inserted by `admin_stop_shift` ("Shift stopped by owner/manager").
-- Also a `shift` insert on first heartbeat shift creation (migration `20260822191001`).
-- Live data: 13 `shift_start` rows at `shift`.
+- `pharmacy_settings`: add `large_cash_out_threshold numeric default 5000`, `closing_discrepancy_limit numeric default 500`, `price_drop_alert_percent numeric default 20`. Existing hard-coded ৳5,000 rule in `log_cash_transaction_activity` reads from here (falls back to the default when no settings row exists).
+- New `log_medicine_update_activity()` — AFTER UPDATE on `medicines`, `SECURITY DEFINER`, early-returns when `auth.uid()` is null:
+  - price change -> `inventory_price_change`, `audit`; `high_risk` when the drop exceeds `price_drop_alert_percent`.
+  - stock decrease with no `sale_items` row for that medicine in the last 60 seconds -> `inventory_stock_adjust`, `high_risk`; increases -> `audit`.
+  - expiry/pack edits -> `inventory_edit`, `audit`.
+  - `metadata` always carries `{field, old, new}` pairs for the diff viewer.
+  - Guard: single trigger, one insert max per statement, indexed lookups only — no effect on POS billing (sales decrement stock through `complete_sale`, which will set a `app.skip_inventory_log` flag so billing writes stay unlogged).
+- Rewrite `log_customer_ledger_activity()` to cover all entry types and UPDATE/DELETE: `due_added` (`info`), `due_adjusted` (`audit`), `due_written_off` (`high_risk`), `payment_received` unchanged (`info`).
 
-### High risk (`severity='high_risk'`)
-From triggers:
-- `log_sale_activity` (on `sales`): `sale_void` (completed -> non-completed), `sale_delete` (delete of a completed sale).
-- `log_cash_transaction_activity` (on `cash_transactions`): `transaction_delete` (any deleted non-sale cash row); `transaction_create` where `direction='out'` and `amount >= 5000` (large cash-out).
-- `log_medicine_delete_activity` (on `medicines`): `inventory_delete`, with stock quantity captured in `metadata`.
+## Phase 2 — Migration B: cash closing, security & settings events
 
-From RPCs:
-- `request_medicine_deletion` -> `deletion_requested` ("Requested deletion of …").
-- `complete_sale` -> `discount_approval_requested` when the discount exceeds `pharmacy_settings.max_discount_percent`.
-- `resolve_sale_discount` reject path logs high risk.
+- `submit_blind_closing`: after writing the closing row, insert `day_closed` with `amount = discrepancy` and `metadata = {declared, system, discrepancy}` — `info` within ±৳50, `audit` beyond, `high_risk` when the shortfall exceeds `closing_discrepancy_limit`.
+- Security stream (new severity `security`, so it lands in the Security chip; the genuinely dangerous ones stay `high_risk`):
+  - `verify_staff_pin` -> `pin_failed` (`security`), `pin_locked` (`high_risk`).
+  - `set_staff_pin` -> `pin_set` (`security`); `admin_reset_staff_pin` -> `pin_reset` (`security`).
+  - `revoke_staff_session` -> `session_revoked` (`security`).
+  - `session-guard` edge function -> `blocked_ip_attempt` (`high_risk`), written with the service-role client.
+  - `read_only_block` (`high_risk`) — a trigger insert would roll back with the RAISE, so the attempt is logged from the guarded RPC paths (`complete_sale`, `request_medicine_deletion`, cash/ledger inserts) which check `is_staff_read_only` and log before refusing. Net effect: every refusal is recorded.
+- Settings/permission audit triggers (all `audit`):
+  - `pharmacy_settings` UPDATE -> `settings_changed` with old/new in `metadata`.
+  - `pharmacies.default_discount` change -> `discount_policy_changed`.
+  - `staff_permissions` INSERT/UPDATE/DELETE -> `permission_changed` (`{permission_key, old, new}`).
+  - `staff_access.is_suspended` change -> `staff_suspended` / `staff_unsuspended`.
 
-### Audit (`severity='audit'`)
-- `log_sale_activity`: `sale_update` (edit of an already-completed sale); `sale_create` whose `discount_percent` exceeds `pharmacies.default_discount`.
-- `log_cash_transaction_activity`: `transaction_update` (edited cash row); `transaction_create` with `direction='out'` below the ৳5,000 threshold.
-- `admin_set_staff_read_only` -> `remote_lock_on` / `remote_lock_off`.
-- `resolve_medicine_deletion` -> `deletion_approved` / `deletion_restored`.
-- `resolve_sale_discount` approve path -> `discount_approved`.
+## Phase 3 — Frontend
 
-### Info (never chip-filtered, shown only under "All")
-`sale_create` (routine), `transaction_create` (cash in), `payment_received` (customer ledger payment), `ai_denied_query` (RBAC refusal from `ai-chat`), `staff_removed`, `staff_role_changed`.
+`src/components/staff/ActivityFeed.tsx`
+- Fix the filter guard: replace `or("action_type.neq.sale,severity.neq.info")` with a correct exclusion of `action_type='sale_create' AND severity='info'` (`or("action_type.neq.sale_create,severity.neq.info")`).
+- Add the `Security` chip to `FILTERS`; badge styling in `badgeFor`/`iconFor` (violet, `ShieldAlert`).
+- Rows with `metadata` diff pairs get a chevron affordance; tapping opens the new diff drawer.
+- Subscribe to `staff_activity_logs` realtime (pharmacy-scoped) and raise a toast for incoming `high_risk` rows.
 
-## Part 2: Coverage gaps found in the codebase
+New components under `src/components/staff/`
+- `LogDiffDrawer.tsx` — bottom sheet (`Drawer`) rendering `Stock: 50 ➔ 30` style rows from `metadata`, plus actor, time, amount.
+- `RedFlagBanner.tsx` — "Today's Red Flags: X" card at the top of the Activity tab; counts today's `high_risk` rows for the current staff filter; tapping sets the feed filter to `high_risk`.
+- `ExportAuditSheet.tsx` — date-range picker + staff selector, exports duty hours, invoice counts and audit rows. Excel via `xlsx` (SheetJS) and PDF via `jspdf` + `jspdf-autotable`; both generated client-side from a single fetch.
 
-Actions that mutate money, stock, access, or identity today with **no** `staff_activity_logs` entry:
+`src/components/staff/DutyControlCenter.tsx`
+- Mounts `RedFlagBanner` and the Export button above `DutyCard`, and lifts the feed's severity filter into shared state so the banner can drive it.
 
-1. **Inventory edits.** `medicines` has a delete trigger only. Price changes, stock_quantity changes, and expiry edits from `AddProduct.tsx` / `Inventory.tsx` are unlogged — the single easiest way to hide theft (drop stock, raise price, edit later).
-2. **Customer ledger, except payments.** `log_customer_ledger_activity` returns early unless `entry_type='payment'`. Manual due creation, adjustments, and write-offs (`AddManualDueSheet`, `customer_dues`) leave no trace, and there is no UPDATE/DELETE logging at all.
-3. **Security events.** `verify_staff_pin` failures/lockouts, `revoke_staff_session`, `set_staff_pin` / `admin_reset_staff_pin`, IP-restriction blocks (`session-guard`), and revoked-session forced sign-outs are all silent in the feed.
-4. **Permission and access changes.** Direct writes to `staff_permissions` and suspension toggles on `staff_access` (`is_suspended`) are not logged; only role change, removal, and read-only lock are.
-5. **Day close.** `submit_blind_closing` / `daily_closings` (declared vs system cash, discrepancy) never reach the feed — the single most owner-relevant number.
-6. **Read-only refusals.** `tg_block_read_only_staff` raises but records nothing, so repeated attempts by a locked user are invisible.
-7. **Shop settings.** Changes to `pharmacies.default_discount`, `pharmacy_settings.max_discount_percent`, and `require_discount_approval` are unlogged — someone can raise the ceiling and then discount freely.
+## Phase 4 — Verification
 
-## Recommended additions (highest impact first)
-
-1. **`log_medicine_update_activity` trigger** on `medicines` UPDATE — emit `inventory_price_change` (`audit`, `high_risk` if price drops >20%), `inventory_stock_adjust` (`high_risk` when stock is reduced without a matching sale), with old/new values in `metadata`.
-2. **Cash-drawer closing log** — inside `submit_blind_closing`, insert `day_closed` with `amount = discrepancy`: `info` when within ±৳50, `audit` beyond that, `high_risk` when shortfall exceeds a configurable limit.
-3. **Security event stream** — log `pin_failed` (`audit`), `pin_locked` (`high_risk`), `session_revoked` (`audit`), `pin_reset` (`audit`), `blocked_ip_attempt` (`high_risk`) from `verify_staff_pin`, `revoke_staff_session`, `admin_reset_staff_pin`, and `session-guard`. Add a 5th chip **Security**, or fold these into Audit/High risk.
-4. **Ledger write-off / due adjustment log** — extend `log_customer_ledger_activity` to cover every `entry_type` plus UPDATE/DELETE: `due_added` (`info`), `due_adjusted` (`audit`), `due_written_off` (`high_risk`).
-5. **Access & settings audit** — triggers on `staff_permissions`, `staff_access.is_suspended`, `pharmacy_settings`, and `pharmacies.default_discount` writing `permission_changed` / `staff_suspended` / `discount_policy_changed` at `audit`, plus `read_only_block` (`high_risk`) from `tg_block_read_only_staff` (needs an autonomous-transaction or pre-raise insert pattern).
+- Browser pass as owner: edit a product price and stock, confirm two rows appear under High risk/Audit with a working diff drawer; confirm a routine sale produces no feed row; confirm the red-flag count matches a direct SQL count; export both files and open them.
+- Confirm a normal POS sale writes no `inventory_*` log and adds no measurable latency (timing check around `complete_sale`).
 
 ## Technical notes
 
-- All new logging belongs in `SECURITY DEFINER` triggers/RPCs following the existing `log_*_activity` shape (early return when `auth.uid()` is null so cron and edge-function writes don't create ownerless rows).
-- Severity thresholds (large cash-out ৳5,000, closing discrepancy, price-drop %) should move into `pharmacy_settings` columns rather than staying hard-coded in function bodies.
-- `ActivityFeed` needs no structural change for items 1-5 except the `sale`/`sale_create` filter fix and, if we add the Security chip, one more entry in `FILTERS`.
+- Every new function is `SECURITY DEFINER`, `SET search_path = public`, `EXECUTE` to `authenticated` only; triggers early-return when `auth.uid()` is null so cron/edge writes never create ownerless rows.
+- Existing partial indexes on `(pharmacy_id, severity, created_at DESC)` already cover the new chip and the red-flag count.
+- Export is fully client-side; no new edge function or storage bucket.
+- New npm deps: `xlsx`, `jspdf`, `jspdf-autotable`.
