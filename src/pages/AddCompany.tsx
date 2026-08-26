@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import useDebounce from "@/hooks/useDebounce";
 
@@ -50,12 +50,6 @@ const AddCompany = () => {
   return (
     <div className="min-h-[calc(100vh-72px)] bg-background">
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={() => navigate("/add-product", { state: formData })}
-          className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors"
-        >
-          <ArrowLeft size={20} className="text-foreground" />
-        </button>
         <h1 className="text-lg font-bold text-foreground">Select Your Company</h1>
       </div>
 
