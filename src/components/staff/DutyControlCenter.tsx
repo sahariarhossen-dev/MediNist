@@ -6,7 +6,6 @@ import DutyCard, { type DutySummary } from "@/components/staff/DutyCard";
 import ApprovalQueue from "@/components/staff/ApprovalQueue";
 import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
 import ActivityFeed, { type FeedStaffOption, type Severity } from "@/components/staff/ActivityFeed";
-import RedFlagBanner from "@/components/staff/RedFlagBanner";
 import ExportAuditSheet from "@/components/staff/ExportAuditSheet";
 
 const DutyControlCenter = ({
@@ -63,12 +62,6 @@ const DutyControlCenter = ({
           compact
         />
       </div>
-
-      <RedFlagBanner
-        userFilter={userFilter}
-        refreshKey={refreshKey}
-        onSelect={() => setFeedFilter("high_risk")}
-      />
 
       <DutyCard
         summary={summary}
