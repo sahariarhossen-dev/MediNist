@@ -21,7 +21,7 @@ Builds on the audit review: closes the logging coverage gaps, adds a Security ch
   - `set_staff_pin` -> `pin_set` (`security`); `admin_reset_staff_pin` -> `pin_reset` (`security`).
   - `revoke_staff_session` -> `session_revoked` (`security`).
   - `session-guard` edge function -> `blocked_ip_attempt` (`high_risk`), written with the service-role client.
-  - `tg_block_read_only_staff` -> `read_only_block` (`high_risk`). Because the trigger raises, the insert is written from a small `log_security_event(...)` helper called via `pg_background`-free pattern: the helper is invoked before the RAISE inside a `BEGIN ... EXCEPTION` block in a separate `SECURITY DEFINER` function using `dblink`-free autonomous emulation is not available, so instead the client-visible refusal path logs it — the trigger records the attempt into `staff_activity_logs` through a `pg_notify`-independent route: we switch the read-only guard to log first, then raise, and accept that the log rolls back on the same transaction; to keep the record we instead log from the RPC wrappers (`complete_sale`, `request_medicine_deletion`, cash/ledger inserts) which check `is_staff_read_only` before mutating. Net effect: refusals are recorded.
+  - `read_only_block` (`high_risk`) — a trigger insert would roll back with the RAISE, so the attempt is logged from the guarded RPC paths (`complete_sale`, `request_medicine_deletion`, cash/ledger inserts) which check `is_staff_read_only` and log before refusing. Net effect: every refusal is recorded.
 - Settings/permission audit triggers (all `audit`):
   - `pharmacy_settings` UPDATE -> `settings_changed` with old/new in `metadata`.
   - `pharmacies.default_discount` change -> `discount_policy_changed`.
