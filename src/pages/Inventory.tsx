@@ -456,7 +456,7 @@ const Inventory = () => {
   const longPressMed = longPressId ? medicines.find((m) => m.id === longPressId) : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-6">
+    <div className="min-h-[calc(100vh-72px)] bg-gray-50 pb-6">
       {/* Top Header */}
 
       {/* Search Bar */}

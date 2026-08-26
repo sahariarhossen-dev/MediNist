@@ -318,7 +318,7 @@ const Index = () => {
       ];
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
 
       <BroadcastBanner />

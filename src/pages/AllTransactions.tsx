@@ -61,7 +61,7 @@ const AllTransactions = () => {
   }, [txs]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
 
       <div className="flex items-center gap-2 px-page pt-3 pb-2">
         <button

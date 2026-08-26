@@ -58,7 +58,7 @@ const Notes = () => {
     (profile?.full_name?.trim().charAt(0) || user?.email?.charAt(0) || "U").toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 w-full max-w-3xl mx-auto pb-32">
+    <div className="min-h-[calc(100vh-72px)] bg-slate-50 dark:bg-slate-950 w-full max-w-3xl mx-auto pb-32">
       <NotesMenu
         open={menuOpen}
         onOpenChange={setMenuOpen}

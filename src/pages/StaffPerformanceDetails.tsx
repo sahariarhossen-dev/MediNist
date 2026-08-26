@@ -314,7 +314,7 @@ const StaffPerformanceDetails = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto p-6">
+      <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-32 bg-white rounded-3xl" />
           <div className="h-24 bg-white rounded-3xl" />
@@ -325,7 +325,7 @@ const StaffPerformanceDetails = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-12">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-12">
       {/* Header bar */}
       <div className="sticky top-0 z-10 bg-[#F4F6FB]/90 backdrop-blur px-page pt-3 pb-2 flex items-center gap-3">
         <button

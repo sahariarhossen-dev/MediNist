@@ -56,7 +56,7 @@ const Messages = () => {
   }, [rooms, query, filter]);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-[calc(100vh-72px)] bg-gray-50 pb-20">
       <div className="bg-white border-b border-gray-200 px-3 py-3 flex items-center gap-2 sticky top-0 z-10">
         <button
           onClick={() => navigate("/dashboard", { replace: true })}

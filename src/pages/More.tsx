@@ -47,7 +47,7 @@ const More = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
 
       {/* Static Identity Card – Shop logo, user name, shop name */}
       <div className="mx-page mt-2 bg-white rounded-2xl p-4 shadow-sm">

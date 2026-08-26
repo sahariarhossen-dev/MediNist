@@ -77,7 +77,7 @@ const Sales = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 w-full max-w-md mx-auto pb-28">
+    <div className="min-h-[calc(100vh-72px)] bg-gray-50 w-full max-w-md mx-auto pb-28">
       <div className="px-page pt-6 pb-2">
         <h1 className="text-fluid-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
         <p className="text-fluid-sm text-gray-400 mt-0.5">Manage your daily transactions</p>

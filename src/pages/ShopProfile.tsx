@@ -171,7 +171,7 @@ const ShopProfile = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-10">
+    <div className="min-h-[calc(100vh-72px)] bg-background pb-10">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="p-2 rounded-full bg-muted">

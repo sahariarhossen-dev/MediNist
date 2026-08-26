@@ -415,7 +415,7 @@ const StaffManagement = () => {
   const nameOf = (id: string) => overview.find((r) => r.user_id === id)?.full_name || "Someone";
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-[calc(100vh-72px)] bg-background pb-16">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="p-2 rounded-full bg-muted" aria-label="Go back">
