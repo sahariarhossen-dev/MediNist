@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Phone, MessageCircle, Pencil, Check, X,
+  Phone, MessageCircle, Pencil, Check, X,
   Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -328,13 +328,6 @@ const StaffPerformanceDetails = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-12">
       {/* Header bar */}
       <div className="sticky top-0 z-10 bg-[#F4F6FB]/90 backdrop-blur px-page pt-3 pb-2 flex items-center gap-3">
-        <button
-          onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-xl hover:bg-white/60"
-          aria-label="Back"
-        >
-          <ArrowLeft size={20} />
-        </button>
         <h1 className="text-base font-bold text-gray-900 flex-1 truncate">Staff Performance</h1>
       </div>
 

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pencil, Check, Camera, Store, FileText, Percent } from "lucide-react";
+import { Pencil, Check, Camera, Store, FileText, Percent } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ interface PharmacyData {
 }
 
 const ShopProfile = () => {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
   const [editing, setEditing] = useState(false);
@@ -174,9 +173,6 @@ const ShopProfile = () => {
     <div className="min-h-[calc(100vh-72px)] bg-background pb-10">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-full bg-muted">
-          <ArrowLeft size={20} className="text-foreground" />
-        </button>
         <h1 className="text-lg font-bold text-foreground">Shop Profile</h1>
       </div>
 

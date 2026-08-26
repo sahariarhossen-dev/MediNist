@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { format, startOfDay, endOfDay, isSameDay, subDays } from "date-fns";
-import { ArrowLeft, CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
+import { CalendarIcon, Plus, Minus, Wallet, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -216,13 +216,7 @@ const DailyTransactions = () => {
 
       {/* Title row */}
       <div className="flex items-center justify-between px-page pt-3 pb-2">
-        <button
-          onClick={() => navigate("/more")}
-          className="flex items-center gap-2 text-gray-800"
-        >
-          <ArrowLeft size={20} />
-          <span className="font-semibold text-fluid-base">Daily Transactions</span>
-        </button>
+        <h1 className="font-semibold text-fluid-base text-gray-800">Daily Transactions</h1>
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2 h-9 rounded-xl bg-white">

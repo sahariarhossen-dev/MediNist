@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { ArrowLeft } from "lucide-react";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { getPostBySlug, getSortedPosts, type BlogPost } from "@/data/blogPosts";
 import { formatPostDate } from "@/lib/formatDate";
@@ -139,7 +138,6 @@ const BlogPostPage = () => {
             to="/blog"
             className="group inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 transition hover:text-brand"
           >
-            <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-0.5" />
             All posts
           </Link>
         </div>
@@ -190,7 +188,7 @@ const BlogPostPage = () => {
               to="/blog"
               className="inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline"
             >
-              <ArrowLeft size={14} /> Back to all posts
+              Back to all posts
             </Link>
           </div>
         </div>

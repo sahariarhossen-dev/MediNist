@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { format } from "date-fns";
-import { ArrowLeft, Plus, Minus } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,6 @@ const formatBDT = (n: number) =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
 
 const AllTransactions = () => {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [txs, setTxs] = useState<CashTx[]>([]);
@@ -64,13 +63,7 @@ const AllTransactions = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
 
       <div className="flex items-center gap-2 px-page pt-3 pb-2">
-        <button
-          onClick={() => navigate("/more/daily-transactions")}
-          className="flex items-center gap-2 text-gray-800"
-        >
-          <ArrowLeft size={20} />
-          <span className="font-semibold text-fluid-base">All Transactions</span>
-        </button>
+        <h1 className="font-semibold text-fluid-base text-gray-800">All Transactions</h1>
       </div>
 
       <div className="px-page mt-2">

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { ArrowLeft, Search, X, Plus, Check, Loader2 } from "lucide-react";
+import { Search, X, Plus, Check, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toFunctionalType } from "@/lib/productType";
 import { classifyCatalogPack } from "@/lib/stockUtils";
@@ -148,12 +148,6 @@ const CatalogSearch = () => {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-full bg-primary text-primary-foreground flex-shrink-0"
-          >
-            <ArrowLeft size={18} />
-          </button>
           <h1 className="text-lg font-bold text-foreground truncate">
             Add from Catalog
           </h1>

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  ArrowLeft, Send, AlertTriangle, Trash2, Copy, Megaphone, Trophy, ChevronRight,
+  Send, AlertTriangle, Trash2, Copy, Megaphone, Trophy, ChevronRight,
   Search, MoreVertical, PauseCircle, PlayCircle, UserCog, SlidersHorizontal,
   Activity, Users, Zap,
 } from "lucide-react";
@@ -418,9 +418,6 @@ const StaffManagement = () => {
     <div className="min-h-[calc(100vh-72px)] bg-background pb-16">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-full bg-muted" aria-label="Go back">
-          <ArrowLeft size={20} className="text-foreground" />
-        </button>
         <div className="min-w-0">
           <h1 className="text-lg font-bold text-foreground">Staff Management</h1>
           <p className="text-xs text-muted-foreground">Roles, permissions and performance</p>

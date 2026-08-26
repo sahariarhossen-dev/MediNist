@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, TrendingUp, Receipt, Percent, BarChart3 } from "lucide-react";
+import { TrendingUp, Receipt, Percent, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -125,11 +125,7 @@ const PersonalReport = () => {
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-24">
       <div className="flex items-center justify-between px-page pt-5 pb-3 bg-[#e9f1fb]">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-white/60">
-          <ArrowLeft size={22} className="text-gray-700" />
-        </button>
         <h1 className="text-base font-bold text-gray-900">My Sales Report</h1>
-        <div className="w-8" />
       </div>
 
       <div className="px-page pt-3 pb-2">

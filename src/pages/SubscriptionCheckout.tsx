@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, Smartphone, CreditCard, ShieldCheck } from "lucide-react";
+import { Check, Loader2, Smartphone, CreditCard, ShieldCheck } from "lucide-react";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -64,13 +64,6 @@ export default function SubscriptionCheckout() {
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-32">
       <header className="sticky top-0 z-10 bg-[#F4F6FB]/90 backdrop-blur px-page py-3 flex items-center gap-3">
-        <button
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className="p-2 -ml-2 rounded-full hover:bg-gray-100"
-        >
-          <ArrowLeft size={20} className="text-gray-700" />
-        </button>
         <h1 className="font-bold text-gray-900 text-fluid-lg">Checkout</h1>
       </header>
 

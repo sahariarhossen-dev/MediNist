@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Pill, FlaskConical, Syringe, Package, AlertTriangle, Plus, Check, X, Wind } from "lucide-react";
+import { Pill, FlaskConical, Syringe, Package, AlertTriangle, Plus, Check, X, Wind } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -286,12 +286,6 @@ const AddProduct = () => {
     <div className="min-h-[calc(100vh-72px)] bg-background">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors"
-        >
-          <ArrowLeft size={20} className="text-foreground" />
-        </button>
         <h1 className="text-lg font-bold text-foreground">
           {editId ? "Edit Product" : "Add New Product"}
         </h1>
