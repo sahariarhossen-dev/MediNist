@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown,
+  Camera, Pencil, LogOut, Eye, EyeOff, X, Check, Lock, ChevronDown,
   Award, Zap, Star, TrendingUp, Calendar, Coins, Users as UsersIcon, Mail,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -302,9 +302,6 @@ const Profile = () => {
     <div className="min-h-[calc(100vh-72px)] bg-background max-w-md mx-auto pb-10">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <button onClick={() => navigate("/dashboard", { replace: true })} className="p-2 rounded-full hover:bg-muted transition">
-          <ArrowLeft size={20} className="text-foreground" />
-        </button>
         <h1 className="text-lg font-bold text-foreground">My Profile</h1>
       </div>
 

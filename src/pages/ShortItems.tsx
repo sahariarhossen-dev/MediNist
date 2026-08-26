@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, PackageX } from "lucide-react";
+import { PackageX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -82,12 +82,6 @@ const ShortItems = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-8">
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-3 px-page pt-5 pb-4">
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition"
-        >
-          <ArrowLeft size={22} className="text-gray-700" />
-        </button>
         <h1 className="text-fluid-lg font-bold text-gray-900">Short Items</h1>
         <div className="ml-auto">
           <Select value={selectedCompany} onValueChange={setSelectedCompany}>

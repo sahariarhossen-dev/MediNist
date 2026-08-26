@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Sparkles, Pencil, Check } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
+import { Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -466,9 +466,6 @@ const CreateSale = () => {
       {/* Header */}
       <div className="px-4 pt-5 pb-3 flex items-center justify-between bg-white border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/sales")} className="p-1.5 -ml-1.5 rounded-lg hover:bg-gray-100 transition">
-            <ArrowLeft className="w-5 h-5 text-gray-700" />
-          </button>
           <div className="flex items-center gap-2.5 text-secondary">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Plus, X, User as UserIcon } from "lucide-react";
+import { Search, Plus, X, User as UserIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
@@ -50,10 +50,7 @@ const Customers = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
 
       <div className="flex items-center justify-between px-page pt-3 pb-2">
-        <button onClick={() => navigate("/more")} className="flex items-center gap-2 text-gray-800">
-          <ArrowLeft size={20} />
-          <span className="font-semibold text-fluid-base">Customers</span>
-        </button>
+        <h1 className="font-semibold text-fluid-base text-gray-800">Customers</h1>
         <span className="text-fluid-xs text-gray-500">{rows.length} total</span>
       </div>
 
