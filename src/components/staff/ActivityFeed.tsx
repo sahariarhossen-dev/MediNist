@@ -38,7 +38,6 @@ const FILTERS: { key: "all" | Severity; label: string }[] = [
   { key: "all", label: "All" },
   { key: "high_risk", label: "High risk" },
   { key: "audit", label: "Audit" },
-  { key: "security", label: "Security" },
   { key: "shift", label: "Shifts" },
 ];
 
