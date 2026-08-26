@@ -48,7 +48,7 @@ const AddCompany = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[calc(100vh-72px)] bg-background">
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center gap-3">
         <button
           onClick={() => navigate("/add-product", { state: formData })}

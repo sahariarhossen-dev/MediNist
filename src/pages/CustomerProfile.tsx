@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pencil, Phone, HandCoins, Pill, Plus, ShoppingCart, MapPin, FileText, MinusCircle } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
@@ -112,8 +111,7 @@ const CustomerProfile = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto">
-        <AppHeader />
+      <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto">
         <p className="text-center py-10 text-gray-400 text-sm">Loading…</p>
       </div>
     );
@@ -121,8 +119,7 @@ const CustomerProfile = () => {
 
   if (!customer) {
     return (
-      <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto">
-        <AppHeader />
+      <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto">
         <div className="px-page pt-4">
           <button onClick={() => navigate("/more/customers")} className="text-sm text-blue-600 flex items-center gap-1">
             <ArrowLeft size={16} /> Back to Customers
@@ -138,8 +135,7 @@ const CustomerProfile = () => {
   const dueLabel = due > 0 ? "Total Due" : due < 0 ? "Advance Balance" : "Settled";
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-16">
-      <AppHeader />
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-16">
 
       <div className="flex items-center justify-between px-page pt-3 pb-2">
         <button onClick={() => navigate("/more/customers")} className="flex items-center gap-1.5 text-gray-700">

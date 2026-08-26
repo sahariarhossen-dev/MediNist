@@ -299,7 +299,7 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background max-w-md mx-auto pb-10">
+    <div className="min-h-[calc(100vh-72px)] bg-background max-w-md mx-auto pb-10">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
         <button onClick={() => navigate("/dashboard", { replace: true })} className="p-2 rounded-full hover:bg-muted transition">

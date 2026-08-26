@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ArrowLeft, Plus, Minus } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -62,8 +61,7 @@ const AllTransactions = () => {
   }, [txs]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
-      <AppHeader />
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
 
       <div className="flex items-center gap-2 px-page pt-3 pb-2">
         <button

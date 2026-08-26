@@ -123,7 +123,7 @@ const PersonalReport = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-24">
       <div className="flex items-center justify-between px-page pt-5 pb-3 bg-[#e9f1fb]">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-white/60">
           <ArrowLeft size={22} className="text-gray-700" />

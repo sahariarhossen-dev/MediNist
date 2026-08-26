@@ -42,7 +42,7 @@ export default function Subscription() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-24">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md md:max-w-2xl mx-auto pb-24">
       <header className="sticky top-0 z-10 bg-[#F4F6FB]/90 backdrop-blur px-page py-3 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}

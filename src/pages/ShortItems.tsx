@@ -79,7 +79,7 @@ const ShortItems = () => {
     qty === 0 ? "text-red-600 font-bold" : "text-orange-500 font-semibold";
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] w-full max-w-md mx-auto pb-8">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-8">
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-3 px-page pt-5 pb-4">
         <button

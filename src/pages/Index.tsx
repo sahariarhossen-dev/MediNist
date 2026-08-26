@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import SalesTrendChart from "@/components/SalesTrendChart";
-import AppHeader from "@/components/AppHeader";
 import BroadcastBanner from "@/components/BroadcastBanner";
 import TopSalesPerformers from "@/components/TopSalesPerformers";
 import { isLowStock } from "@/lib/stockUtils";
@@ -319,9 +318,8 @@ const Index = () => {
       ];
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] max-w-md mx-auto pb-24">
+    <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] max-w-md mx-auto pb-24">
       {/* Header */}
-      <AppHeader />
 
       <BroadcastBanner />
 
