@@ -63,12 +63,6 @@ const DutyControlCenter = ({
         />
       </div>
 
-      <RedFlagBanner
-        userFilter={userFilter}
-        refreshKey={refreshKey}
-        onSelect={() => setFeedFilter("high_risk")}
-      />
-
       <DutyCard
         summary={summary}
         userId={selected ? userFilter : null}
