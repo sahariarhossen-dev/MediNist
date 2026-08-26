@@ -6,7 +6,9 @@ import DutyCard, { type DutySummary } from "@/components/staff/DutyCard";
 import ApprovalQueue from "@/components/staff/ApprovalQueue";
 import MonthlySummaryCard from "@/components/staff/MonthlySummaryCard";
 import StaffPresenceStrip from "@/components/staff/StaffPresenceStrip";
-import ActivityFeed, { type FeedStaffOption } from "@/components/staff/ActivityFeed";
+import ActivityFeed, { type FeedStaffOption, type Severity } from "@/components/staff/ActivityFeed";
+import RedFlagBanner from "@/components/staff/RedFlagBanner";
+import ExportAuditSheet from "@/components/staff/ExportAuditSheet";
 
 const DutyControlCenter = ({
   nameOf,
@@ -20,6 +22,7 @@ const DutyControlCenter = ({
   const [userFilter, setUserFilter] = useState<string>("all");
   const [summary, setSummary] = useState<DutySummary | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [feedFilter, setFeedFilter] = useState<"all" | Severity>("all");
 
   const loadSummary = useCallback(async () => {
     const { data } = await supabase.rpc("get_staff_duty_summary" as any, {
@@ -54,6 +57,17 @@ const DutyControlCenter = ({
         </SelectContent>
       </Select>
 
+      <RedFlagBanner
+        userFilter={userFilter}
+        refreshKey={refreshKey}
+        onSelect={() => setFeedFilter("high_risk")}
+      />
+
+      <ExportAuditSheet
+        userFilter={userFilter}
+        staffName={selected ? nameOf(userFilter) : "Whole team"}
+      />
+
       <DutyCard
         summary={summary}
         staffName={selected ? nameOf(userFilter) : "Whole team"}
@@ -68,7 +82,13 @@ const DutyControlCenter = ({
 
       {!selected && <StaffPresenceStrip userFilter={userFilter} />}
 
-      <ActivityFeed nameOf={nameOf} userFilter={userFilter} refreshKey={refreshKey} />
+      <ActivityFeed
+        nameOf={nameOf}
+        userFilter={userFilter}
+        refreshKey={refreshKey}
+        filter={feedFilter}
+        onFilterChange={setFeedFilter}
+      />
     </div>
   );
 };
