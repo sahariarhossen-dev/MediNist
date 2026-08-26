@@ -5,7 +5,7 @@ import { AlertOctagon, Clock, Search, ShieldAlert, ShieldCheck } from "lucide-re
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+
 import { formatDuration } from "@/lib/deviceInfo";
 import { relativeTime } from "@/lib/relativeTime";
 
@@ -85,7 +85,7 @@ const ActivityFeed = ({
   const { profile } = useAuth();
   const [rows, setRows] = useState<FeedItem[]>([]);
   const [filter, setFilter] = useState<"all" | Severity>("all");
-  const [includeSales, setIncludeSales] = useState(false);
+  
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
@@ -111,8 +111,8 @@ const ActivityFeed = ({
         if (filter !== "all") q = q.eq("severity", filter);
         if (userFilter !== "all") q = q.eq("user_id", userFilter);
         if (before) q = q.lt("created_at", before);
-        // Hide routine (info-level) sale entries unless explicitly requested
-        if (!includeSales) q = q.or("action_type.neq.sale,severity.neq.info");
+        // Routine (info-level) sale entries are never shown in this feed
+        q = q.or("action_type.neq.sale,severity.neq.info");
         const { data } = await q;
         return ((data as any[]) || []).map((r) => ({
           id: r.id,
@@ -159,7 +159,7 @@ const ActivityFeed = ({
       setCursor(page.length ? page[page.length - 1].created_at : before);
       setRows((prev) => (replace ? page : [...prev, ...page]));
     },
-    [profile?.pharmacy_id, filter, userFilter, includeSales],
+    [profile?.pharmacy_id, filter, userFilter],
   );
 
   useEffect(() => {
@@ -224,10 +224,6 @@ const ActivityFeed = ({
         />
       </div>
 
-      <label className="flex items-center gap-2 px-1">
-        <Switch checked={includeSales} onCheckedChange={setIncludeSales} />
-        <span className="text-xs text-muted-foreground">Include routine sales</span>
-      </label>
 
 
       {loading && <p className="text-sm text-muted-foreground text-center py-6">Loading activity…</p>}
