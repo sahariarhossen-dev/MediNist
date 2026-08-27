@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Users, Send, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, Send, Search, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +21,16 @@ interface Props {
   description?: string;
   /** Prefix prepended to the forwarded body (e.g. task framing). */
   prefix?: string;
+  /** Called with a delivery receipt (e.g. "Sent to Rakib — 5 items"). */
+  onSent?: (receipt: string) => void;
 }
+
+/** Count list-ish lines in a forwarded body so the receipt can say "5 items". */
+const countItems = (body: string) =>
+  body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^([-*•]|\d+[.)])\s+/.test(l)).length;
 
 const ForwardToStaffDrawer = ({
   open,
@@ -30,12 +39,18 @@ const ForwardToStaffDrawer = ({
   title = "Forward to staff",
   description = "Pick a chat thread to send this report to.",
   prefix,
+  onSent,
 }: Props) => {
   const { user, profile } = useAuth();
   const { rooms } = useChatInbox();
   const [query, setQuery] = useState("");
   const [note, setNote] = useState("");
   const [sendingTo, setSendingTo] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) setReceipt(null);
+  }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -58,9 +73,13 @@ const ForwardToStaffDrawer = ({
       toast.error("Could not send", { description: error.message });
       return;
     }
-    toast.success(`Sent to ${name}`);
+    const items = countItems(body);
+    const text = `Sent to ${name} — ${items > 0 ? `${items} item${items === 1 ? "" : "s"}` : "report"}`;
+    toast.success(text);
+    setReceipt(text);
+    onSent?.(text);
     setNote("");
-    onOpenChange(false);
+    setTimeout(() => onOpenChange(false), 1200);
   };
 
   return (
@@ -70,6 +89,15 @@ const ForwardToStaffDrawer = ({
           <SheetTitle className="text-base">{title}</SheetTitle>
           <SheetDescription className="text-[12.5px]">{description}</SheetDescription>
         </SheetHeader>
+
+        {receipt && (
+          <div className="px-5 pt-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[12.5px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+              <Check className="h-3.5 w-3.5" />
+              {receipt}
+            </span>
+          </div>
+        )}
 
         <div className="space-y-2 px-5 pb-3 pt-3">
           <textarea

@@ -13,7 +13,13 @@ import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 import SlashCommandMenu, { type SlashCommand } from "@/components/ai/SlashCommandMenu";
 import ForwardToStaffDrawer from "@/components/workspace/ForwardToStaffDrawer";
 import StockLookupDrawer from "@/components/workspace/StockLookupDrawer";
-import { deriveActions, forwardableText, type AgentAction } from "@/lib/agentCards";
+import {
+  deriveActions,
+  deriveSuggestions,
+  forwardableText,
+  type AgentAction,
+} from "@/lib/agentCards";
+import { markAiReplied, markAiSeen, setAiThinking } from "@/lib/aiActivity";
 
 interface Message {
   id?: string;
@@ -46,9 +52,14 @@ const AIAssistant = () => {
   const [stockDrawer, setStockDrawer] = useState<{ mode: "stock" | "reorder"; query: string } | null>(
     null
   );
-  const [forward, setForward] = useState<{ content: string; prefix?: string; title: string } | null>(
-    null
-  );
+  const [forward, setForward] = useState<{
+    content: string;
+    prefix?: string;
+    title: string;
+    /** Index of the assistant message this forward belongs to. */
+    index: number | null;
+  } | null>(null);
+  const [receipts, setReceipts] = useState<Record<number, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
@@ -59,6 +70,11 @@ const AIAssistant = () => {
     setElement(scrollRef.current);
     return () => setElement(null);
   }, [setElement]);
+
+  // The AI thread is in view: clear the unread state shown on the inbox row.
+  useEffect(() => {
+    markAiSeen();
+  }, []);
 
   // Load conversations & resume most recent on mount
   useEffect(() => {
@@ -175,6 +191,7 @@ const AIAssistant = () => {
     setMessages((prev) => [...prev.filter((m) => m !== WELCOME || prev.length > 1), userMsg]);
     setInput("");
     setIsLoading(true);
+    setAiThinking(true);
 
     // Persist user message
     const { error: insertErr } = await supabase.from("ai_messages").insert({
@@ -214,6 +231,8 @@ const AIAssistant = () => {
         role: "assistant",
         content: reply,
       });
+      markAiReplied();
+      markAiSeen();
       refreshConversations();
     } catch (err) {
       console.error("AI chat error:", err);
@@ -224,6 +243,7 @@ const AIAssistant = () => {
       ]);
     } finally {
       setIsLoading(false);
+      setAiThinking(false);
     }
   };
 
@@ -237,14 +257,25 @@ const AIAssistant = () => {
 
   // Inline actions come from the message's own agent block when present;
   // otherwise they are derived from the question/answer intent.
+  const questionFor = (index: number) =>
+    [...messages.slice(0, index)].reverse().find((m) => m.role === "user")?.content ?? "";
+
   const actionsFor = (index: number): AgentAction[] => {
     const reply = messages[index];
     if (!reply || reply.role !== "assistant") return [];
-    const question = [...messages.slice(0, index)].reverse().find((m) => m.role === "user");
-    return deriveActions(question?.content ?? "", reply.content);
+    return deriveActions(questionFor(index), reply.content);
   };
 
-  const handleAction = (action: AgentAction, content: string) => {
+  const suggestionsFor = (index: number): string[] => {
+    const reply = messages[index];
+    if (!reply || reply.role !== "assistant") return [];
+    // Only the latest assistant reply offers follow-up chips.
+    if (index !== messages.length - 1) return [];
+    if (reply === WELCOME) return [];
+    return deriveSuggestions(questionFor(index), reply.content);
+  };
+
+  const handleAction = (action: AgentAction, content: string, index: number) => {
     const text = forwardableText(content);
     if (action.id === "check_stock") {
       setStockDrawer({ mode: "stock", query: "" });
@@ -255,10 +286,15 @@ const AIAssistant = () => {
       return;
     }
     if (action.id === "assign_task") {
-      setForward({ content: text, prefix: "✅ Task from owner:", title: "Assign task to staff" });
+      setForward({
+        content: text,
+        prefix: "✅ Task from owner:",
+        title: "Assign task to staff",
+        index,
+      });
       return;
     }
-    setForward({ content: text, title: "Forward to staff" });
+    setForward({ content: text, title: "Forward to staff", index });
   };
 
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
@@ -331,7 +367,10 @@ const AIAssistant = () => {
                 userName={profile?.full_name ?? null}
                 userAvatarUrl={profile?.avatar_url ?? null}
                 actions={actionsFor(i)}
-                onAction={handleAction}
+                onAction={(a, c) => handleAction(a, c, i)}
+                suggestions={suggestionsFor(i)}
+                onSuggestion={(p) => sendMessage(p)}
+                receipt={receipts[i] ?? null}
               />
             ))}
             {isLoading && <TypingIndicator />}
@@ -416,7 +455,7 @@ const AIAssistant = () => {
         initialQuery={stockDrawer?.query ?? ""}
         onCreateDraft={(draft) => {
           setStockDrawer(null);
-          setForward({ content: draft, title: "Send re-order list" });
+          setForward({ content: draft, title: "Send re-order list", index: null });
         }}
       />
 
@@ -426,6 +465,10 @@ const AIAssistant = () => {
         content={forward?.content ?? ""}
         prefix={forward?.prefix}
         title={forward?.title ?? "Forward to staff"}
+        onSent={(receipt) => {
+          const idx = forward?.index;
+          if (typeof idx === "number") setReceipts((prev) => ({ ...prev, [idx]: receipt }));
+        }}
       />
     </div>
   );

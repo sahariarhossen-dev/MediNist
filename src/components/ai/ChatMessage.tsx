@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LogoMark from "@/components/brand/LogoMark";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,6 +17,11 @@ export interface ChatMessageProps {
   /** Inline actions rendered under an assistant reply. */
   actions?: AgentAction[];
   onAction?: (action: AgentAction, content: string) => void;
+  /** Follow-up prompt chips (rendered only for the latest assistant reply). */
+  suggestions?: string[];
+  onSuggestion?: (prompt: string) => void;
+  /** Delivery receipt shown after this reply was forwarded to a staff thread. */
+  receipt?: string | null;
 }
 
 
@@ -37,11 +43,15 @@ const ChatMessage = ({
   userAvatarUrl,
   actions,
   onAction,
+  suggestions,
+  onSuggestion,
+  receipt,
 }: ChatMessageProps) => {
   const isUser = role === "user";
   const parsed = isUser ? null : parseAgentMessage(content);
   const cards = parsed ? [...(parsed.block?.cards ?? []), ...parsed.jsonCards] : [];
   const inlineActions = parsed?.block?.actions?.length ? parsed.block.actions : actions ?? [];
+  const chips = parsed?.block?.suggestions?.length ? parsed.block.suggestions : suggestions ?? [];
   return (
     <div
       className={cn(
@@ -77,6 +87,28 @@ const ChatMessage = ({
               actions={inlineActions}
               onAction={(a) => onAction(a, parsed?.prose ?? content)}
             />
+          )}
+          {receipt && (
+            <div className="flex">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+                <Check className="h-3.5 w-3.5" />
+                {receipt}
+              </span>
+            </div>
+          )}
+          {onSuggestion && chips.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {chips.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onSuggestion(s)}
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-medium text-slate-600 transition hover:bg-slate-200/80 active:scale-[0.98]"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}

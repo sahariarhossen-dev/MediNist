@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { readThreadPrefs } from "@/lib/threadPrefs";
 
 export interface InboxRoom {
   room_id: string;
@@ -64,6 +65,11 @@ export const useChatInbox = () => {
     };
   }, [profile?.pharmacy_id, user?.id, refresh]);
 
-  const totalUnread = rooms.reduce((acc, r) => acc + (r.unread_count || 0), 0);
+  // Muted threads are excluded from the global badge count.
+  const muted = readThreadPrefs().muted;
+  const totalUnread = rooms.reduce(
+    (acc, r) => acc + (muted.includes(r.room_id) ? 0 : r.unread_count || 0),
+    0
+  );
   return { rooms, totalUnread, loading, refresh };
 };
