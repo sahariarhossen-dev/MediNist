@@ -186,6 +186,7 @@ const AIAssistant = () => {
     setMessages((prev) => [...prev.filter((m) => m !== WELCOME || prev.length > 1), userMsg]);
     setInput("");
     setIsLoading(true);
+    setAiThinking(true);
 
     // Persist user message
     const { error: insertErr } = await supabase.from("ai_messages").insert({
