@@ -42,7 +42,7 @@ const NewGroupSheet = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     onOpenChange(false);
     setName("");
     setSelected(new Set());
-    navigate(`/messages/${data}`);
+    navigate(`/workspace/room/${data}`);
   };
 
   return (

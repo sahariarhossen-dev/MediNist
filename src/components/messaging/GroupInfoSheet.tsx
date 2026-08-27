@@ -104,7 +104,7 @@ const GroupInfoSheet = ({
       return;
     }
     onOpenChange(false);
-    window.location.href = "/messages";
+    window.location.href = "/workspace";
   };
 
   if (!room) return null;

@@ -29,7 +29,7 @@ const NewChatSheet = ({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
       return;
     }
     onOpenChange(false);
-    navigate(`/messages/${data}`);
+    navigate(`/workspace/room/${data}`);
   };
 
   return (

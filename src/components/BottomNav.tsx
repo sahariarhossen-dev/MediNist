@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutGrid, ShoppingCart, MoreHorizontal, Sparkles } from "lucide-react";
+import { LayoutGrid, ShoppingCart, MoreHorizontal, MessagesSquare } from "lucide-react";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
   { label: "Sales", icon: ShoppingCart, path: "/sales" },
-  { label: "AI", icon: Sparkles, path: "/ai" },
+  { label: "Chats", icon: MessagesSquare, path: "/workspace" },
   { label: "More", icon: MoreHorizontal, path: "/more" },
 ];
 
@@ -33,7 +33,7 @@ const BottomNav = () => {
     >
       <div className="flex items-center justify-around py-2.5 px-1">
         {navItems.map(({ label, icon: Icon, path }) => {
-          const isActive = pathname === path;
+          const isActive = pathname === path || pathname.startsWith(path + "/");
           return (
             <button
               key={path}
