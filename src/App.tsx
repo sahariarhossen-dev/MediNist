@@ -128,6 +128,7 @@ const App = () => (
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </SubscriptionProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
