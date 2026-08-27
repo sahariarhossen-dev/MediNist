@@ -249,14 +249,25 @@ const AIAssistant = () => {
 
   // Inline actions come from the message's own agent block when present;
   // otherwise they are derived from the question/answer intent.
+  const questionFor = (index: number) =>
+    [...messages.slice(0, index)].reverse().find((m) => m.role === "user")?.content ?? "";
+
   const actionsFor = (index: number): AgentAction[] => {
     const reply = messages[index];
     if (!reply || reply.role !== "assistant") return [];
-    const question = [...messages.slice(0, index)].reverse().find((m) => m.role === "user");
-    return deriveActions(question?.content ?? "", reply.content);
+    return deriveActions(questionFor(index), reply.content);
   };
 
-  const handleAction = (action: AgentAction, content: string) => {
+  const suggestionsFor = (index: number): string[] => {
+    const reply = messages[index];
+    if (!reply || reply.role !== "assistant") return [];
+    // Only the latest assistant reply offers follow-up chips.
+    if (index !== messages.length - 1) return [];
+    if (reply === WELCOME) return [];
+    return deriveSuggestions(questionFor(index), reply.content);
+  };
+
+  const handleAction = (action: AgentAction, content: string, index: number) => {
     const text = forwardableText(content);
     if (action.id === "check_stock") {
       setStockDrawer({ mode: "stock", query: "" });
@@ -267,10 +278,15 @@ const AIAssistant = () => {
       return;
     }
     if (action.id === "assign_task") {
-      setForward({ content: text, prefix: "✅ Task from owner:", title: "Assign task to staff" });
+      setForward({
+        content: text,
+        prefix: "✅ Task from owner:",
+        title: "Assign task to staff",
+        index,
+      });
       return;
     }
-    setForward({ content: text, title: "Forward to staff" });
+    setForward({ content: text, title: "Forward to staff", index });
   };
 
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
