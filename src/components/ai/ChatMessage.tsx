@@ -87,6 +87,28 @@ const ChatMessage = ({
               onAction={(a) => onAction(a, parsed?.prose ?? content)}
             />
           )}
+          {receipt && (
+            <div className="flex">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+                <Check className="h-3.5 w-3.5" />
+                {receipt}
+              </span>
+            </div>
+          )}
+          {onSuggestion && chips.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {chips.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onSuggestion(s)}
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-medium text-slate-600 transition hover:bg-slate-200/80 active:scale-[0.98]"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
