@@ -33,7 +33,6 @@ import Customers from "./pages/Customers.tsx";
 import CustomerProfile from "./pages/CustomerProfile.tsx";
 import Notes from "./pages/Notes.tsx";
 import NoteEditor from "./pages/NoteEditor.tsx";
-import Messages from "./pages/Messages.tsx";
 import Workspace from "./pages/Workspace.tsx";
 import AlertsThread from "./components/workspace/AlertsThread.tsx";
 import ChatRoom from "./pages/ChatRoom.tsx";
