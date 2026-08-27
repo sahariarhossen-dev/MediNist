@@ -13,7 +13,13 @@ import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 import SlashCommandMenu, { type SlashCommand } from "@/components/ai/SlashCommandMenu";
 import ForwardToStaffDrawer from "@/components/workspace/ForwardToStaffDrawer";
 import StockLookupDrawer from "@/components/workspace/StockLookupDrawer";
-import { deriveActions, forwardableText, type AgentAction } from "@/lib/agentCards";
+import {
+  deriveActions,
+  deriveSuggestions,
+  forwardableText,
+  type AgentAction,
+} from "@/lib/agentCards";
+import { markAiReplied, markAiSeen, setAiThinking } from "@/lib/aiActivity";
 
 interface Message {
   id?: string;
