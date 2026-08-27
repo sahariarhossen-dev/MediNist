@@ -35,8 +35,11 @@ export const readAiActivity = (): AiActivity => {
     const raw = localStorage.getItem(KEY);
     if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as Partial<AiActivity>;
+    const since = parsed.thinkingSince ?? null;
+    const stale = !since || Date.now() - new Date(since).getTime() > STALE_MS;
     return {
-      thinking: !!parsed.thinking,
+      thinking: !!parsed.thinking && !stale,
+      thinkingSince: since,
       lastAssistantAt: parsed.lastAssistantAt ?? null,
       lastSeenAt: parsed.lastSeenAt ?? null,
     };
