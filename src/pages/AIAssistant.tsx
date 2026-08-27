@@ -359,7 +359,10 @@ const AIAssistant = () => {
                 userName={profile?.full_name ?? null}
                 userAvatarUrl={profile?.avatar_url ?? null}
                 actions={actionsFor(i)}
-                onAction={handleAction}
+                onAction={(a, c) => handleAction(a, c, i)}
+                suggestions={suggestionsFor(i)}
+                onSuggestion={(p) => sendMessage(p)}
+                receipt={receipts[i] ?? null}
               />
             ))}
             {isLoading && <TypingIndicator />}
