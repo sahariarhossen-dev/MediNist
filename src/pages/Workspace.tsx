@@ -56,7 +56,7 @@ const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
 const Workspace = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { rooms, loading } = useChatInbox();
+  const { rooms, loading, refresh } = useChatInbox();
   const { staff } = usePharmacyStaff();
   const { alerts } = useSystemAlerts();
   const ai = useAiActivity();
@@ -269,6 +269,10 @@ const Workspace = () => {
                 muted={isMuted(r.room_id)}
                 onTogglePin={() => togglePin(r.room_id)}
                 onToggleMute={() => toggleMute(r.room_id)}
+                onMarkRead={async () => {
+                  await supabase.rpc("mark_room_read", { p_room_id: r.room_id });
+                  refresh();
+                }}
                 onClick={() => navigate(`/workspace/room/${r.room_id}`)}
               />
             ))}
