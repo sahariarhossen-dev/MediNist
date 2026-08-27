@@ -90,6 +90,15 @@ const ForwardToStaffDrawer = ({
           <SheetDescription className="text-[12.5px]">{description}</SheetDescription>
         </SheetHeader>
 
+        {receipt && (
+          <div className="px-5 pt-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[12.5px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+              <Check className="h-3.5 w-3.5" />
+              {receipt}
+            </span>
+          </div>
+        )}
+
         <div className="space-y-2 px-5 pb-3 pt-3">
           <textarea
             value={note}
