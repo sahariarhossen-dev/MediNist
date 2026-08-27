@@ -141,13 +141,6 @@ const Workspace = () => {
   const urgentAlerts = alerts.filter((a) => a.is_urgent).length;
   const aiUnseen = hasUnseenAiReply(ai);
 
-  const nothingVisible =
-    !loading &&
-    !showAI &&
-    !showAlerts &&
-    (!showStaff || filteredRooms.length === 0) &&
-    !(showAlerts && alerts.length > 0);
-
   const staffEmpty = showStaff && !loading && filteredRooms.length === 0;
   const alertsEmpty = filter === "alerts" && alerts.length === 0;
 
