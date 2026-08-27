@@ -57,7 +57,12 @@ const write = (next: AiActivity) => {
   window.dispatchEvent(new CustomEvent<AiActivity>(EVENT, { detail: next }));
 };
 
-export const setAiThinking = (thinking: boolean) => write({ ...readAiActivity(), thinking });
+export const setAiThinking = (thinking: boolean) =>
+  write({
+    ...readAiActivity(),
+    thinking,
+    thinkingSince: thinking ? new Date().toISOString() : null,
+  });
 
 export const markAiReplied = () =>
   write({ ...readAiActivity(), thinking: false, lastAssistantAt: new Date().toISOString() });
