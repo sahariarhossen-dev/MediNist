@@ -226,6 +226,8 @@ const AIAssistant = () => {
         role: "assistant",
         content: reply,
       });
+      markAiReplied();
+      markAiSeen();
       refreshConversations();
     } catch (err) {
       console.error("AI chat error:", err);
