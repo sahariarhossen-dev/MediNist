@@ -447,7 +447,7 @@ const AIAssistant = () => {
         initialQuery={stockDrawer?.query ?? ""}
         onCreateDraft={(draft) => {
           setStockDrawer(null);
-          setForward({ content: draft, title: "Send re-order list" });
+          setForward({ content: draft, title: "Send re-order list", index: null });
         }}
       />
 
@@ -457,6 +457,10 @@ const AIAssistant = () => {
         content={forward?.content ?? ""}
         prefix={forward?.prefix}
         title={forward?.title ?? "Forward to staff"}
+        onSent={(receipt) => {
+          const idx = forward?.index;
+          if (typeof idx === "number") setReceipts((prev) => ({ ...prev, [idx]: receipt }));
+        }}
       />
     </div>
   );
