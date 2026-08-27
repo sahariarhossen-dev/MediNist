@@ -73,9 +73,13 @@ const ForwardToStaffDrawer = ({
       toast.error("Could not send", { description: error.message });
       return;
     }
-    toast.success(`Sent to ${name}`);
+    const items = countItems(body);
+    const text = `Sent to ${name} — ${items > 0 ? `${items} item${items === 1 ? "" : "s"}` : "report"}`;
+    toast.success(text);
+    setReceipt(text);
+    onSent?.(text);
     setNote("");
-    onOpenChange(false);
+    setTimeout(() => onOpenChange(false), 1200);
   };
 
   return (
