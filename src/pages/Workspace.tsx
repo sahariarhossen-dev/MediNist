@@ -270,7 +270,7 @@ const Workspace = () => {
                 onTogglePin={() => togglePin(r.room_id)}
                 onToggleMute={() => toggleMute(r.room_id)}
                 onMarkRead={async () => {
-                  await supabase.rpc("mark_room_read", { p_room_id: r.room_id });
+                  await supabase.rpc("mark_room_read", { _room_id: r.room_id });
                   refresh();
                 }}
                 onClick={() => navigate(`/workspace/room/${r.room_id}`)}

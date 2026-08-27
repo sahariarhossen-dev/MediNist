@@ -2,7 +2,7 @@ import BottomNav from "./BottomNav";
 import AppHeader from "./AppHeader";
 import { ScrollContainerProvider } from "@/contexts/ScrollContainerContext";
 import { useRootBackHandler } from "@/hooks/useRootBackHandler";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import SubscriptionExpiredOverlay from "./subscription/SubscriptionExpiredOverlay";
 import { useLocation } from "react-router-dom";
 import DemoBanner from "./DemoBanner";
@@ -13,7 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const AppLayout = ({ children, showHeader = true }: { children: React.ReactNode; showHeader?: boolean }) => {
   useRootBackHandler();
-  const { isExpired } = useSubscription();
+  const { isExpired, loading: subLoading, resolution } = useSubscription();
   const { isDemo } = useAuth();
   const { pathname } = useLocation();
   const allowDuringExpiry = pathname.startsWith("/subscription");
@@ -25,7 +25,10 @@ const AppLayout = ({ children, showHeader = true }: { children: React.ReactNode;
       {children}
       <BottomNav />
       <ShiftTracker />
-      {isExpired && !allowDuringExpiry && !isDemo && <SubscriptionExpiredOverlay />}
+      {/* Lock only on a settled, server-confirmed expiry — never on a pending/unresolved read. */}
+      {!subLoading && resolution === "resolved" && isExpired && !allowDuringExpiry && !isDemo && (
+        <SubscriptionExpiredOverlay />
+      )}
 
 
     </ScrollContainerProvider>
