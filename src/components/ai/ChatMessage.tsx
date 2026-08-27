@@ -2,6 +2,9 @@ import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import LogoMark from "@/components/brand/LogoMark";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import AgentCardView from "@/components/ai/cards/AgentCardView";
+import AgentActionBar from "@/components/ai/AgentActionBar";
+import { parseAgentMessage, type AgentAction } from "@/lib/agentCards";
 
 export type ChatRole = "user" | "assistant";
 
@@ -10,7 +13,11 @@ export interface ChatMessageProps {
   content: string;
   userName?: string | null;
   userAvatarUrl?: string | null;
+  /** Inline actions rendered under an assistant reply. */
+  actions?: AgentAction[];
+  onAction?: (action: AgentAction, content: string) => void;
 }
+
 
 const initials = (name?: string | null) => {
   if (!name) return "U";
