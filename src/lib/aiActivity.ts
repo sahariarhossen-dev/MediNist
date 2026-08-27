@@ -91,7 +91,10 @@ export const useAiActivity = (): AiActivity => {
     window.addEventListener(EVENT, sync as EventListener);
     window.addEventListener("storage", sync);
     sync();
+    // Re-read periodically so a stale "thinking" flag expires on its own.
+    const id = setInterval(sync, 15_000);
     return () => {
+      clearInterval(id);
       window.removeEventListener(EVENT, sync as EventListener);
       window.removeEventListener("storage", sync);
     };
