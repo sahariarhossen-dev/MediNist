@@ -65,7 +65,12 @@ export const setAiThinking = (thinking: boolean) =>
   });
 
 export const markAiReplied = () =>
-  write({ ...readAiActivity(), thinking: false, lastAssistantAt: new Date().toISOString() });
+  write({
+    ...readAiActivity(),
+    thinking: false,
+    thinkingSince: null,
+    lastAssistantAt: new Date().toISOString(),
+  });
 
 export const markAiSeen = () =>
   write({ ...readAiActivity(), lastSeenAt: new Date().toISOString() });
