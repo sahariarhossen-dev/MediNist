@@ -74,9 +74,6 @@ const AIAssistant = () => {
   // The AI thread is in view: clear the unread state shown on the inbox row.
   useEffect(() => {
     markAiSeen();
-    return () => {
-      setAiThinking(false);
-    };
   }, []);
 
   // Load conversations & resume most recent on mount

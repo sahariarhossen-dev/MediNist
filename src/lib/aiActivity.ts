@@ -13,13 +13,22 @@ const EVENT = "medinist:ai-activity";
 export interface AiActivity {
   /** A request to ai-chat is currently in flight. */
   thinking: boolean;
+  /** When the in-flight request started (guards against a stale flag). */
+  thinkingSince: string | null;
   /** ISO timestamp of the newest assistant reply. */
   lastAssistantAt: string | null;
   /** ISO timestamp the user last had the AI thread in view. */
   lastSeenAt: string | null;
 }
 
-const EMPTY: AiActivity = { thinking: false, lastAssistantAt: null, lastSeenAt: null };
+const STALE_MS = 90_000;
+
+const EMPTY: AiActivity = {
+  thinking: false,
+  thinkingSince: null,
+  lastAssistantAt: null,
+  lastSeenAt: null,
+};
 
 export const readAiActivity = (): AiActivity => {
   try {
