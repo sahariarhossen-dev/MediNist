@@ -21,7 +21,16 @@ interface Props {
   description?: string;
   /** Prefix prepended to the forwarded body (e.g. task framing). */
   prefix?: string;
+  /** Called with a delivery receipt (e.g. "Sent to Rakib — 5 items"). */
+  onSent?: (receipt: string) => void;
 }
+
+/** Count list-ish lines in a forwarded body so the receipt can say "5 items". */
+const countItems = (body: string) =>
+  body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^([-*•]|\d+[.)])\s+/.test(l)).length;
 
 const ForwardToStaffDrawer = ({
   open,
