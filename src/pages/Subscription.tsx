@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import StatusCard from "@/components/subscription/StatusCard";
 import PaymentHistory from "@/components/subscription/PaymentHistory";
 import RenewButton from "@/components/subscription/RenewButton";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import WelcomeTrialModal from "@/components/subscription/WelcomeTrialModal";
 import { supabase } from "@/integrations/supabase/client";
 import {
