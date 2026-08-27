@@ -52,9 +52,14 @@ const AIAssistant = () => {
   const [stockDrawer, setStockDrawer] = useState<{ mode: "stock" | "reorder"; query: string } | null>(
     null
   );
-  const [forward, setForward] = useState<{ content: string; prefix?: string; title: string } | null>(
-    null
-  );
+  const [forward, setForward] = useState<{
+    content: string;
+    prefix?: string;
+    title: string;
+    /** Index of the assistant message this forward belongs to. */
+    index: number | null;
+  } | null>(null);
+  const [receipts, setReceipts] = useState<Record<number, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
