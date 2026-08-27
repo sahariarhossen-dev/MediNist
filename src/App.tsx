@@ -33,7 +33,8 @@ import Customers from "./pages/Customers.tsx";
 import CustomerProfile from "./pages/CustomerProfile.tsx";
 import Notes from "./pages/Notes.tsx";
 import NoteEditor from "./pages/NoteEditor.tsx";
-import Messages from "./pages/Messages.tsx";
+import Workspace from "./pages/Workspace.tsx";
+import AlertsThread from "./components/workspace/AlertsThread.tsx";
 import ChatRoom from "./pages/ChatRoom.tsx";
 import Subscription from "./pages/Subscription.tsx";
 import SubscriptionCheckout from "./pages/SubscriptionCheckout.tsx";
@@ -90,7 +91,7 @@ const App = () => (
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
-            <Route path="/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+            <Route path="/ai" element={<Navigate to="/workspace/ai" replace />} />
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
             <Route path="/add-product" element={<ProtectedRoute><AppLayout><AddProduct /></AppLayout></ProtectedRoute>} />
@@ -110,7 +111,11 @@ const App = () => (
             <Route path="/more/customers/:id" element={<ProtectedRoute><AppLayout><CustomerProfile /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes" element={<ProtectedRoute><AppLayout><Notes /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
-            <Route path="/messages" element={<ProtectedRoute><AppLayout><Messages /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace" element={<ProtectedRoute><AppLayout><Workspace /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/alerts" element={<ProtectedRoute><AppLayout><AlertsThread /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/room/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
+            <Route path="/messages" element={<Navigate to="/workspace" replace />} />
             <Route path="/messages/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/subscription" element={<ProtectedRoute><AppLayout><Subscription /></AppLayout></ProtectedRoute>} />
             <Route path="/subscription/checkout" element={<ProtectedRoute><AppLayout><SubscriptionCheckout /></AppLayout></ProtectedRoute>} />

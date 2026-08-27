@@ -9,7 +9,7 @@ const MessageBubble = () => {
   return (
     <button
       aria-label="Messages"
-      onClick={() => navigate("/messages")}
+      onClick={() => navigate("/workspace")}
       className="relative p-2 rounded-full hover:bg-gray-100 transition mr-[4px]"
     >
       <MessageSquare size={22} className="text-gray-600" strokeWidth={2} />

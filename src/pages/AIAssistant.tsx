@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Globe, ArrowUp, TrendingUp, PackageSearch, Trophy, CalendarClock } from "lucide-react";
+import { Slash, Globe, ArrowUp, TrendingUp, PackageSearch, Trophy, CalendarClock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,10 @@ import ChatHeader from "@/components/ai/ChatHeader";
 import ConversationSidebar, { type Conversation } from "@/components/ai/ConversationSidebar";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
+import SlashCommandMenu, { type SlashCommand } from "@/components/ai/SlashCommandMenu";
+import ForwardToStaffDrawer from "@/components/workspace/ForwardToStaffDrawer";
+import StockLookupDrawer from "@/components/workspace/StockLookupDrawer";
+import { deriveActions, forwardableText, type AgentAction } from "@/lib/agentCards";
 
 interface Message {
   id?: string;
@@ -38,6 +42,13 @@ const AIAssistant = () => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [stockDrawer, setStockDrawer] = useState<{ mode: "stock" | "reorder"; query: string } | null>(
+    null
+  );
+  const [forward, setForward] = useState<{ content: string; prefix?: string; title: string } | null>(
+    null
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
@@ -224,6 +235,32 @@ const AIAssistant = () => {
     }
   };
 
+  // Inline actions come from the message's own agent block when present;
+  // otherwise they are derived from the question/answer intent.
+  const actionsFor = (index: number): AgentAction[] => {
+    const reply = messages[index];
+    if (!reply || reply.role !== "assistant") return [];
+    const question = [...messages.slice(0, index)].reverse().find((m) => m.role === "user");
+    return deriveActions(question?.content ?? "", reply.content);
+  };
+
+  const handleAction = (action: AgentAction, content: string) => {
+    const text = forwardableText(content);
+    if (action.id === "check_stock") {
+      setStockDrawer({ mode: "stock", query: "" });
+      return;
+    }
+    if (action.id === "reorder") {
+      setStockDrawer({ mode: "reorder", query: "" });
+      return;
+    }
+    if (action.id === "assign_task") {
+      setForward({ content: text, prefix: "✅ Task from owner:", title: "Assign task to staff" });
+      return;
+    }
+    setForward({ content: text, title: "Forward to staff" });
+  };
+
   const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
   const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
@@ -293,6 +330,8 @@ const AIAssistant = () => {
                 content={m.content}
                 userName={profile?.full_name ?? null}
                 userAvatarUrl={profile?.avatar_url ?? null}
+                actions={actionsFor(i)}
+                onAction={handleAction}
               />
             ))}
             {isLoading && <TypingIndicator />}
@@ -307,7 +346,9 @@ const AIAssistant = () => {
             ref={textareaRef}
             value={input}
             onChange={(e) => {
-              setInput(e.target.value);
+              const v = e.target.value;
+              setInput(v);
+              if (v === "/") setSlashOpen(true);
               const ta = e.currentTarget;
               ta.style.height = "auto";
               ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
@@ -327,10 +368,11 @@ const AIAssistant = () => {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                aria-label="Attach"
+                aria-label="Quick commands"
+                onClick={() => setSlashOpen(true)}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
               >
-                <Plus className="h-5 w-5" />
+                <Slash className="h-5 w-5" />
               </button>
               <button
                 type="button"
@@ -357,6 +399,34 @@ const AIAssistant = () => {
           </div>
         </div>
       </form>
+
+      <SlashCommandMenu
+        open={slashOpen}
+        onOpenChange={setSlashOpen}
+        onSelect={(c: SlashCommand) => {
+          setSlashOpen(false);
+          sendMessage(c.prompt);
+        }}
+      />
+
+      <StockLookupDrawer
+        open={!!stockDrawer}
+        onOpenChange={(v) => !v && setStockDrawer(null)}
+        mode={stockDrawer?.mode ?? "stock"}
+        initialQuery={stockDrawer?.query ?? ""}
+        onCreateDraft={(draft) => {
+          setStockDrawer(null);
+          setForward({ content: draft, title: "Send re-order list" });
+        }}
+      />
+
+      <ForwardToStaffDrawer
+        open={!!forward}
+        onOpenChange={(v) => !v && setForward(null)}
+        content={forward?.content ?? ""}
+        prefix={forward?.prefix}
+        title={forward?.title ?? "Forward to staff"}
+      />
     </div>
   );
 };
