@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LogoMark from "@/components/brand/LogoMark";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
