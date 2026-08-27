@@ -84,8 +84,4 @@ const ChatMessage = ({
   );
 };
 
-    </div>
-  );
-};
-
 export default ChatMessage;
