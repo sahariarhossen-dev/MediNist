@@ -194,6 +194,39 @@ export function deriveActions(question: string, reply: string): AgentAction[] {
   return actions;
 }
 
+/**
+ * Follow-up prompt chips for an assistant reply that carries no explicit
+ * `suggestions[]` in its agent block.
+ */
+export function deriveSuggestions(question: string, reply: string): string[] {
+  const q = `${question} ${reply}`.toLowerCase();
+  const out: string[] = [];
+  const add = (s: string) => {
+    if (out.length < 3 && !out.includes(s)) out.push(s);
+  };
+
+  const salesy = /sale|sales|bikri|বিক্রি|revenue|profit|report|performance/.test(q);
+  const stocky = /stock|kom|short|shortage|inventory|medicine|reorder|re-order|স্টক|ঔষধ/.test(q);
+  const expiry = /expire|expiry|expiring/.test(q);
+  const dues = /due|baki|বাকি|customer|ledger|payment/.test(q);
+
+  if (salesy) {
+    add("Compare with yesterday");
+    add("Top selling medicine?");
+  }
+  if (stocky) {
+    add("Which items to re-order?");
+    add("Show low stock list");
+  }
+  if (expiry) add("Expiring in 30 days?");
+  if (dues) add("Who owes the most?");
+  if (out.length === 0) {
+    add("আজকের বিক্রি কত?");
+    add("Stock kom ase kon medicine gulor?");
+  }
+  return out;
+}
+
 /** Plain-text version of an assistant reply, safe to forward into staff chat. */
 export function forwardableText(content: string): string {
   const { prose } = parseAgentMessage(content);
