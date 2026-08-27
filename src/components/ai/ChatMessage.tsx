@@ -42,11 +42,15 @@ const ChatMessage = ({
   userAvatarUrl,
   actions,
   onAction,
+  suggestions,
+  onSuggestion,
+  receipt,
 }: ChatMessageProps) => {
   const isUser = role === "user";
   const parsed = isUser ? null : parseAgentMessage(content);
   const cards = parsed ? [...(parsed.block?.cards ?? []), ...parsed.jsonCards] : [];
   const inlineActions = parsed?.block?.actions?.length ? parsed.block.actions : actions ?? [];
+  const chips = parsed?.block?.suggestions?.length ? parsed.block.suggestions : suggestions ?? [];
   return (
     <div
       className={cn(
