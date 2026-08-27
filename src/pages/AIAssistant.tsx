@@ -71,6 +71,14 @@ const AIAssistant = () => {
     return () => setElement(null);
   }, [setElement]);
 
+  // The AI thread is in view: clear the unread state shown on the inbox row.
+  useEffect(() => {
+    markAiSeen();
+    return () => {
+      setAiThinking(false);
+    };
+  }, []);
+
   // Load conversations & resume most recent on mount
   useEffect(() => {
     if (!user?.id) return;
@@ -238,6 +246,7 @@ const AIAssistant = () => {
       ]);
     } finally {
       setIsLoading(false);
+      setAiThinking(false);
     }
   };
 
