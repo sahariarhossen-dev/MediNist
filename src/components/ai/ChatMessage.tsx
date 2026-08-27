@@ -16,6 +16,11 @@ export interface ChatMessageProps {
   /** Inline actions rendered under an assistant reply. */
   actions?: AgentAction[];
   onAction?: (action: AgentAction, content: string) => void;
+  /** Follow-up prompt chips (rendered only for the latest assistant reply). */
+  suggestions?: string[];
+  onSuggestion?: (prompt: string) => void;
+  /** Delivery receipt shown after this reply was forwarded to a staff thread. */
+  receipt?: string | null;
 }
 
 
