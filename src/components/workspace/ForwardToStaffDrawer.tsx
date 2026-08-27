@@ -39,12 +39,18 @@ const ForwardToStaffDrawer = ({
   title = "Forward to staff",
   description = "Pick a chat thread to send this report to.",
   prefix,
+  onSent,
 }: Props) => {
   const { user, profile } = useAuth();
   const { rooms } = useChatInbox();
   const [query, setQuery] = useState("");
   const [note, setNote] = useState("");
   const [sendingTo, setSendingTo] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) setReceipt(null);
+  }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
