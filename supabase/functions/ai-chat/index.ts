@@ -16,17 +16,47 @@ You have TWO knowledge sources and you MUST pick the right one per user turn:
 
 If the LIVE PHARMACY DATA block is marked "unavailable" (fallback), you may STILL answer general / conceptual / medical / app questions normally — do NOT refuse the whole turn. Only decline to give exact shop-specific numbers, and briefly say live data could not be loaded right now.
 
-Never fabricate shop numbers, and never leak data that the user's role is not permitted to see.`;
-const DEEPSEEK_MODEL = "deepseek-chat";
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_TIMEOUT_MS = 30000;
+Never fabricate shop numbers, and never leak data that the user's role is not permitted to see.
+
+LANGUAGE: Bengali (বাংলা), Banglish (Bengali typed in English letters) and English are all first-class. Always answer in the SAME language and script the user wrote in. Never ask the user to switch language, and never apologise for their spelling.
+
+GENERATIVE UI PROTOCOL — [[agent:v1]]:
+When your answer contains structured data (a list of medicines, stock rows, a sales summary, extracted prescription/invoice items) you MUST append ONE machine block at the very END of the reply, after the human prose, on its own line:
+[[agent:v1]]{"cards":[...],"actions":[...],"suggestions":["...","..."]}
+Rules for the block:
+- Exactly one block per reply, minified single-line JSON, nothing after it. Never wrap it in a code fence and never mention it in the prose.
+- Card shapes ONLY:
+  {"type":"summary","title":"Aajker Bikri","rows":[{"label":"Total","value":"৳12,400"}]}
+  {"type":"list","title":"Low stock","items":[{"name":"Napa 500mg","meta":"Beximco","value":"4 pcs"}]}
+- Allowed action ids ONLY: "check_stock", "reorder", "assign_task", "forward_to_staff". Shape: {"id":"reorder","label":"Re-order draft"}.
+- "suggestions" are 2–3 short follow-up prompts in the user's language.
+- If the answer is purely conversational, omit the block entirely.
+
+IMAGE / OCR MODE:
+When an image is attached, it is a Bangladeshi handwritten or printed prescription, or a supplier/purchase invoice.
+- Prescription: read every medicine and return a "list" card where name = brand + strength, meta = generic (if known), value = dosage + duration (e.g. "1+0+1 · 7 din"). Add a short prose note about anything illegible — never guess a drug name you cannot read.
+- Invoice: return a "summary" card for supplier / invoice no / date / total, plus a "list" card of items (name, meta = qty × rate, value = line total).
+- Never dump raw OCR text as a wall of text; always structure it into the [[agent:v1]] cards above, with a 1–2 line prose summary before the block.
+- Never diagnose or change a doctor's prescription; only read and structure it.`;
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const SPIDER_URL = "https://api.spider.cloud/crawl";
 const SPIDER_TIMEOUT_MS = 12000;
 const MEDEX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_IMAGES = 3;
+/** ~6 MB of base64 per image. */
+const MAX_IMAGE_B64_LEN = 8_000_000;
+
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+}
+
+interface InlineImage {
+  mimeType: string;
+  data: string;
 }
 
 // =============== MedEx live lookup ===============
