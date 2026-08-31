@@ -466,6 +466,26 @@ const AIAssistant = () => {
       {/* Floating Composer Card */}
       <form onSubmit={handleSubmit} className="relative shrink-0 px-3 pt-2 pb-[15px]">
         <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-3xl border border-black/5 bg-white/70 px-4 pb-2 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur transition-all duration-200 focus-within:border-black/10 focus-within:bg-white/90 focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          {attachment && (
+            <div className="flex items-center gap-2 rounded-2xl bg-slate-100/80 p-2">
+              <img
+                src={attachment.preview}
+                alt="Attached prescription or invoice"
+                className="h-12 w-12 rounded-xl object-cover ring-1 ring-black/5"
+              />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">
+                {attachment.name}
+              </span>
+              <button
+                type="button"
+                aria-label="Remove attachment"
+                onClick={() => setAttachment(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-white hover:text-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={input}
@@ -484,7 +504,15 @@ const AIAssistant = () => {
               }
             }}
             rows={1}
-            placeholder={isLoading ? "MediNist is thinking..." : "Ask MediNist anything…"}
+            placeholder={
+              recorder
+                ? "Recording… tap the stop button when done"
+                : transcribing
+                ? "Transcribing your voice…"
+                : isLoading
+                ? "MediNist is thinking..."
+                : "Ask MediNist anything…"
+            }
             disabled={isLoading}
             className="max-h-[140px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
           />
@@ -498,21 +526,53 @@ const AIAssistant = () => {
               >
                 <Slash className="h-5 w-5" />
               </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={handlePickImage}
+              />
               <button
                 type="button"
-                aria-label="Tools"
-                className="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
+                aria-label="Attach prescription or invoice"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95 disabled:opacity-40"
               >
-                <Globe className="h-4 w-4" />
-                Tools
+                <ImagePlus className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label={recorder ? "Stop recording" : "Voice input"}
+                onClick={toggleRecording}
+                disabled={isLoading || transcribing}
+                className={
+                  "flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition active:scale-95 disabled:opacity-40 " +
+                  (recorder
+                    ? "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700")
+                }
+              >
+                {transcribing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : recorder ? (
+                  <>
+                    <Square className="h-4 w-4" />
+                    Stop
+                  </>
+                ) : (
+                  <Mic className="h-5 w-5" />
+                )}
               </button>
             </div>
             <Button
               type="submit"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || (!input.trim() && !attachment)}
               className={
                 "h-9 w-9 shrink-0 rounded-full p-0 transition-all duration-200 " +
-                (input.trim() && !isLoading
+                ((input.trim() || attachment) && !isLoading
                   ? "scale-100 bg-slate-900 text-white hover:bg-slate-800"
                   : "scale-95 bg-slate-200 text-slate-400 hover:bg-slate-200")
               }
