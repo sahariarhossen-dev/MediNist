@@ -66,9 +66,15 @@ interface InlineImage {
 
 let cachedGeminiModel: { name: string; expiresAt: number } | null = null;
 const GEMINI_MODEL_CACHE_MS = 60 * 60 * 1000;
+// Models the catalog advertises but that reject our requests (retired / restricted).
+const deadGeminiModels = new Set<string>();
 
 async function resolveGeminiModel(apiKey: string): Promise<string | null> {
-  if (cachedGeminiModel && cachedGeminiModel.expiresAt > Date.now()) {
+  if (
+    cachedGeminiModel &&
+    cachedGeminiModel.expiresAt > Date.now() &&
+    !deadGeminiModels.has(cachedGeminiModel.name)
+  ) {
     return cachedGeminiModel.name;
   }
 
@@ -93,15 +99,24 @@ async function resolveGeminiModel(apiKey: string): Promise<string | null> {
     return null;
   }
 
+  const configured = Deno.env.get("GEMINI_MODEL");
   const selected = selectGeminiModel(
     Array.isArray(payload?.models) ? payload.models : [],
-    Deno.env.get("GEMINI_MODEL"),
+    configured && !deadGeminiModels.has(configured) ? configured : undefined,
+    deadGeminiModels,
   );
   if (selected) {
     cachedGeminiModel = { name: selected, expiresAt: Date.now() + GEMINI_MODEL_CACHE_MS };
   }
   return selected;
 }
+
+function isRetiredModelError(status: number, body: string): boolean {
+  if (status !== 400 && status !== 403 && status !== 404) return false;
+  return /no longer available|not found for API version|is not supported for generateContent|deprecated/i
+    .test(body);
+}
+
 
 // =============== MedEx live lookup ===============
 
