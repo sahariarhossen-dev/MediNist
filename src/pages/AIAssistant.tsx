@@ -239,14 +239,50 @@ const AIAssistant = () => {
           content: image && i === arr.length - 1 ? promptText : m.content,
         }));
 
+      // The stored access token can reference a session that no longer exists
+      // server-side (revoked / rotated), which makes the edge function reply 401.
+      // Refresh first and use the fresh token explicitly.
+      let { data: sessionData } = await supabase.auth.getSession();
+      let accessToken = sessionData?.session?.access_token;
+      const expiresAt = sessionData?.session?.expires_at ?? 0;
+      if (!accessToken || expiresAt * 1000 - Date.now() < 60_000) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        accessToken = refreshed?.session?.access_token ?? accessToken;
+      }
+      if (!accessToken) {
+        toast.error("Session expired. Please sign in again.");
+        await supabase.auth.signOut();
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("ai-chat", {
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: {
           messages: history,
           ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // One retry with a forcibly refreshed token for stale-session 401s.
+        const { data: retryAuth } = await supabase.auth.refreshSession();
+        const retryToken = retryAuth?.session?.access_token;
+        if (!retryToken) {
+          toast.error("Session expired. Please sign in again.");
+          await supabase.auth.signOut();
+          return;
+        }
+        const retry = await supabase.functions.invoke("ai-chat", {
+          headers: { Authorization: `Bearer ${retryToken}` },
+          body: {
+            messages: history,
+            ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
+          },
+        });
+        if (retry.error) throw retry.error;
+        Object.assign({}, retry);
+        return await handleReply(retry.data, convId);
+      }
 
       let reply: string;
       if (data?.error) {
