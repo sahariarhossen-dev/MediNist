@@ -815,8 +815,11 @@ Deno.serve(async (req) => {
       images: images.length,
     }));
 
+    const geminiUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
+    console.log("ai-chat: calling Gemini URL", geminiUrl.split("?key=")[0] + "?key=REDACTED");
+
     // No client-side timeout: vision + long context runs can legitimately take a while.
-    const dsRes = await fetch(GEMINI_URL, {
+    const dsRes = await fetch(geminiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
