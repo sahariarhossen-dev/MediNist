@@ -79,6 +79,10 @@ const AIAssistant = () => {
     index: number | null;
   } | null>(null);
   const [receipts, setReceipts] = useState<Record<number, string>>({});
+  const [attachment, setAttachment] = useState<InlineImage | null>(null);
+  const [recorder, setRecorder] = useState<VoiceRecorder | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
