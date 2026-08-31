@@ -179,17 +179,23 @@ const AIAssistant = () => {
     }
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, image?: InlineImage | null) => {
     const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
+    if ((!trimmed && !image) || isLoading) return;
 
     const convId = await ensureConversation();
     if (!convId) return;
 
-    const userMsg: Message = { role: "user", content: trimmed };
+    const promptText =
+      trimmed ||
+      "এই ছবিটি (প্রেসক্রিপশন / ইনভয়েস) পড়ে গুরুত্বপূর্ণ তথ্য গুছিয়ে দিন।";
+    const shown = image ? `${promptText}\n\n_📎 ${image.name} সংযুক্ত করা হয়েছে_` : promptText;
+
+    const userMsg: Message = { role: "user", content: shown };
     const nextMessages = [...messages.filter((m) => m !== WELCOME || messages.length > 1), userMsg];
     setMessages((prev) => [...prev.filter((m) => m !== WELCOME || prev.length > 1), userMsg]);
     setInput("");
+    setAttachment(null);
     setIsLoading(true);
     setAiThinking(true);
 
@@ -197,7 +203,7 @@ const AIAssistant = () => {
     const { error: insertErr } = await supabase.from("ai_messages").insert({
       conversation_id: convId,
       role: "user",
-      content: trimmed,
+      content: shown,
     });
     if (insertErr) console.error("persist user msg:", insertErr);
 
@@ -205,10 +211,16 @@ const AIAssistant = () => {
       const history = nextMessages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .slice(-20)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m, i, arr) => ({
+          role: m.role,
+          content: image && i === arr.length - 1 ? promptText : m.content,
+        }));
 
       const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: { messages: history },
+        body: {
+          messages: history,
+          ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
+        },
       });
 
       if (error) throw error;
@@ -249,9 +261,59 @@ const AIAssistant = () => {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    sendMessage(input);
+    sendMessage(input, attachment);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
+    }
+  };
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file.");
+      return;
+    }
+    try {
+      setAttachment(await fileToInlineImage(file));
+    } catch (err) {
+      toast.error((err as Error).message || "Could not read the image.");
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (transcribing || isLoading) return;
+    if (recorder) {
+      const active = recorder;
+      setRecorder(null);
+      setTranscribing(true);
+      try {
+        const blob = await active.stop();
+        if (!blob) {
+          toast.error("Kichu record hoyni. Abar try korun.");
+          return;
+        }
+        const text = await transcribeAudio(blob);
+        if (!text) {
+          toast.error("Kono kotha bujhte parini. Abar bolun.");
+          return;
+        }
+        setInput((prev) => (prev ? `${prev.trim()} ${text}` : text));
+        textareaRef.current?.focus();
+      } catch (err) {
+        console.error("transcription failed:", err);
+        toast.error("Voice transcription failed.");
+      } finally {
+        setTranscribing(false);
+      }
+      return;
+    }
+    try {
+      setRecorder(await startVoiceRecording());
+    } catch (err) {
+      console.error("mic error:", err);
+      toast.error("Microphone access denied.");
     }
   };
 
