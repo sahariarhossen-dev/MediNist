@@ -788,50 +788,59 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `${SYSTEM_BASE}\n\n${scopeHeader}\n\n${securityBlock}\n\n${context}${medexBlock}`;
 
-    const openAiMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-    ];
-
-    console.log("ai-chat: calling DeepSeek", JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messageCount: openAiMessages.length,
-      timeoutMs: DEEPSEEK_TIMEOUT_MS,
+    // Gemini content format: system prompt goes in systemInstruction, history in contents[].
+    const contents = messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }] as Array<Record<string, unknown>>,
     }));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
+    // Attach images to the latest user turn so Gemini Flash runs the vision pass.
+    if (images.length > 0) {
+      const lastUserIdx = [...contents].reverse().findIndex((c) => c.role === "user");
+      const idx = lastUserIdx === -1 ? contents.length - 1 : contents.length - 1 - lastUserIdx;
+      const target = contents[idx];
+      if (target) {
+        if (!target.parts[0] || !(target.parts[0] as { text?: string }).text) {
+          target.parts[0] = { text: "এই ছবিটি পড়ে গুরুত্বপূর্ণ তথ্য বের করে দিন।" };
+        }
+        for (const img of images) {
+          target.parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        }
+      }
+    }
 
-    const dsRes = await fetch(DEEPSEEK_URL, {
+    console.log("ai-chat: calling Gemini", JSON.stringify({
+      model: GEMINI_MODEL,
+      turns: contents.length,
+      images: images.length,
+    }));
+
+    // No client-side timeout: vision + long context runs can legitimately take a while.
+    const dsRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        messages: openAiMessages,
-        temperature: 0.7,
-        max_tokens: 1600,
-        stream: false,
+        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        },
       }),
     }).catch((error) => {
-      console.error("ai-chat: DeepSeek fetch failed", safeErrorMessage(error));
+      console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
       return null;
     });
 
-    clearTimeout(timeout);
-
     if (!dsRes) {
       return new Response(
-        JSON.stringify({ error: `DeepSeek request timed out after ${DEEPSEEK_TIMEOUT_MS / 1000} seconds.` }),
+        JSON.stringify({ error: "Could not reach the AI service. Please try again." }),
         { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const dsText = await dsRes.text();
-    console.log("ai-chat: DeepSeek raw response", JSON.stringify({
+    console.log("ai-chat: Gemini raw response", JSON.stringify({
       status: dsRes.status,
       body: dsText.slice(0, 4000),
     }));
@@ -840,21 +849,23 @@ Deno.serve(async (req) => {
     try {
       dsData = dsText ? JSON.parse(dsText) : null;
     } catch (error) {
-      console.error("ai-chat: failed to parse DeepSeek response", safeErrorMessage(error));
+      console.error("ai-chat: failed to parse Gemini response", safeErrorMessage(error));
     }
 
     if (!dsRes.ok) {
       const errMsg =
-        dsData?.error?.message || dsText || `DeepSeek API request failed with status ${dsRes.status}`;
+        dsData?.error?.message || `AI request failed with status ${dsRes.status}`;
       return new Response(
         JSON.stringify({ error: errMsg, code: dsRes.status }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const parts = dsData?.candidates?.[0]?.content?.parts;
     let reply: string =
-      dsData?.choices?.[0]?.message?.content ??
-      "I couldn't generate a reply. Please try again.";
+      (Array.isArray(parts)
+        ? parts.map((p: any) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
+        : "") || "I couldn't generate a reply. Please try again.";
 
     // Layer 4 — defense-in-depth output filter. If the model ever emits a
     // restricted term for a non-owner, replace the reply with the canonical
