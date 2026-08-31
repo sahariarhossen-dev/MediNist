@@ -797,7 +797,7 @@ Deno.serve(async (req) => {
         : roleRaw === "manager"
         ? "manager"
         : "salesman";
-    const fullName = profile.full_name?.trim() || undefined || "User";
+    const fullName = profile.full_name?.trim() || "User";
 
     console.log("ai-chat: authenticated request", JSON.stringify({
       userId: userId,
