@@ -39,7 +39,7 @@ When an image is attached, it is a Bangladeshi handwritten or printed prescripti
 - Never dump raw OCR text as a wall of text; always structure it into the [[agent:v1]] cards above, with a 1–2 line prose summary before the block.
 - Never diagnose or change a doctor's prescription; only read and structure it.`;
 const GEMINI_MODEL = "gemini-1.5-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const SPIDER_URL = "https://api.spider.cloud/crawl";
 const SPIDER_TIMEOUT_MS = 12000;
 const MEDEX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
