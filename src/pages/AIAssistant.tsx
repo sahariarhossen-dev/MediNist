@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Slash, Globe, ArrowUp, TrendingUp, PackageSearch, Trophy, CalendarClock } from "lucide-react";
+import {
+  Slash,
+  ArrowUp,
+  TrendingUp,
+  PackageSearch,
+  Trophy,
+  CalendarClock,
+  Mic,
+  Square,
+  ImagePlus,
+  Loader2,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
