@@ -1875,6 +1875,75 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_queue: {
+        Row: {
+          brand_name: string
+          created_at: string
+          format: string | null
+          id: string
+          kind: string
+          last_error: string | null
+          lock_id: string | null
+          locked_at: string | null
+          master_id: string | null
+          next_attempt_at: string
+          retry_count: number
+          status: string
+          strength: string | null
+          updated_at: string
+        }
+        Insert: {
+          brand_name: string
+          created_at?: string
+          format?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          lock_id?: string | null
+          locked_at?: string | null
+          master_id?: string | null
+          next_attempt_at?: string
+          retry_count?: number
+          status?: string
+          strength?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brand_name?: string
+          created_at?: string
+          format?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          lock_id?: string | null
+          locked_at?: string | null
+          master_id?: string | null
+          next_attempt_at?: string
+          retry_count?: number
+          status?: string
+          strength?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sync_state: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -2286,6 +2355,48 @@ export type Database = {
           pharmacy_id: string | null
           qty_sold: number | null
           revenue_bdt: number | null
+        }
+        Relationships: []
+      }
+      new_product_approvals: {
+        Row: {
+          brand_name: string | null
+          company: string | null
+          detected_at: string | null
+          duplicate_match: Json | null
+          format: string | null
+          generic: string | null
+          id: string | null
+          payload: Json | null
+          price: number | null
+          status: string | null
+          strength: string | null
+        }
+        Insert: {
+          brand_name?: string | null
+          company?: string | null
+          detected_at?: string | null
+          duplicate_match?: Json | null
+          format?: string | null
+          generic?: string | null
+          id?: string | null
+          payload?: Json | null
+          price?: number | null
+          status?: never
+          strength?: string | null
+        }
+        Update: {
+          brand_name?: string | null
+          company?: string | null
+          detected_at?: string | null
+          duplicate_match?: Json | null
+          format?: string | null
+          generic?: string | null
+          id?: string | null
+          payload?: Json | null
+          price?: number | null
+          status?: never
+          strength?: string | null
         }
         Relationships: []
       }
