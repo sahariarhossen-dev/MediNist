@@ -758,7 +758,7 @@ Deno.serve(async (req) => {
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("full_name, role, pharmacy_id")
-      .eq("id", userData.user.id)
+      .eq("id", userId)
       .maybeSingle();
 
     if (profileErr) {
@@ -797,10 +797,10 @@ Deno.serve(async (req) => {
         : roleRaw === "manager"
         ? "manager"
         : "salesman";
-    const fullName = profile.full_name?.trim() || userData.user.email || "User";
+    const fullName = profile.full_name?.trim() || undefined || "User";
 
     console.log("ai-chat: authenticated request", JSON.stringify({
-      userId: userData.user.id,
+      userId: userId,
       pharmacyId: profile.pharmacy_id,
       role,
       messageCount: messages.length,
@@ -813,7 +813,7 @@ Deno.serve(async (req) => {
       shopName: pharmacy.name,
     });
 
-    const context = await buildPharmacyContext(supabase, profile.pharmacy_id, role, userData.user.id);
+    const context = await buildPharmacyContext(supabase, profile.pharmacy_id, role, userId);
 
     // Live MedEx lookup for the latest user turn — only when medicine intent detected.
     let medexBlock = "";
@@ -965,7 +965,7 @@ Deno.serve(async (req) => {
           );
           await adminClient.from("staff_activity_logs").insert({
             pharmacy_id: profile.pharmacy_id,
-            user_id: userData.user.id,
+            user_id: userId,
             action_type: "ai_denied_query",
             entity_type: "ai_chat",
             description: `AI blocked a restricted response (role=${role})`,
