@@ -32,6 +32,13 @@ import {
   type AgentAction,
 } from "@/lib/agentCards";
 import { markAiReplied, markAiSeen, setAiThinking } from "@/lib/aiActivity";
+import {
+  fileToInlineImage,
+  startVoiceRecording,
+  transcribeAudio,
+  type InlineImage,
+  type VoiceRecorder,
+} from "@/lib/voiceImage";
 
 interface Message {
   id?: string;
