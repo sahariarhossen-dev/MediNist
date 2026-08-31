@@ -733,14 +733,26 @@ Deno.serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      console.error("ai-chat: auth validation failed", userErr);
+
+    // Verify the JWT itself (does not require the auth session row to still exist).
+    let userId: string | null = null;
+    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
+    if (!claimsErr && claimsData?.claims?.sub) {
+      userId = claimsData.claims.sub as string;
+    } else {
+      // Fallback for older tokens
+      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+      if (!userErr && userData?.user) userId = userData.user.id;
+      else console.error("ai-chat: auth validation failed", claimsErr ?? userErr);
+    }
+
+    if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     // Resolve identity server-side (never trust client)
     const { data: profile, error: profileErr } = await supabase
