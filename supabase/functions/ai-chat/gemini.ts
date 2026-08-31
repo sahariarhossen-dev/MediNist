@@ -31,12 +31,14 @@ export function buildGeminiGenerateUrl(model: string): string {
 export function selectGeminiModel(
   models: GeminiModelRecord[],
   configuredModel?: string | null,
+  excluded: Iterable<string> = [],
 ): string | null {
+  const skip = new Set([...excluded].map((m) => normalizeGeminiModel(m)));
   const available = new Set(
     models
       .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
       .map((model) => normalizeGeminiModel(model.name ?? ""))
-      .filter((name) => name.startsWith("gemini-")),
+      .filter((name) => name.startsWith("gemini-") && !skip.has(name)),
   );
 
   const configured = configuredModel ? normalizeGeminiModel(configuredModel) : "";
@@ -51,6 +53,7 @@ export function selectGeminiModel(
     .sort()
     .reverse()[0] ?? null;
 }
+
 
 export function redactGeminiUrl(url: string): string {
   return url.replace(/([?&]key=)[^&]+/i, "$1REDACTED");
