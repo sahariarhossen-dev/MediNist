@@ -66,9 +66,15 @@ interface InlineImage {
 
 let cachedGeminiModel: { name: string; expiresAt: number } | null = null;
 const GEMINI_MODEL_CACHE_MS = 60 * 60 * 1000;
+// Models the catalog advertises but that reject our requests (retired / restricted).
+const deadGeminiModels = new Set<string>();
 
 async function resolveGeminiModel(apiKey: string): Promise<string | null> {
-  if (cachedGeminiModel && cachedGeminiModel.expiresAt > Date.now()) {
+  if (
+    cachedGeminiModel &&
+    cachedGeminiModel.expiresAt > Date.now() &&
+    !deadGeminiModels.has(cachedGeminiModel.name)
+  ) {
     return cachedGeminiModel.name;
   }
 
@@ -93,15 +99,24 @@ async function resolveGeminiModel(apiKey: string): Promise<string | null> {
     return null;
   }
 
+  const configured = Deno.env.get("GEMINI_MODEL");
   const selected = selectGeminiModel(
     Array.isArray(payload?.models) ? payload.models : [],
-    Deno.env.get("GEMINI_MODEL"),
+    configured && !deadGeminiModels.has(configured) ? configured : undefined,
+    deadGeminiModels,
   );
   if (selected) {
     cachedGeminiModel = { name: selected, expiresAt: Date.now() + GEMINI_MODEL_CACHE_MS };
   }
   return selected;
 }
+
+function isRetiredModelError(status: number, body: string): boolean {
+  if (status !== 400 && status !== 403 && status !== 404) return false;
+  return /no longer available|not found for API version|is not supported for generateContent|deprecated/i
+    .test(body);
+}
+
 
 // =============== MedEx live lookup ===============
 
@@ -875,43 +890,65 @@ Deno.serve(async (req) => {
       }
     }
 
-    const geminiModel = await resolveGeminiModel(GEMINI_API_KEY);
-    if (!geminiModel) {
-      console.error("ai-chat: no catalog model supports generateContent");
-      return new Response(
-        JSON.stringify({ error: "No compatible AI model is currently available. Please try again later." }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    console.log("ai-chat: calling Gemini", JSON.stringify({
-      model: geminiModel,
-      turns: contents.length,
-      images: images.length,
-    }));
-
-    const geminiUrl = `${buildGeminiGenerateUrl(geminiModel)}?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-    console.log("ai-chat: calling Gemini URL", redactGeminiUrl(geminiUrl));
-
-    // No client-side timeout: vision + long context runs can legitimately take a while.
-    const dsRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
+    const requestBody = JSON.stringify({
+      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
       },
-      body: JSON.stringify({
-        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048,
-        },
-      }),
-    }).catch((error) => {
-      console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
-      return null;
     });
+
+    let dsRes: Response | null = null;
+    let dsText = "";
+    // Retry with the next candidate model if the chosen one turns out to be retired.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const geminiModel = await resolveGeminiModel(GEMINI_API_KEY);
+      if (!geminiModel) {
+        console.error("ai-chat: no catalog model supports generateContent");
+        return new Response(
+          JSON.stringify({ error: "No compatible AI model is currently available. Please try again later." }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const geminiUrl = `${buildGeminiGenerateUrl(geminiModel)}?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+      console.log("ai-chat: calling Gemini", JSON.stringify({
+        model: geminiModel,
+        attempt,
+        turns: contents.length,
+        images: images.length,
+        url: redactGeminiUrl(geminiUrl),
+      }));
+
+      // No client-side timeout: vision + long context runs can legitimately take a while.
+      dsRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
+        body: requestBody,
+      }).catch((error) => {
+        console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
+        return null;
+      });
+
+      if (!dsRes) break;
+
+      dsText = await dsRes.text();
+      console.log("ai-chat: Gemini raw response", JSON.stringify({
+        status: dsRes.status,
+        model: geminiModel,
+        body: dsText.slice(0, 4000),
+      }));
+
+      if (dsRes.ok || !isRetiredModelError(dsRes.status, dsText)) break;
+
+      console.error("ai-chat: model retired, trying next candidate", geminiModel);
+      deadGeminiModels.add(geminiModel);
+      cachedGeminiModel = null;
+    }
 
     if (!dsRes) {
       return new Response(
@@ -920,18 +957,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const dsText = await dsRes.text();
-    console.log("ai-chat: Gemini raw response", JSON.stringify({
-      status: dsRes.status,
-      body: dsText.slice(0, 4000),
-    }));
-
     let dsData: any = null;
     try {
       dsData = dsText ? JSON.parse(dsText) : null;
     } catch (error) {
       console.error("ai-chat: failed to parse Gemini response", safeErrorMessage(error));
     }
+
 
     if (!dsRes.ok) {
       const errMsg =

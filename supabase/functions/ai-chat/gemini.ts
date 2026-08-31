@@ -1,9 +1,15 @@
 export const GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
 
+// Newest-first: retired models (e.g. gemini-2.5-flash) may still appear in the
+// catalog but reject requests from new projects, so prefer current generations.
 export const GEMINI_FLASH_PREFERENCES = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3-flash",
+  "gemini-2.0-flash",
+  "gemini-flash-latest",
 ] as const;
+
 
 export interface GeminiModelRecord {
   name?: string;
@@ -25,12 +31,14 @@ export function buildGeminiGenerateUrl(model: string): string {
 export function selectGeminiModel(
   models: GeminiModelRecord[],
   configuredModel?: string | null,
+  excluded: Iterable<string> = [],
 ): string | null {
+  const skip = new Set([...excluded].map((m) => normalizeGeminiModel(m)));
   const available = new Set(
     models
       .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
       .map((model) => normalizeGeminiModel(model.name ?? ""))
-      .filter((name) => name.startsWith("gemini-")),
+      .filter((name) => name.startsWith("gemini-") && !skip.has(name)),
   );
 
   const configured = configuredModel ? normalizeGeminiModel(configuredModel) : "";
@@ -45,6 +53,7 @@ export function selectGeminiModel(
     .sort()
     .reverse()[0] ?? null;
 }
+
 
 export function redactGeminiUrl(url: string): string {
   return url.replace(/([?&]key=)[^&]+/i, "$1REDACTED");
