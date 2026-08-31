@@ -255,13 +255,16 @@ const AIAssistant = () => {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: {
-          messages: history,
-          ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
-        },
-      });
+      const invoke = (token: string) =>
+        supabase.functions.invoke("ai-chat", {
+          headers: { Authorization: `Bearer ${token}` },
+          body: {
+            messages: history,
+            ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
+          },
+        });
+
+      let { data, error } = await invoke(accessToken);
 
       if (error) {
         // One retry with a forcibly refreshed token for stale-session 401s.
@@ -272,16 +275,8 @@ const AIAssistant = () => {
           await supabase.auth.signOut();
           return;
         }
-        const retry = await supabase.functions.invoke("ai-chat", {
-          headers: { Authorization: `Bearer ${retryToken}` },
-          body: {
-            messages: history,
-            ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
-          },
-        });
-        if (retry.error) throw retry.error;
-        Object.assign({}, retry);
-        return await handleReply(retry.data, convId);
+        ({ data, error } = await invoke(retryToken));
+        if (error) throw error;
       }
 
       let reply: string;
