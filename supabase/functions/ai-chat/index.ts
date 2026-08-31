@@ -1,5 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildPharmacyContext } from "./contextBuilder.ts";
+import {
+  buildGeminiGenerateUrl,
+  GEMINI_API_ROOT,
+  GeminiModelRecord,
+  redactGeminiUrl,
+  selectGeminiModel,
+} from "./gemini.ts";
 import { Role, safeErrorMessage } from "./shared.ts";
 
 const corsHeaders = {
@@ -38,8 +45,6 @@ When an image is attached, it is a Bangladeshi handwritten or printed prescripti
 - Invoice: return a "summary" card for supplier / invoice no / date / total, plus a "list" card of items (name, meta = qty × rate, value = line total).
 - Never dump raw OCR text as a wall of text; always structure it into the [[agent:v1]] cards above, with a 1–2 line prose summary before the block.
 - Never diagnose or change a doctor's prescription; only read and structure it.`;
-const GEMINI_MODEL = "gemini-1.5-flash";
-const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const SPIDER_URL = "https://api.spider.cloud/crawl";
 const SPIDER_TIMEOUT_MS = 12000;
 const MEDEX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -57,6 +62,45 @@ interface ChatMsg {
 interface InlineImage {
   mimeType: string;
   data: string;
+}
+
+let cachedGeminiModel: { name: string; expiresAt: number } | null = null;
+const GEMINI_MODEL_CACHE_MS = 60 * 60 * 1000;
+
+async function resolveGeminiModel(apiKey: string): Promise<string | null> {
+  if (cachedGeminiModel && cachedGeminiModel.expiresAt > Date.now()) {
+    return cachedGeminiModel.name;
+  }
+
+  const catalogUrl = `${GEMINI_API_ROOT}/models?key=${encodeURIComponent(apiKey)}`;
+  console.log("ai-chat: Gemini catalog URL", redactGeminiUrl(catalogUrl));
+  const response = await fetch(catalogUrl, {
+    headers: { "x-goog-api-key": apiKey },
+  });
+  const text = await response.text();
+  console.log("ai-chat: Gemini catalog response", JSON.stringify({
+    status: response.status,
+    body: text.slice(0, 4000),
+  }));
+
+  if (!response.ok) return null;
+
+  let payload: { models?: GeminiModelRecord[] } | null = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (error) {
+    console.error("ai-chat: failed to parse Gemini catalog", safeErrorMessage(error));
+    return null;
+  }
+
+  const selected = selectGeminiModel(
+    Array.isArray(payload?.models) ? payload.models : [],
+    Deno.env.get("GEMINI_MODEL"),
+  );
+  if (selected) {
+    cachedGeminiModel = { name: selected, expiresAt: Date.now() + GEMINI_MODEL_CACHE_MS };
+  }
+  return selected;
 }
 
 // =============== MedEx live lookup ===============
@@ -809,14 +853,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    const geminiModel = await resolveGeminiModel(GEMINI_API_KEY);
+    if (!geminiModel) {
+      console.error("ai-chat: no catalog model supports generateContent");
+      return new Response(
+        JSON.stringify({ error: "No compatible AI model is currently available. Please try again later." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     console.log("ai-chat: calling Gemini", JSON.stringify({
-      model: GEMINI_MODEL,
+      model: geminiModel,
       turns: contents.length,
       images: images.length,
     }));
 
-    const geminiUrl = `${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`;
-    console.log("ai-chat: calling Gemini URL", geminiUrl.split("?key=")[0] + "?key=REDACTED");
+    const geminiUrl = `${buildGeminiGenerateUrl(geminiModel)}?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+    console.log("ai-chat: calling Gemini URL", redactGeminiUrl(geminiUrl));
 
     // No client-side timeout: vision + long context runs can legitimately take a while.
     const dsRes = await fetch(geminiUrl, {
