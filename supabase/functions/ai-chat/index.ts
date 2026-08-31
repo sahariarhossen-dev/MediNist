@@ -610,12 +610,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { messages } = (await req.json()) as { messages: ChatMsg[] };
+    const body = (await req.json()) as { messages: ChatMsg[]; images?: InlineImage[] };
+    const messages = body?.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Optional Base64 images (prescription / invoice OCR).
+    const rawImages = Array.isArray(body?.images) ? body.images : [];
+    if (rawImages.length > MAX_IMAGES) {
+      return new Response(
+        JSON.stringify({ error: `Too many images (max ${MAX_IMAGES}).` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const images: InlineImage[] = [];
+    for (const img of rawImages) {
+      const mimeType = typeof img?.mimeType === "string" ? img.mimeType.toLowerCase() : "";
+      const data = typeof img?.data === "string" ? img.data.replace(/^data:[^;]+;base64,/, "") : "";
+      if (!ALLOWED_IMAGE_TYPES.has(mimeType) || data.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Only JPEG, PNG or WebP images are supported." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (data.length > MAX_IMAGE_B64_LEN) {
+        return new Response(
+          JSON.stringify({ error: "Image is too large. Please use a smaller photo." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      images.push({ mimeType, data });
     }
 
     // Server-side validation to prevent prompt-injection via crafted roles
@@ -635,7 +663,7 @@ Deno.serve(async (req) => {
         typeof m.role !== "string" ||
         !ALLOWED_ROLES.has(m.role) ||
         typeof m.content !== "string" ||
-        m.content.length === 0 ||
+        (m.content.length === 0 && images.length === 0) ||
         m.content.length > MAX_CONTENT_LEN
       ) {
         return new Response(
@@ -645,10 +673,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
-    console.log("ai-chat: DEEPSEEK_API_KEY configured", Boolean(DEEPSEEK_API_KEY));
-    if (!DEEPSEEK_API_KEY) {
-      return new Response(JSON.stringify({ error: "DEEPSEEK_API_KEY not configured" }), {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    console.log("ai-chat: GEMINI_API_KEY configured", Boolean(GEMINI_API_KEY));
+    if (!GEMINI_API_KEY) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
