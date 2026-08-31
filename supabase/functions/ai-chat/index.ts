@@ -16,17 +16,47 @@ You have TWO knowledge sources and you MUST pick the right one per user turn:
 
 If the LIVE PHARMACY DATA block is marked "unavailable" (fallback), you may STILL answer general / conceptual / medical / app questions normally — do NOT refuse the whole turn. Only decline to give exact shop-specific numbers, and briefly say live data could not be loaded right now.
 
-Never fabricate shop numbers, and never leak data that the user's role is not permitted to see.`;
-const DEEPSEEK_MODEL = "deepseek-chat";
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_TIMEOUT_MS = 30000;
+Never fabricate shop numbers, and never leak data that the user's role is not permitted to see.
+
+LANGUAGE: Bengali (বাংলা), Banglish (Bengali typed in English letters) and English are all first-class. Always answer in the SAME language and script the user wrote in. Never ask the user to switch language, and never apologise for their spelling.
+
+GENERATIVE UI PROTOCOL — [[agent:v1]]:
+When your answer contains structured data (a list of medicines, stock rows, a sales summary, extracted prescription/invoice items) you MUST append ONE machine block at the very END of the reply, after the human prose, on its own line:
+[[agent:v1]]{"cards":[...],"actions":[...],"suggestions":["...","..."]}
+Rules for the block:
+- Exactly one block per reply, minified single-line JSON, nothing after it. Never wrap it in a code fence and never mention it in the prose.
+- Card shapes ONLY:
+  {"type":"summary","title":"Aajker Bikri","rows":[{"label":"Total","value":"৳12,400"}]}
+  {"type":"list","title":"Low stock","items":[{"name":"Napa 500mg","meta":"Beximco","value":"4 pcs"}]}
+- Allowed action ids ONLY: "check_stock", "reorder", "assign_task", "forward_to_staff". Shape: {"id":"reorder","label":"Re-order draft"}.
+- "suggestions" are 2–3 short follow-up prompts in the user's language.
+- If the answer is purely conversational, omit the block entirely.
+
+IMAGE / OCR MODE:
+When an image is attached, it is a Bangladeshi handwritten or printed prescription, or a supplier/purchase invoice.
+- Prescription: read every medicine and return a "list" card where name = brand + strength, meta = generic (if known), value = dosage + duration (e.g. "1+0+1 · 7 din"). Add a short prose note about anything illegible — never guess a drug name you cannot read.
+- Invoice: return a "summary" card for supplier / invoice no / date / total, plus a "list" card of items (name, meta = qty × rate, value = line total).
+- Never dump raw OCR text as a wall of text; always structure it into the [[agent:v1]] cards above, with a 1–2 line prose summary before the block.
+- Never diagnose or change a doctor's prescription; only read and structure it.`;
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const SPIDER_URL = "https://api.spider.cloud/crawl";
 const SPIDER_TIMEOUT_MS = 12000;
 const MEDEX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_IMAGES = 3;
+/** ~6 MB of base64 per image. */
+const MAX_IMAGE_B64_LEN = 8_000_000;
+
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+}
+
+interface InlineImage {
+  mimeType: string;
+  data: string;
 }
 
 // =============== MedEx live lookup ===============
@@ -558,7 +588,7 @@ Shop: ${shopName}
     (b) Found, stock 0 or ≤ stock_alert → flag as low/out and suggest up to 2 SAME-GENERIC alternatives from the inventory (use the verified mappings in rule 21). If none exist, say: "একই জেনেরিকের কোনো বিকল্প এখন stock-এ নেই।"
     (c) Not in inventory → "দুঃখিত, এই ওষুধটি আমাদের ইনভেন্টরিতে নেই।" + up to 2 same-generic alternatives from inventory if any; otherwise the same "একই জেনেরিকের কোনো বিকল্প…" line.
     ANTI-PATTERN (FORBIDDEN): Never suggest Amilin (Amitriptyline) as a substitute for Acemox (Acetazolamide), or any cross-generic swap. Different generics ≠ alternatives.
-23. NO "DATA NOT SAVED" — EVER: The phrases "ডাটা সেভ নেই" / "ডাটা সেভ করা নেই" / "data is not saved" are FORBIDDEN. For a missing specific date the only acceptable phrasing is "ঐ তারিখে কোনো লেনদেন রেকর্ড করা হয়নি" (or the সেল/খরচ variant from rule 18).`;
+23. NO "DATA NOT SAVED" — EVER: The phrases "ডাটা সেভ নেই" / "ডাটা সেভ করা নেই" / "data is not saved" are FORBIDDEN. For a missing specific date the only acceptable phrasing is "ঐ তারিখে কোনো লেনদেন রেকর্ড করা হয়নি" (or the সেল/খরচ variant from rule 18).
 24. DUAL-MODE ANSWERING:
     (a) GENERAL / CONCEPTUAL queries — how MediNist works, what a drug class does, general pharmacy workflow advice, business tips, greetings, app help, "what can you do?" — answer from YOUR OWN pre-trained knowledge in a friendly conversational tone (Bangla if the user wrote Bangla/Banglish, English otherwise). NO database lookup required. Do NOT say "data not found" / "no records" for these.
     (b) SHOP-SPECIFIC queries — this shop's inventory, sales numbers, dues, expenses, staff, customers, today's totals, etc. — answer STRICTLY from the LIVE PHARMACY DATA block. All RBAC rules (1–23) apply with full force; never relax them.
@@ -580,12 +610,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { messages } = (await req.json()) as { messages: ChatMsg[] };
+    const body = (await req.json()) as { messages: ChatMsg[]; images?: InlineImage[] };
+    const messages = body?.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Optional Base64 images (prescription / invoice OCR).
+    const rawImages = Array.isArray(body?.images) ? body.images : [];
+    if (rawImages.length > MAX_IMAGES) {
+      return new Response(
+        JSON.stringify({ error: `Too many images (max ${MAX_IMAGES}).` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const images: InlineImage[] = [];
+    for (const img of rawImages) {
+      const mimeType = typeof img?.mimeType === "string" ? img.mimeType.toLowerCase() : "";
+      const data = typeof img?.data === "string" ? img.data.replace(/^data:[^;]+;base64,/, "") : "";
+      if (!ALLOWED_IMAGE_TYPES.has(mimeType) || data.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Only JPEG, PNG or WebP images are supported." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (data.length > MAX_IMAGE_B64_LEN) {
+        return new Response(
+          JSON.stringify({ error: "Image is too large. Please use a smaller photo." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      images.push({ mimeType, data });
     }
 
     // Server-side validation to prevent prompt-injection via crafted roles
@@ -605,7 +663,7 @@ Deno.serve(async (req) => {
         typeof m.role !== "string" ||
         !ALLOWED_ROLES.has(m.role) ||
         typeof m.content !== "string" ||
-        m.content.length === 0 ||
+        (m.content.length === 0 && images.length === 0) ||
         m.content.length > MAX_CONTENT_LEN
       ) {
         return new Response(
@@ -615,10 +673,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
-    console.log("ai-chat: DEEPSEEK_API_KEY configured", Boolean(DEEPSEEK_API_KEY));
-    if (!DEEPSEEK_API_KEY) {
-      return new Response(JSON.stringify({ error: "DEEPSEEK_API_KEY not configured" }), {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    console.log("ai-chat: GEMINI_API_KEY configured", Boolean(GEMINI_API_KEY));
+    if (!GEMINI_API_KEY) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -730,50 +788,59 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `${SYSTEM_BASE}\n\n${scopeHeader}\n\n${securityBlock}\n\n${context}${medexBlock}`;
 
-    const openAiMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-    ];
-
-    console.log("ai-chat: calling DeepSeek", JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messageCount: openAiMessages.length,
-      timeoutMs: DEEPSEEK_TIMEOUT_MS,
+    // Gemini content format: system prompt goes in systemInstruction, history in contents[].
+    const contents = messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }] as Array<Record<string, unknown>>,
     }));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
+    // Attach images to the latest user turn so Gemini Flash runs the vision pass.
+    if (images.length > 0) {
+      const lastUserIdx = [...contents].reverse().findIndex((c) => c.role === "user");
+      const idx = lastUserIdx === -1 ? contents.length - 1 : contents.length - 1 - lastUserIdx;
+      const target = contents[idx];
+      if (target) {
+        if (!target.parts[0] || !(target.parts[0] as { text?: string }).text) {
+          target.parts[0] = { text: "এই ছবিটি পড়ে গুরুত্বপূর্ণ তথ্য বের করে দিন।" };
+        }
+        for (const img of images) {
+          target.parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        }
+      }
+    }
 
-    const dsRes = await fetch(DEEPSEEK_URL, {
+    console.log("ai-chat: calling Gemini", JSON.stringify({
+      model: GEMINI_MODEL,
+      turns: contents.length,
+      images: images.length,
+    }));
+
+    // No client-side timeout: vision + long context runs can legitimately take a while.
+    const dsRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        messages: openAiMessages,
-        temperature: 0.7,
-        max_tokens: 1600,
-        stream: false,
+        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        },
       }),
     }).catch((error) => {
-      console.error("ai-chat: DeepSeek fetch failed", safeErrorMessage(error));
+      console.error("ai-chat: Gemini fetch failed", safeErrorMessage(error));
       return null;
     });
 
-    clearTimeout(timeout);
-
     if (!dsRes) {
       return new Response(
-        JSON.stringify({ error: `DeepSeek request timed out after ${DEEPSEEK_TIMEOUT_MS / 1000} seconds.` }),
+        JSON.stringify({ error: "Could not reach the AI service. Please try again." }),
         { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const dsText = await dsRes.text();
-    console.log("ai-chat: DeepSeek raw response", JSON.stringify({
+    console.log("ai-chat: Gemini raw response", JSON.stringify({
       status: dsRes.status,
       body: dsText.slice(0, 4000),
     }));
@@ -782,21 +849,23 @@ Deno.serve(async (req) => {
     try {
       dsData = dsText ? JSON.parse(dsText) : null;
     } catch (error) {
-      console.error("ai-chat: failed to parse DeepSeek response", safeErrorMessage(error));
+      console.error("ai-chat: failed to parse Gemini response", safeErrorMessage(error));
     }
 
     if (!dsRes.ok) {
       const errMsg =
-        dsData?.error?.message || dsText || `DeepSeek API request failed with status ${dsRes.status}`;
+        dsData?.error?.message || `AI request failed with status ${dsRes.status}`;
       return new Response(
         JSON.stringify({ error: errMsg, code: dsRes.status }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const parts = dsData?.candidates?.[0]?.content?.parts;
     let reply: string =
-      dsData?.choices?.[0]?.message?.content ??
-      "I couldn't generate a reply. Please try again.";
+      (Array.isArray(parts)
+        ? parts.map((p: any) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
+        : "") || "I couldn't generate a reply. Please try again.";
 
     // Layer 4 — defense-in-depth output filter. If the model ever emits a
     // restricted term for a non-owner, replace the reply with the canonical

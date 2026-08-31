@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Slash, Globe, ArrowUp, TrendingUp, PackageSearch, Trophy, CalendarClock } from "lucide-react";
+import {
+  Slash,
+  ArrowUp,
+  TrendingUp,
+  PackageSearch,
+  Trophy,
+  CalendarClock,
+  Mic,
+  Square,
+  ImagePlus,
+  Loader2,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -20,6 +32,13 @@ import {
   type AgentAction,
 } from "@/lib/agentCards";
 import { markAiReplied, markAiSeen, setAiThinking } from "@/lib/aiActivity";
+import {
+  fileToInlineImage,
+  startVoiceRecording,
+  transcribeAudio,
+  type InlineImage,
+  type VoiceRecorder,
+} from "@/lib/voiceImage";
 
 interface Message {
   id?: string;
@@ -60,6 +79,10 @@ const AIAssistant = () => {
     index: number | null;
   } | null>(null);
   const [receipts, setReceipts] = useState<Record<number, string>>({});
+  const [attachment, setAttachment] = useState<InlineImage | null>(null);
+  const [recorder, setRecorder] = useState<VoiceRecorder | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { setElement } = useScrollContainer();
@@ -179,17 +202,23 @@ const AIAssistant = () => {
     }
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, image?: InlineImage | null) => {
     const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
+    if ((!trimmed && !image) || isLoading) return;
 
     const convId = await ensureConversation();
     if (!convId) return;
 
-    const userMsg: Message = { role: "user", content: trimmed };
+    const promptText =
+      trimmed ||
+      "এই ছবিটি (প্রেসক্রিপশন / ইনভয়েস) পড়ে গুরুত্বপূর্ণ তথ্য গুছিয়ে দিন।";
+    const shown = image ? `${promptText}\n\n_📎 ${image.name} সংযুক্ত করা হয়েছে_` : promptText;
+
+    const userMsg: Message = { role: "user", content: shown };
     const nextMessages = [...messages.filter((m) => m !== WELCOME || messages.length > 1), userMsg];
     setMessages((prev) => [...prev.filter((m) => m !== WELCOME || prev.length > 1), userMsg]);
     setInput("");
+    setAttachment(null);
     setIsLoading(true);
     setAiThinking(true);
 
@@ -197,7 +226,7 @@ const AIAssistant = () => {
     const { error: insertErr } = await supabase.from("ai_messages").insert({
       conversation_id: convId,
       role: "user",
-      content: trimmed,
+      content: shown,
     });
     if (insertErr) console.error("persist user msg:", insertErr);
 
@@ -205,10 +234,16 @@ const AIAssistant = () => {
       const history = nextMessages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .slice(-20)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m, i, arr) => ({
+          role: m.role,
+          content: image && i === arr.length - 1 ? promptText : m.content,
+        }));
 
       const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: { messages: history },
+        body: {
+          messages: history,
+          ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
+        },
       });
 
       if (error) throw error;
@@ -249,9 +284,59 @@ const AIAssistant = () => {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    sendMessage(input);
+    sendMessage(input, attachment);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
+    }
+  };
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file.");
+      return;
+    }
+    try {
+      setAttachment(await fileToInlineImage(file));
+    } catch (err) {
+      toast.error((err as Error).message || "Could not read the image.");
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (transcribing || isLoading) return;
+    if (recorder) {
+      const active = recorder;
+      setRecorder(null);
+      setTranscribing(true);
+      try {
+        const blob = await active.stop();
+        if (!blob) {
+          toast.error("Kichu record hoyni. Abar try korun.");
+          return;
+        }
+        const text = await transcribeAudio(blob);
+        if (!text) {
+          toast.error("Kono kotha bujhte parini. Abar bolun.");
+          return;
+        }
+        setInput((prev) => (prev ? `${prev.trim()} ${text}` : text));
+        textareaRef.current?.focus();
+      } catch (err) {
+        console.error("transcription failed:", err);
+        toast.error("Voice transcription failed.");
+      } finally {
+        setTranscribing(false);
+      }
+      return;
+    }
+    try {
+      setRecorder(await startVoiceRecording());
+    } catch (err) {
+      console.error("mic error:", err);
+      toast.error("Microphone access denied.");
     }
   };
 
@@ -381,6 +466,26 @@ const AIAssistant = () => {
       {/* Floating Composer Card */}
       <form onSubmit={handleSubmit} className="relative shrink-0 px-3 pt-2 pb-[15px]">
         <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-3xl border border-black/5 bg-white/70 px-4 pb-2 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur transition-all duration-200 focus-within:border-black/10 focus-within:bg-white/90 focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          {attachment && (
+            <div className="flex items-center gap-2 rounded-2xl bg-slate-100/80 p-2">
+              <img
+                src={attachment.preview}
+                alt="Attached prescription or invoice"
+                className="h-12 w-12 rounded-xl object-cover ring-1 ring-black/5"
+              />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">
+                {attachment.name}
+              </span>
+              <button
+                type="button"
+                aria-label="Remove attachment"
+                onClick={() => setAttachment(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-white hover:text-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={input}
@@ -399,7 +504,15 @@ const AIAssistant = () => {
               }
             }}
             rows={1}
-            placeholder={isLoading ? "MediNist is thinking..." : "Ask MediNist anything…"}
+            placeholder={
+              recorder
+                ? "Recording… tap the stop button when done"
+                : transcribing
+                ? "Transcribing your voice…"
+                : isLoading
+                ? "MediNist is thinking..."
+                : "Ask MediNist anything…"
+            }
             disabled={isLoading}
             className="max-h-[140px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
           />
@@ -413,21 +526,53 @@ const AIAssistant = () => {
               >
                 <Slash className="h-5 w-5" />
               </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={handlePickImage}
+              />
               <button
                 type="button"
-                aria-label="Tools"
-                className="flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
+                aria-label="Attach prescription or invoice"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isLoading}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95 disabled:opacity-40"
               >
-                <Globe className="h-4 w-4" />
-                Tools
+                <ImagePlus className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label={recorder ? "Stop recording" : "Voice input"}
+                onClick={toggleRecording}
+                disabled={isLoading || transcribing}
+                className={
+                  "flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition active:scale-95 disabled:opacity-40 " +
+                  (recorder
+                    ? "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700")
+                }
+              >
+                {transcribing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : recorder ? (
+                  <>
+                    <Square className="h-4 w-4" />
+                    Stop
+                  </>
+                ) : (
+                  <Mic className="h-5 w-5" />
+                )}
               </button>
             </div>
             <Button
               type="submit"
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || (!input.trim() && !attachment)}
               className={
                 "h-9 w-9 shrink-0 rounded-full p-0 transition-all duration-200 " +
-                (input.trim() && !isLoading
+                ((input.trim() || attachment) && !isLoading
                   ? "scale-100 bg-slate-900 text-white hover:bg-slate-800"
                   : "scale-95 bg-slate-200 text-slate-400 hover:bg-slate-200")
               }
