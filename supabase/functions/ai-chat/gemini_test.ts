@@ -37,13 +37,14 @@ Deno.test("selects a configured supported model, then a safe Flash fallback", ()
 Deno.test("skips excluded (retired) models", () => {
   assertEquals(
     selectGeminiModel(catalog, "gemini-3.6-flash", ["models/gemini-3.6-flash"]),
-    "gemini-2.5-flash",
-  );
-  assertEquals(
-    selectGeminiModel(catalog, null, ["gemini-3.6-flash", "gemini-2.5-flash"]),
     "gemini-2.5-flash-lite",
   );
+  assertEquals(
+    selectGeminiModel(catalog, null, ["gemini-3.6-flash", "gemini-2.5-flash-lite"]),
+    "gemini-2.5-flash",
+  );
 });
+
 
 
 Deno.test("redacts API keys from diagnostic URLs", () => {
