@@ -816,9 +816,13 @@ Deno.serve(async (req) => {
     }));
 
     // No client-side timeout: vision + long context runs can legitimately take a while.
-    const dsRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    const dsRes = await fetch(GEMINI_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GEMINI_API_KEY}`,
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
       body: JSON.stringify({
         systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
         contents,
