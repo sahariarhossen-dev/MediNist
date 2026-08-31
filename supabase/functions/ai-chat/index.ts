@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildPharmacyContext } from "./contextBuilder.ts";
 import {
   buildGeminiGenerateUrl,
@@ -734,16 +734,25 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
 
-    // Verify the JWT itself (does not require the auth session row to still exist).
+    // Verify the JWT itself (getClaims does not require the auth session row to still exist).
     let userId: string | null = null;
-    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
-    if (!claimsErr && claimsData?.claims?.sub) {
-      userId = claimsData.claims.sub as string;
-    } else {
-      // Fallback for older tokens
-      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-      if (!userErr && userData?.user) userId = userData.user.id;
-      else console.error("ai-chat: auth validation failed", claimsErr ?? userErr);
+    try {
+      const authApi = supabase.auth as unknown as {
+        getClaims?: (t: string) => Promise<{ data?: { claims?: Record<string, unknown> } | null; error?: unknown }>;
+      };
+      if (typeof authApi.getClaims === "function") {
+        const { data: claimsData, error: claimsErr } = await authApi.getClaims(token);
+        const sub = claimsData?.claims?.sub;
+        if (!claimsErr && typeof sub === "string") userId = sub;
+        else console.error("ai-chat: getClaims validation failed", claimsErr);
+      }
+      if (!userId) {
+        const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+        if (!userErr && userData?.user) userId = userData.user.id;
+        else console.error("ai-chat: auth validation failed", userErr);
+      }
+    } catch (authEx) {
+      console.error("ai-chat: auth verification threw", authEx);
     }
 
     if (!userId) {
@@ -752,6 +761,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
 
     // Resolve identity server-side (never trust client)
