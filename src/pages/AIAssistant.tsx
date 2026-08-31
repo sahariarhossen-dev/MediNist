@@ -239,14 +239,45 @@ const AIAssistant = () => {
           content: image && i === arr.length - 1 ? promptText : m.content,
         }));
 
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: {
-          messages: history,
-          ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
-        },
-      });
+      // The stored access token can reference a session that no longer exists
+      // server-side (revoked / rotated), which makes the edge function reply 401.
+      // Refresh first and use the fresh token explicitly.
+      let { data: sessionData } = await supabase.auth.getSession();
+      let accessToken = sessionData?.session?.access_token;
+      const expiresAt = sessionData?.session?.expires_at ?? 0;
+      if (!accessToken || expiresAt * 1000 - Date.now() < 60_000) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        accessToken = refreshed?.session?.access_token ?? accessToken;
+      }
+      if (!accessToken) {
+        toast.error("Session expired. Please sign in again.");
+        await supabase.auth.signOut();
+        return;
+      }
 
-      if (error) throw error;
+      const invoke = (token: string) =>
+        supabase.functions.invoke("ai-chat", {
+          headers: { Authorization: `Bearer ${token}` },
+          body: {
+            messages: history,
+            ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
+          },
+        });
+
+      let { data, error } = await invoke(accessToken);
+
+      if (error) {
+        // One retry with a forcibly refreshed token for stale-session 401s.
+        const { data: retryAuth } = await supabase.auth.refreshSession();
+        const retryToken = retryAuth?.session?.access_token;
+        if (!retryToken) {
+          toast.error("Session expired. Please sign in again.");
+          await supabase.auth.signOut();
+          return;
+        }
+        ({ data, error } = await invoke(retryToken));
+        if (error) throw error;
+      }
 
       let reply: string;
       if (data?.error) {
