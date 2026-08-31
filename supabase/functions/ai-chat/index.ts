@@ -733,20 +733,32 @@ Deno.serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      console.error("ai-chat: auth validation failed", userErr);
+
+    // Verify the JWT itself (does not require the auth session row to still exist).
+    let userId: string | null = null;
+    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
+    if (!claimsErr && claimsData?.claims?.sub) {
+      userId = claimsData.claims.sub as string;
+    } else {
+      // Fallback for older tokens
+      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+      if (!userErr && userData?.user) userId = userData.user.id;
+      else console.error("ai-chat: auth validation failed", claimsErr ?? userErr);
+    }
+
+    if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+
     // Resolve identity server-side (never trust client)
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("full_name, role, pharmacy_id")
-      .eq("id", userData.user.id)
+      .eq("id", userId)
       .maybeSingle();
 
     if (profileErr) {
@@ -785,10 +797,10 @@ Deno.serve(async (req) => {
         : roleRaw === "manager"
         ? "manager"
         : "salesman";
-    const fullName = profile.full_name?.trim() || userData.user.email || "User";
+    const fullName = profile.full_name?.trim() || "User";
 
     console.log("ai-chat: authenticated request", JSON.stringify({
-      userId: userData.user.id,
+      userId: userId,
       pharmacyId: profile.pharmacy_id,
       role,
       messageCount: messages.length,
@@ -801,7 +813,7 @@ Deno.serve(async (req) => {
       shopName: pharmacy.name,
     });
 
-    const context = await buildPharmacyContext(supabase, profile.pharmacy_id, role, userData.user.id);
+    const context = await buildPharmacyContext(supabase, profile.pharmacy_id, role, userId);
 
     // Live MedEx lookup for the latest user turn — only when medicine intent detected.
     let medexBlock = "";
@@ -953,7 +965,7 @@ Deno.serve(async (req) => {
           );
           await adminClient.from("staff_activity_logs").insert({
             pharmacy_id: profile.pharmacy_id,
-            user_id: userData.user.id,
+            user_id: userId,
             action_type: "ai_denied_query",
             entity_type: "ai_chat",
             description: `AI blocked a restricted response (role=${role})`,
