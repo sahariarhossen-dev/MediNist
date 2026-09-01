@@ -8,11 +8,35 @@ import {
   ImagePlus,
   Loader2,
   X,
-  ChevronLeft,
   LayoutPanelLeft,
   Link2,
   AtSign,
+  Pencil,
+  Pin,
+  Eraser,
+  Archive,
 } from "lucide-react";
+import ChatTopBar from "@/components/chat/ChatTopBar";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { useThreadPrefs } from "@/lib/threadPrefs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -94,6 +118,12 @@ const AIAssistant = () => {
   const [attachment, setAttachment] = useState<InlineImage | null>(null);
   const [recorder, setRecorder] = useState<VoiceRecorder | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const { isPinned, togglePin } = useThreadPrefs();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -402,57 +432,137 @@ const AIAssistant = () => {
     toast.success(`Bridged context from “${threadTitle}”`);
   };
 
+  const renameThread = async () => {
+    const next = renameValue.trim();
+    if (!conversationId || !next) return;
+    setRenameOpen(false);
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ title: next })
+      .eq("id", conversationId);
+    if (error) {
+      toast.error("Could not rename this topic.");
+      return;
+    }
+    setTitle(next);
+    toast.success("Topic renamed.");
+  };
+
+  const clearHistory = async () => {
+    if (!conversationId) return;
+    const { error } = await supabase
+      .from("ai_messages")
+      .delete()
+      .eq("conversation_id", conversationId);
+    if (error) {
+      toast.error("Could not clear this thread.");
+      return;
+    }
+    setMessages([]);
+    setReceipts({});
+    toast.success("Chat history cleared.");
+  };
+
+  const archiveThread = async () => {
+    if (!conversationId) return;
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", conversationId);
+    if (error) {
+      toast.error("Could not archive this thread.");
+      return;
+    }
+    toast.success("Thread archived.");
+    navigate("/workspace", { replace: true });
+  };
+
   const isEmptyThread = messages.length === 0;
   const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] flex-col bg-chat-canvas">
-      {/* Thread header */}
-      <header className="shrink-0 border-b border-black/5 bg-chat-canvas">
-        <div className="flex items-center gap-2 px-2 py-2.5 sm:px-3">
-          <button
-            onClick={() => navigate("/workspace")}
-            aria-label="Back to chats"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 active:scale-95"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${topic.accent} text-white`}
-          >
+      {/* Telegram-style thread header */}
+      <ChatTopBar
+        onBack={() => navigate("/workspace")}
+        onIdentityClick={() => setInfoOpen(true)}
+        avatar={
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-[0_0_0_3px_hsl(160_84%_39%/0.12),0_4px_12px_-4px_hsl(160_84%_39%/0.55)]">
             <TopicIcon className="h-4 w-4" />
+            <span
+              aria-hidden
+              className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background ${
+                isLoading ? "animate-pulse" : ""
+              }`}
+            />
           </span>
-          <div className="min-w-0 flex-1 leading-tight">
-            <h1 className="truncate text-[15px] font-semibold tracking-tight text-slate-900">
-              {title}
-            </h1>
-            <p className="truncate text-[11px] text-slate-500">
-              {bridge ? `Bridged: ${bridge.title}` : topic.label}
-              {pharmacyName ? ` · ${pharmacyName}` : ""}
-            </p>
-          </div>
-          <button
-            onClick={() => setBridgeOpen(true)}
-            aria-label="Bridge another topic"
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-              bridge ? "text-indigo-600" : "text-slate-500"
-            }`}
-          >
-            <Link2 className="h-4.5 w-4.5" />
-          </button>
-          {topic.canvas !== "none" && (
+        }
+        title={title}
+        subtitle={
+          <>
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium text-emerald-700">
+              {bridge ? `Linked: ${bridge.title}` : topic.label}
+            </span>
+            <span className="truncate">
+              {isLoading ? "Thinking…" : pharmacyName ?? "MediNist AI"}
+            </span>
+          </>
+        }
+        actions={
+          topic.canvas !== "none" ? (
             <button
+              type="button"
               onClick={() => setCanvasOpen((v) => !v)}
-              aria-label="Toggle canvas"
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-                canvasOpen ? "text-indigo-600" : "text-slate-500"
+              aria-label="Toggle canvas view"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none transition hover:bg-emerald-500/10 focus-visible:ring-2 focus-visible:ring-emerald-500/40 active:scale-95 ${
+                canvasOpen ? "text-emerald-600" : "text-foreground/70"
               }`}
             >
-              <LayoutPanelLeft className="h-4.5 w-4.5" />
+              <LayoutPanelLeft className="h-5 w-5" />
             </button>
-          )}
-        </div>
-      </header>
+          ) : null
+        }
+        menu={
+          <>
+            <DropdownMenuItem className="gap-2.5 rounded-xl py-2.5" onSelect={() => setBridgeOpen(true)}>
+              <Link2 className="h-4 w-4 text-emerald-600" />
+              Link Topic
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => {
+                setRenameValue(title);
+                setRenameOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4 text-emerald-600" />
+              Rename Topic
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => conversationId && togglePin(conversationId)}
+            >
+              <Pin className="h-4 w-4 text-emerald-600" />
+              {conversationId && isPinned(conversationId) ? "Unpin Thread" : "Pin Thread"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => setClearOpen(true)}
+            >
+              <Eraser className="h-4 w-4 text-muted-foreground" />
+              Clear History
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => setArchiveOpen(true)}
+            >
+              <Archive className="h-4 w-4 text-muted-foreground" />
+              Archive Thread
+            </DropdownMenuItem>
+          </>
+        }
+      />
 
       <div className="flex min-h-0 flex-1">
         {/* Messages */}
@@ -775,6 +885,101 @@ const AIAssistant = () => {
           if (typeof idx === "number") setReceipts((prev) => ({ ...prev, [idx]: receipt }));
         }}
       />
+      {/* Thread info */}
+      <Sheet open={infoOpen} onOpenChange={setInfoOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-8">
+          <SheetHeader className="text-left">
+            <SheetTitle className="text-base">Thread info</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white">
+              <TopicIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{title}</p>
+              <p className="truncate text-xs text-slate-500">
+                {topic.label}
+                {pharmacyName ? ` · ${pharmacyName}` : ""}
+              </p>
+            </div>
+          </div>
+          <dl className="mt-5 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Messages</dt>
+              <dd className="font-medium text-slate-900">{messages.length}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Linked topic</dt>
+              <dd className="font-medium text-slate-900">{bridge ? bridge.title : "None"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Pinned</dt>
+              <dd className="font-medium text-slate-900">
+                {conversationId && isPinned(conversationId) ? "Yes" : "No"}
+              </dd>
+            </div>
+          </dl>
+        </SheetContent>
+      </Sheet>
+
+      {/* Rename */}
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="rounded-3xl sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Rename topic</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="Topic title"
+            className="rounded-xl"
+          />
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="rounded-xl" disabled={!renameValue.trim()} onClick={renameThread}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear history */}
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear this chat history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All messages in this topic thread will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="rounded-xl" onClick={clearHistory}>
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Archive */}
+      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this thread?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be hidden from your workspace inbox. Messages are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="rounded-xl" onClick={archiveThread}>
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
