@@ -146,26 +146,32 @@ export type Database = {
       }
       ai_conversations: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: string
           pharmacy_id: string
           title: string
+          topic_key: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           pharmacy_id: string
           title?: string
+          topic_key?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           pharmacy_id?: string
           title?: string
+          topic_key?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -197,6 +203,45 @@ export type Database = {
           {
             foreignKeyName: "ai_messages_conversation_id_fkey"
             columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_thread_links: {
+        Row: {
+          created_at: string
+          from_conversation: string
+          id: string
+          to_conversation: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_conversation: string
+          id?: string
+          to_conversation: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          from_conversation?: string
+          id?: string
+          to_conversation?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_thread_links_from_conversation_fkey"
+            columns: ["from_conversation"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_thread_links_to_conversation_fkey"
+            columns: ["to_conversation"]
             isOneToOne: false
             referencedRelation: "ai_conversations"
             referencedColumns: ["id"]
