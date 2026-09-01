@@ -885,6 +885,101 @@ const AIAssistant = () => {
           if (typeof idx === "number") setReceipts((prev) => ({ ...prev, [idx]: receipt }));
         }}
       />
+      {/* Thread info */}
+      <Sheet open={infoOpen} onOpenChange={setInfoOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl pb-8">
+          <SheetHeader className="text-left">
+            <SheetTitle className="text-base">Thread info</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white">
+              <TopicIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">{title}</p>
+              <p className="truncate text-xs text-slate-500">
+                {topic.label}
+                {pharmacyName ? ` · ${pharmacyName}` : ""}
+              </p>
+            </div>
+          </div>
+          <dl className="mt-5 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Messages</dt>
+              <dd className="font-medium text-slate-900">{messages.length}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Linked topic</dt>
+              <dd className="font-medium text-slate-900">{bridge ? bridge.title : "None"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Pinned</dt>
+              <dd className="font-medium text-slate-900">
+                {conversationId && isPinned(conversationId) ? "Yes" : "No"}
+              </dd>
+            </div>
+          </dl>
+        </SheetContent>
+      </Sheet>
+
+      {/* Rename */}
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="rounded-3xl sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Rename topic</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="Topic title"
+            className="rounded-xl"
+          />
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="rounded-xl" disabled={!renameValue.trim()} onClick={renameThread}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear history */}
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear this chat history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All messages in this topic thread will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="rounded-xl" onClick={clearHistory}>
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Archive */}
+      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this thread?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be hidden from your workspace inbox. Messages are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="rounded-xl" onClick={archiveThread}>
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
