@@ -86,7 +86,7 @@ const AiThreadRow = ({
         }}
         className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-slate-50/70 active:bg-slate-100/70"
       >
-        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-border/60 shadow-sm">
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-blue-100 shadow-sm">
           <MediNistMark size={26} />
           {thinking && (
             <span className="absolute inset-0 animate-ping rounded-2xl ring-2 ring-[#1E56A0]/40" />

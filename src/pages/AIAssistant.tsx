@@ -488,7 +488,7 @@ const AIAssistant = () => {
         onBack={() => navigate("/workspace")}
         onIdentityClick={() => setInfoOpen(true)}
         avatar={
-          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-border/60 shadow-sm">
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-blue-100 shadow-sm">
             <MediNistMark size={22} />
             <span
               aria-hidden
