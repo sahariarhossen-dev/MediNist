@@ -26,6 +26,8 @@ import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import AIAssistant from "./pages/AIAssistant.tsx";
+import AiThreadResolver from "./pages/AiThreadResolver.tsx";
+
 import AcceptInvitation from "./pages/AcceptInvitation.tsx";
 import DailyTransactions from "./pages/DailyTransactions.tsx";
 import AllTransactions from "./pages/AllTransactions.tsx";
