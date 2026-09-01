@@ -22,6 +22,7 @@ const InboxRow = ({
   presence = null,
   pinned = false,
   muted = false,
+  fallbackName = null,
   onTogglePin,
   onToggleMute,
   onMarkRead,
@@ -31,11 +32,17 @@ const InboxRow = ({
   presence?: Presence;
   pinned?: boolean;
   muted?: boolean;
+  /** Shown instead of the generic placeholder when the teammate has no name. */
+  fallbackName?: string | null;
   onTogglePin?: () => void;
   onToggleMute?: () => void;
   onMarkRead?: () => void;
 }) => {
   const unread = room.unread_count > 0;
+  const title =
+    !room.display_name || room.display_name === "Teammate"
+      ? fallbackName || "Pharmacy staff"
+      : room.display_name;
   const [menuOpen, setMenuOpen] = useState(false);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressStart = useRef<{ x: number; y: number } | null>(null);

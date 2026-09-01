@@ -10,7 +10,7 @@ import { useAiThreads } from "@/hooks/useAiThreads";
 import { supabase } from "@/integrations/supabase/client";
 import { isThreadUnseen, useAiActivity } from "@/lib/aiActivity";
 import { useThreadPrefs } from "@/lib/threadPrefs";
-import { roleLabel } from "@/lib/staffRoles";
+import { inviteRoleLabel } from "@/lib/staffRoles";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 import { toast } from "sonner";
 
@@ -97,7 +97,7 @@ const Workspace = () => {
 
   const roleMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of staff) if (s.role) m.set(s.user_id, roleLabel(s.role));
+    for (const s of staff) if (s.role) m.set(s.user_id, inviteRoleLabel(s.role));
     return m;
   }, [staff]);
 
