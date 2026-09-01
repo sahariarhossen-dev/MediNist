@@ -1,47 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  MessageSquarePlus,
-  Search,
-  Megaphone,
-  Sparkles,
-  ChevronRight,
-  Pin,
-  Inbox,
-  BellOff,
-} from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { MessageSquarePlus, Search, Megaphone, Inbox, BellOff } from "lucide-react";
 import InboxRow from "@/components/messaging/InboxRow";
 import NewChatSheet from "@/components/messaging/NewChatSheet";
+import AiThreadRow from "@/components/workspace/AiThreadRow";
 import { useChatInbox } from "@/hooks/useChatInbox";
 import { usePharmacyStaff } from "@/hooks/usePharmacyStaff";
 import { useSystemAlerts } from "@/components/workspace/AlertsThread";
+import { useAiThreads } from "@/hooks/useAiThreads";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { relativeTime } from "@/lib/relativeTime";
-import { forwardableText } from "@/lib/agentCards";
-import { hasUnseenAiReply, useAiActivity } from "@/lib/aiActivity";
+import { isThreadUnseen, useAiActivity } from "@/lib/aiActivity";
 import { useThreadPrefs } from "@/lib/threadPrefs";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 type Filter = "all" | "ai" | "staff" | "alerts";
 type Presence = "online" | "away" | null;
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "ai", label: "AI Co-pilot" },
+  { id: "ai", label: "AI Topics" },
   { id: "staff", label: "Staff Messages" },
   { id: "alerts", label: "System Alerts" },
 ];
 
 const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
   all: {
-    title: "Your workspace is quiet",
-    body: "Start a chat with a teammate or ask the AI co-pilot anything about your shop.",
+    title: "No conversations yet",
+    body: "Start one with your team or open a new AI topic from the compose button.",
   },
   ai: {
-    title: "No AI history yet",
-    body: "Open the co-pilot and ask about today's sales, short items or dues.",
+    title: "No AI topics yet",
+    body: "Tap compose → MediNist AI to create a topic like Sales Analysis or Expiring Medicines.",
   },
   staff: {
     title: "No staff conversations",
@@ -55,19 +46,20 @@ const EMPTY_COPY: Record<Filter, { title: string; body: string }> = {
 
 const Workspace = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const { rooms, loading, refresh } = useChatInbox();
   const { staff } = usePharmacyStaff();
   const { alerts } = useSystemAlerts();
+  const { threads, loading: aiLoading, refresh: refreshAi } = useAiThreads();
   const ai = useAiActivity();
   const { isPinned, isMuted, togglePin, toggleMute } = useThreadPrefs();
   const { setElement } = useScrollContainer();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  const [aiFirst, setAiFirst] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [tick, setTick] = useState(0);
-  const [aiPreview, setAiPreview] = useState<{ text: string; at: string } | null>(null);
 
   // Single scroll container so the bottom nav hides/shows consistently here.
   useEffect(() => {
@@ -80,34 +72,17 @@ const Workspace = () => {
     return () => clearInterval(id);
   }, []);
 
-  // Last AI turn, used as the pinned co-pilot row preview.
+  // `/workspace?new=ai` (used by the legacy /workspace/ai resolver) opens the
+  // topic modal directly.
   useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      const { data: convs } = await supabase
-        .from("ai_conversations")
-        .select("id")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      const convId = convs?.[0]?.id;
-      if (!convId) return;
-      const { data: msgs } = await supabase
-        .from("ai_messages")
-        .select("content, created_at")
-        .eq("conversation_id", convId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      const last = msgs?.[0];
-      if (!cancelled && last) {
-        setAiPreview({ text: forwardableText(last.content).slice(0, 120), at: last.created_at });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, ai.lastAssistantAt]);
+    if (params.get("new") === "ai") {
+      setAiFirst(true);
+      setNewOpen(true);
+      params.delete("new");
+      setParams(params, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const presenceMap = useMemo(() => {
     const m = new Map<string, Presence>();
@@ -134,20 +109,62 @@ const Workspace = () => {
     });
   }, [rooms, q, isPinned]);
 
-  const showAI = (filter === "all" || filter === "ai") && (!q || "medinist ai co-pilot".includes(q));
+  const filteredThreads = useMemo(() => {
+    const list = threads.filter((t) => !q || t.title.toLowerCase().includes(q));
+    return [...list].sort((a, b) => {
+      const pa = isPinned(`ai:${a.id}`) ? 1 : 0;
+      const pb = isPinned(`ai:${b.id}`) ? 1 : 0;
+      return pb - pa;
+    });
+  }, [threads, q, isPinned]);
+
   const showAlerts =
     (filter === "all" || filter === "alerts") && (!q || "system alerts".includes(q));
   const showStaff = filter === "all" || filter === "staff";
+  const showAi = filter === "all" || filter === "ai";
   const urgentAlerts = alerts.filter((a) => a.is_urgent).length;
-  const aiUnseen = hasUnseenAiReply(ai);
 
-  const staffEmpty = showStaff && !loading && filteredRooms.length === 0;
-  const alertsEmpty = filter === "alerts" && alerts.length === 0;
+  const staffEmpty = !loading && filteredRooms.length === 0;
+  const aiEmpty = !aiLoading && filteredThreads.length === 0;
+  const alertsEmpty = alerts.length === 0;
+
+  const showEmpty =
+    (filter === "staff" && staffEmpty) ||
+    (filter === "ai" && aiEmpty) ||
+    (filter === "alerts" && alertsEmpty) ||
+    (filter === "all" && staffEmpty && aiEmpty && alertsEmpty);
+
+  const renameThread = async (id: string, current: string) => {
+    const next = window.prompt("Topic title", current);
+    if (!next?.trim()) return;
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ title: next.trim().slice(0, 60) })
+      .eq("id", id);
+    if (error) {
+      toast.error("Could not rename the topic.");
+      return;
+    }
+    refreshAi();
+  };
+
+  const archiveThread = async (id: string) => {
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      toast.error("Could not archive the topic.");
+      return;
+    }
+    toast.success("Topic archived");
+    refreshAi();
+  };
 
   return (
     <div ref={scrollRef} className="min-h-[calc(100vh-72px)] overflow-y-auto bg-gray-50 pb-24">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-200 bg-white px-3 py-3">
-        <h1 className="flex-1 text-lg font-bold text-gray-900">Workspace</h1>
+        <h1 className="flex-1 text-lg font-bold text-gray-900">Chats</h1>
       </div>
 
       <div className="bg-white px-3 py-2">
@@ -156,7 +173,7 @@ const Workspace = () => {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search AI, teammates or groups"
+            placeholder="Search topics, teammates or groups"
             className="border-0 bg-gray-100 pl-9"
           />
         </div>
@@ -184,55 +201,6 @@ const Workspace = () => {
       </div>
 
       <div className="bg-white">
-        {/* Pinned AI Co-pilot */}
-        {showAI && (
-          <button
-            onClick={() => navigate("/workspace/ai")}
-            className="flex w-full items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-indigo-50/60 to-transparent px-4 py-3.5 text-left transition-colors hover:bg-indigo-50/80"
-          >
-            <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 via-sky-500 to-emerald-500 text-white">
-              <Sparkles className="h-5 w-5" />
-              {ai.thinking && (
-                <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-indigo-400/60" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-[14.5px] font-semibold text-slate-900">
-                  MediNist AI (Co-pilot)
-                </p>
-                <Pin className="h-3 w-3 shrink-0 text-indigo-400" />
-              </div>
-              {ai.thinking ? (
-                <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-indigo-600">
-                  Thinking
-                  <span className="flex gap-0.5">
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.3s]" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.15s]" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500" />
-                  </span>
-                </p>
-              ) : (
-                <p className="truncate text-[12.5px] text-slate-500">
-                  {aiPreview?.text || "Ask about sales, stock, dues or medicines — anytime."}
-                </p>
-              )}
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {aiPreview && !ai.thinking && (
-                <span className="text-[10.5px] text-slate-400">{relativeTime(aiPreview.at)}</span>
-              )}
-              {aiUnseen ? (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-500 px-1.5 text-[10.5px] font-semibold text-white">
-                  1
-                </span>
-              ) : (
-                <ChevronRight className="h-4 w-4 text-slate-300" />
-              )}
-            </div>
-          </button>
-        )}
-
         {/* System alerts thread */}
         {showAlerts && !alertsEmpty && (
           <button
@@ -255,6 +223,25 @@ const Workspace = () => {
             )}
           </button>
         )}
+
+        {/* AI topic threads */}
+        {showAi &&
+          filteredThreads.map((t) => (
+            <div key={t.id} className="border-b border-slate-100 last:border-b-0">
+              <AiThreadRow
+                thread={t}
+                unread={isThreadUnseen(t.id, t.last_role, t.last_message_at)}
+                thinking={ai.thinking && ai.thinkingThread === t.id}
+                pinned={isPinned(`ai:${t.id}`)}
+                muted={isMuted(`ai:${t.id}`)}
+                onClick={() => navigate(`/workspace/ai/${t.id}`)}
+                onTogglePin={() => togglePin(`ai:${t.id}`)}
+                onToggleMute={() => toggleMute(`ai:${t.id}`)}
+                onRename={() => renameThread(t.id, t.title)}
+                onArchive={() => archiveThread(t.id)}
+              />
+            </div>
+          ))}
 
         {/* Staff threads */}
         {showStaff && (
@@ -280,9 +267,7 @@ const Workspace = () => {
         )}
 
         {/* Filter-aware empty states */}
-        {((filter === "staff" && staffEmpty) ||
-          (filter === "alerts" && alertsEmpty) ||
-          (filter === "all" && staffEmpty && alerts.length === 0)) && (
+        {showEmpty && (
           <div className="flex flex-col items-center gap-2 px-8 py-14 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
               {filter === "alerts" ? (
@@ -302,14 +287,22 @@ const Workspace = () => {
       </div>
 
       <button
-        onClick={() => setNewOpen(true)}
+        onClick={() => {
+          setAiFirst(false);
+          setNewOpen(true);
+        }}
         className="fixed bottom-24 right-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_8px_30px_rgb(16,185,129,0.3)] transition-all duration-200 hover:scale-105 hover:bg-emerald-600 active:scale-95"
         aria-label="New chat"
       >
         <MessageSquarePlus className="h-6 w-6" />
       </button>
 
-      <NewChatSheet open={newOpen} onOpenChange={setNewOpen} />
+      <NewChatSheet
+        key={aiFirst ? "ai" : "plain"}
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        aiFirst={aiFirst}
+      />
     </div>
   );
 };

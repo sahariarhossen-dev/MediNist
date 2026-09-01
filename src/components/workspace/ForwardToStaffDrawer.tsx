@@ -21,9 +21,12 @@ interface Props {
   description?: string;
   /** Prefix prepended to the forwarded body (e.g. task framing). */
   prefix?: string;
+  /** Pre-fills the thread search (used by @mentions in an AI thread). */
+  initialQuery?: string;
   /** Called with a delivery receipt (e.g. "Sent to Rakib — 5 items"). */
   onSent?: (receipt: string) => void;
 }
+
 
 /** Count list-ish lines in a forwarded body so the receipt can say "5 items". */
 const countItems = (body: string) =>
@@ -39,18 +42,23 @@ const ForwardToStaffDrawer = ({
   title = "Forward to staff",
   description = "Pick a chat thread to send this report to.",
   prefix,
+  initialQuery,
   onSent,
 }: Props) => {
   const { user, profile } = useAuth();
   const { rooms } = useChatInbox();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [note, setNote] = useState("");
   const [sendingTo, setSendingTo] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setReceipt(null);
-  }, [open]);
+    if (open) {
+      setReceipt(null);
+      setQuery(initialQuery ?? "");
+    }
+  }, [open, initialQuery]);
+
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

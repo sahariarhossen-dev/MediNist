@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Slash,
   ArrowUp,
-  TrendingUp,
-  PackageSearch,
-  Trophy,
-  CalendarClock,
   Mic,
   Square,
   ImagePlus,
   Loader2,
   X,
+  ChevronLeft,
+  LayoutPanelLeft,
+  Link2,
+  AtSign,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,20 +19,25 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ChatMessage, { type ChatRole } from "@/components/ai/ChatMessage";
 import TypingIndicator from "@/components/ai/TypingIndicator";
-import ChatHeader from "@/components/ai/ChatHeader";
-import ConversationSidebar, { type Conversation } from "@/components/ai/ConversationSidebar";
+import AiCanvas from "@/components/ai/AiCanvas";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
 import { useKeyboardInset } from "@/hooks/useKeyboardInsets";
 import SlashCommandMenu, { type SlashCommand } from "@/components/ai/SlashCommandMenu";
 import ForwardToStaffDrawer from "@/components/workspace/ForwardToStaffDrawer";
 import StockLookupDrawer from "@/components/workspace/StockLookupDrawer";
+import { usePharmacyStaff } from "@/hooks/usePharmacyStaff";
+import { useAiThreads } from "@/hooks/useAiThreads";
+import { getTopic, topicFocus } from "@/lib/aiTopics";
 import {
   deriveActions,
   deriveSuggestions,
   forwardableText,
+  parseAgentMessage,
   type AgentAction,
 } from "@/lib/agentCards";
-import { markAiReplied, markAiSeen, setAiThinking } from "@/lib/aiActivity";
+import { markAiReplied, markThreadSeen, setAiThinking } from "@/lib/aiActivity";
 import {
   fileToInlineImage,
   startVoiceRecording,
@@ -46,28 +52,33 @@ interface Message {
   content: string;
 }
 
-const SUGGESTIONS: { text: string; icon: typeof TrendingUp }[] = [
-  { text: "আজকের বিক্রি কত?", icon: TrendingUp },
-  { text: "Stock kom ase kon medicine gulor?", icon: PackageSearch },
-  { text: "Top selling medicines this month", icon: Trophy },
-  { text: "Expire howar age ki ki ase?", icon: CalendarClock },
-];
-
-const WELCOME: Message = {
-  role: "assistant",
-  content:
-    "**Assalamu Alaikum!** Ami apnar **MediNist AI assistant**. Inventory, sales, ba pharmacy niye je kono prosno korte paren — Bengali ba Banglish e likhleo cholbe.",
-};
+const initials = (n?: string | null) =>
+  (n || "?")
+    .split(" ")
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
 const AIAssistant = () => {
+  const { conversationId } = useParams<{ conversationId: string }>();
+  const navigate = useNavigate();
   const { user, profile, pharmacyName } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const { staff } = usePharmacyStaff();
+  const { threads } = useAiThreads();
+
+  const [title, setTitle] = useState("MediNist AI");
+  const [topicKey, setTopicKey] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
+  const [bridge, setBridge] = useState<{ id: string; title: string; summary: string } | null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [pendingMention, setPendingMention] = useState<string | null>(null);
   const [stockDrawer, setStockDrawer] = useState<{ mode: "stock" | "reorder"; query: string } | null>(
     null
   );
@@ -75,6 +86,7 @@ const AIAssistant = () => {
     content: string;
     prefix?: string;
     title: string;
+    query?: string;
     /** Index of the assistant message this forward belongs to. */
     index: number | null;
   } | null>(null);
@@ -88,126 +100,65 @@ const AIAssistant = () => {
   const { setElement } = useScrollContainer();
   const keyboardInset = useKeyboardInset();
 
+  const topic = getTopic(topicKey);
+  const TopicIcon = topic.icon;
+
   // Register the chat scroll container so BottomNav can react to scroll direction here.
   useEffect(() => {
     setElement(scrollRef.current);
     return () => setElement(null);
   }, [setElement]);
 
-  // The AI thread is in view: clear the unread state shown on the inbox row.
+  // Load this topic thread (metadata + messages). RLS already restricts the row
+  // to its owner, so an unknown id simply resolves to nothing.
   useEffect(() => {
-    markAiSeen();
-  }, []);
-
-  // Load conversations & resume most recent on mount
-  useEffect(() => {
-    if (!user?.id) return;
+    if (!conversationId || !user?.id) return;
+    let active = true;
     (async () => {
-      const { data, error } = await supabase
+      const { data: conv, error } = await supabase
         .from("ai_conversations")
-        .select("id, title, updated_at")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false });
-      if (error) {
-        console.error(error);
+        .select("id, title, topic_key")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !conv) {
+        toast.error("Topic not found.");
+        navigate("/workspace", { replace: true });
         return;
       }
-      const convs = data ?? [];
-      setConversations(convs);
-      if (convs.length > 0) {
-        setActiveId(convs[0].id);
-      }
-    })();
-  }, [user?.id]);
+      setTitle(conv.title);
+      setTopicKey(conv.topic_key);
 
-  // Load messages whenever active conversation changes
-  useEffect(() => {
-    if (!activeId) {
-      setMessages([WELCOME]);
-      return;
-    }
-    (async () => {
-      const { data, error } = await supabase
+      const { data: msgs } = await supabase
         .from("ai_messages")
         .select("id, role, content")
-        .eq("conversation_id", activeId)
+        .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
-      if (error) {
-        console.error(error);
-        return;
-      }
-      const loaded = (data ?? []).map((m) => ({
-        id: m.id,
-        role: m.role as ChatRole,
-        content: m.content,
-      }));
-      setMessages(loaded.length > 0 ? loaded : [WELCOME]);
+      if (!active) return;
+      setMessages(
+        (msgs ?? []).map((m) => ({ id: m.id, role: m.role as ChatRole, content: m.content }))
+      );
+      markThreadSeen(conversationId);
     })();
-  }, [activeId]);
+    return () => {
+      active = false;
+    };
+  }, [conversationId, user?.id, navigate]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const refreshConversations = async () => {
-    if (!user?.id) return;
-    const { data } = await supabase
-      .from("ai_conversations")
-      .select("id, title, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false });
-    setConversations(data ?? []);
-  };
-
-  const ensureConversation = async (): Promise<string | null> => {
-    if (activeId) return activeId;
-    if (!user?.id || !profile?.pharmacy_id) {
-      toast.error("Pharmacy not configured.");
-      return null;
-    }
-    const { data, error } = await supabase
-      .from("ai_conversations")
-      .insert({
-        user_id: user.id,
-        pharmacy_id: profile.pharmacy_id,
-        title: "New chat",
-      })
-      .select("id, title, updated_at")
-      .single();
-    if (error || !data) {
-      console.error(error);
-      toast.error("Could not start a new chat.");
-      return null;
-    }
-    setActiveId(data.id);
-    setConversations((prev) => [data, ...prev]);
-    return data.id;
-  };
-
-  const handleNewChat = () => {
-    setActiveId(null);
-    setMessages([WELCOME]);
-  };
-
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("ai_conversations").delete().eq("id", id);
-    if (error) {
-      toast.error("Failed to delete.");
-      return;
-    }
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (activeId === id) {
-      setActiveId(null);
-      setMessages([WELCOME]);
-    }
-  };
+  const canvasCards = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!last) return [];
+    const parsed = parseAgentMessage(last.content);
+    return [...(parsed.block?.cards ?? []), ...parsed.jsonCards];
+  }, [messages]);
 
   const sendMessage = async (text: string, image?: InlineImage | null) => {
     const trimmed = text.trim();
-    if ((!trimmed && !image) || isLoading) return;
-
-    const convId = await ensureConversation();
-    if (!convId) return;
+    if ((!trimmed && !image) || isLoading || !conversationId) return;
 
     const promptText =
       trimmed ||
@@ -215,16 +166,15 @@ const AIAssistant = () => {
     const shown = image ? `${promptText}\n\n_📎 ${image.name} সংযুক্ত করা হয়েছে_` : promptText;
 
     const userMsg: Message = { role: "user", content: shown };
-    const nextMessages = [...messages.filter((m) => m !== WELCOME || messages.length > 1), userMsg];
-    setMessages((prev) => [...prev.filter((m) => m !== WELCOME || prev.length > 1), userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput("");
     setAttachment(null);
     setIsLoading(true);
-    setAiThinking(true);
+    setAiThinking(true, conversationId);
 
-    // Persist user message
     const { error: insertErr } = await supabase.from("ai_messages").insert({
-      conversation_id: convId,
+      conversation_id: conversationId,
       role: "user",
       content: shown,
     });
@@ -242,7 +192,7 @@ const AIAssistant = () => {
       // The stored access token can reference a session that no longer exists
       // server-side (revoked / rotated), which makes the edge function reply 401.
       // Refresh first and use the fresh token explicitly.
-      let { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await supabase.auth.getSession();
       let accessToken = sessionData?.session?.access_token;
       const expiresAt = sessionData?.session?.expires_at ?? 0;
       if (!accessToken || expiresAt * 1000 - Date.now() < 60_000) {
@@ -260,6 +210,8 @@ const AIAssistant = () => {
           headers: { Authorization: `Bearer ${token}` },
           body: {
             messages: history,
+            topic_focus: topicFocus(topicKey),
+            ...(bridge ? { bridged_context: `From "${bridge.title}":\n${bridge.summary}` } : {}),
             ...(image ? { images: [{ mimeType: image.mimeType, data: image.data }] } : {}),
           },
         });
@@ -293,13 +245,25 @@ const AIAssistant = () => {
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       await supabase.from("ai_messages").insert({
-        conversation_id: convId,
+        conversation_id: conversationId,
         role: "assistant",
         content: reply,
       });
       markAiReplied();
-      markAiSeen();
-      refreshConversations();
+      markThreadSeen(conversationId);
+      if (topic.canvas !== "none") setCanvasOpen(true);
+
+      // @mention in the prompt → offer to hand the answer to that teammate.
+      if (pendingMention) {
+        setForward({
+          content: forwardableText(reply),
+          prefix: "✅ Task from owner:",
+          title: `Assign to ${pendingMention}`,
+          query: pendingMention,
+          index: null,
+        });
+        setPendingMention(null);
+      }
     } catch (err) {
       console.error("AI chat error:", err);
       toast.error("Failed to reach AI assistant.");
@@ -385,9 +349,7 @@ const AIAssistant = () => {
   const suggestionsFor = (index: number): string[] => {
     const reply = messages[index];
     if (!reply || reply.role !== "assistant") return [];
-    // Only the latest assistant reply offers follow-up chips.
     if (index !== messages.length - 1) return [];
-    if (reply === WELCOME) return [];
     return deriveSuggestions(questionFor(index), reply.content);
   };
 
@@ -413,86 +375,164 @@ const AIAssistant = () => {
     setForward({ content: text, title: "Forward to staff", index });
   };
 
-  const isWelcomeOnly = messages.length === 1 && messages[0] === WELCOME;
+  const pickMention = (name: string) => {
+    setMentionOpen(false);
+    setPendingMention(name);
+    setInput((prev) => `${prev.replace(/@$/, "")}@${name} `.trimStart());
+    textareaRef.current?.focus();
+  };
+
+  const pickBridge = async (id: string, threadTitle: string) => {
+    setBridgeOpen(false);
+    const { data } = await supabase
+      .from("ai_messages")
+      .select("role, content")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    const summary = (data ?? [])
+      .reverse()
+      .map((m) => `${m.role === "user" ? "Q" : "A"}: ${forwardableText(m.content).slice(0, 240)}`)
+      .join("\n");
+    if (!summary) {
+      toast.error("That topic has no messages to bridge yet.");
+      return;
+    }
+    setBridge({ id, title: threadTitle, summary });
+    toast.success(`Bridged context from “${threadTitle}”`);
+  };
+
+  const isEmptyThread = messages.length === 0;
   const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] flex-col bg-chat-canvas">
-      <ChatHeader
-        pharmacyName={pharmacyName}
-        role={profile?.role ?? null}
-        onToggleSidebar={() => setSidebarOpen(true)}
-      />
-
-      <ConversationSidebar
-        open={sidebarOpen}
-        onOpenChange={setSidebarOpen}
-        conversations={conversations}
-        activeId={activeId}
-        onSelect={(id) => setActiveId(id)}
-        onNewChat={handleNewChat}
-        onDelete={handleDelete}
-      />
-
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="relative flex-1 overflow-y-auto px-4 pt-4"
-        style={{
-          paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
-        }}
-      >
-        {isWelcomeOnly && !isLoading ? (
-          <div className="relative mx-auto flex h-full max-w-2xl flex-col justify-center pb-6">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 top-1/3 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-indigo-200/40 via-sky-200/30 to-emerald-200/30 blur-3xl"
-            />
-            <h2 className="animate-fade-in-up text-3xl font-medium tracking-tight text-slate-900 sm:text-4xl">
-              Hello,{" "}
-              <span className="bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent">
-                {firstName}
-              </span>
-            </h2>
-            <p className="mt-2 animate-fade-in-up text-base text-slate-500">
-              How can I help you today?
+      {/* Thread header */}
+      <header className="shrink-0 border-b border-black/5 bg-chat-canvas">
+        <div className="flex items-center gap-2 px-2 py-2.5 sm:px-3">
+          <button
+            onClick={() => navigate("/workspace")}
+            aria-label="Back to chats"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${topic.accent} text-white`}
+          >
+            <TopicIcon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <h1 className="truncate text-[15px] font-semibold tracking-tight text-slate-900">
+              {title}
+            </h1>
+            <p className="truncate text-[11px] text-slate-500">
+              {bridge ? `Bridged: ${bridge.title}` : topic.label}
+              {pharmacyName ? ` · ${pharmacyName}` : ""}
             </p>
+          </div>
+          <button
+            onClick={() => setBridgeOpen(true)}
+            aria-label="Bridge another topic"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
+              bridge ? "text-indigo-600" : "text-slate-500"
+            }`}
+          >
+            <Link2 className="h-4.5 w-4.5" />
+          </button>
+          {topic.canvas !== "none" && (
+            <button
+              onClick={() => setCanvasOpen((v) => !v)}
+              aria-label="Toggle canvas"
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
+                canvasOpen ? "text-indigo-600" : "text-slate-500"
+              }`}
+            >
+              <LayoutPanelLeft className="h-4.5 w-4.5" />
+            </button>
+          )}
+        </div>
+      </header>
 
-            <div className="mt-8 grid animate-fade-in-up grid-cols-1 gap-3 sm:grid-cols-2">
-              {SUGGESTIONS.map(({ text, icon: Icon }) => (
-                <button
-                  key={text}
-                  onClick={() => sendMessage(text)}
-                  className="group flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99]"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="text-sm leading-snug text-slate-700">{text}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
-            {messages.map((m, i) => (
-              <ChatMessage
-                key={m.id ?? i}
-                role={m.role}
-                content={m.content}
-                userName={profile?.full_name ?? null}
-                userAvatarUrl={profile?.avatar_url ?? null}
-                actions={actionsFor(i)}
-                onAction={(a, c) => handleAction(a, c, i)}
-                suggestions={suggestionsFor(i)}
-                onSuggestion={(p) => sendMessage(p)}
-                receipt={receipts[i] ?? null}
+      <div className="flex min-h-0 flex-1">
+        {/* Messages */}
+        <div
+          ref={scrollRef}
+          className="relative flex-1 overflow-y-auto px-4 pt-4"
+          style={{
+            paddingBottom: `calc(1rem + ${keyboardInset}px + env(safe-area-inset-bottom))`,
+          }}
+        >
+          {isEmptyThread && !isLoading ? (
+            <div className="relative mx-auto flex h-full max-w-2xl flex-col justify-center pb-6">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-1/3 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-indigo-200/40 via-sky-200/30 to-emerald-200/30 blur-3xl"
               />
-            ))}
-            {isLoading && <TypingIndicator />}
-          </div>
-        )}
+              <h2 className="animate-fade-in-up text-3xl font-medium tracking-tight text-slate-900 sm:text-4xl">
+                Hello,{" "}
+                <span className="bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent">
+                  {firstName}
+                </span>
+              </h2>
+              <div className="mt-3 max-w-xl animate-fade-in-up">
+                <ChatMessage role="assistant" content={topic.greeting} />
+              </div>
+
+              <div className="mt-8 grid animate-fade-in-up grid-cols-1 gap-3 sm:grid-cols-2">
+                {topic.quickPrompts.map((text) => (
+                  <button
+                    key={text}
+                    onClick={() => sendMessage(text)}
+                    className="group flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99]"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+                      <TopicIcon className="h-4 w-4" />
+                    </span>
+                    <span className="text-sm leading-snug text-slate-700">{text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
+              {messages.map((m, i) => (
+                <ChatMessage
+                  key={m.id ?? i}
+                  role={m.role}
+                  content={m.content}
+                  userName={profile?.full_name ?? null}
+                  userAvatarUrl={profile?.avatar_url ?? null}
+                  actions={actionsFor(i)}
+                  onAction={(a, c) => handleAction(a, c, i)}
+                  suggestions={suggestionsFor(i)}
+                  onSuggestion={(p) => sendMessage(p)}
+                  receipt={receipts[i] ?? null}
+                />
+              ))}
+              {isLoading && <TypingIndicator />}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop split canvas */}
+        <AiCanvas
+          topicKey={topicKey}
+          cards={canvasCards}
+          open={canvasOpen}
+          onClose={() => setCanvasOpen(false)}
+          variant="pane"
+        />
       </div>
+
+      {/* Mobile canvas sheet */}
+      <AiCanvas
+        topicKey={topicKey}
+        cards={canvasCards}
+        open={canvasOpen}
+        onClose={() => setCanvasOpen(false)}
+        variant="sheet"
+      />
 
       {/* Floating Composer Card */}
       <form onSubmit={handleSubmit} className="relative shrink-0 px-3 pt-2 pb-[15px]">
@@ -524,6 +564,7 @@ const AIAssistant = () => {
               const v = e.target.value;
               setInput(v);
               if (v === "/") setSlashOpen(true);
+              if (v.endsWith("@")) setMentionOpen(true);
               const ta = e.currentTarget;
               ta.style.height = "auto";
               ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
@@ -542,7 +583,7 @@ const AIAssistant = () => {
                 ? "Transcribing your voice…"
                 : isLoading
                 ? "MediNist is thinking..."
-                : "Ask MediNist anything…"
+                : `Ask about ${topic.label.toLowerCase()}… use @ to tag staff`
             }
             disabled={isLoading}
             className="max-h-[140px] w-full resize-none bg-transparent text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
@@ -556,6 +597,14 @@ const AIAssistant = () => {
                 className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
               >
                 <Slash className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Mention a teammate"
+                onClick={() => setMentionOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95"
+              >
+                <AtSign className="h-5 w-5" />
               </button>
               <input
                 ref={imageInputRef}
@@ -624,6 +673,85 @@ const AIAssistant = () => {
         }}
       />
 
+      {/* @mention picker */}
+      <Sheet open={mentionOpen} onOpenChange={setMentionOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl px-0 pb-6">
+          <SheetHeader className="px-5 text-left">
+            <SheetTitle className="text-base">Tag a teammate</SheetTitle>
+          </SheetHeader>
+          <div className="max-h-[45vh] overflow-y-auto pt-2">
+            {staff.length === 0 && (
+              <p className="px-5 py-8 text-center text-sm text-slate-500">No teammates yet.</p>
+            )}
+            {staff.map((s) => (
+              <button
+                key={s.user_id}
+                onClick={() => pickMention((s.full_name || "Teammate").split(" ")[0])}
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition hover:bg-slate-50"
+              >
+                <Avatar className="h-9 w-9">
+                  {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                  <AvatarFallback className="bg-blue-500 text-xs font-semibold text-white">
+                    {initials(s.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {s.full_name || "Member"}
+                  </p>
+                  <p className="text-xs capitalize text-slate-500">{s.role || "salesman"}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Context bridge picker */}
+      <Sheet open={bridgeOpen} onOpenChange={setBridgeOpen}>
+        <SheetContent side="bottom" className="rounded-t-3xl px-0 pb-6">
+          <SheetHeader className="px-5 text-left">
+            <SheetTitle className="text-base">Bridge another topic</SheetTitle>
+          </SheetHeader>
+          <div className="max-h-[45vh] overflow-y-auto pt-2">
+            {bridge && (
+              <button
+                onClick={() => {
+                  setBridge(null);
+                  setBridgeOpen(false);
+                }}
+                className="w-full px-5 py-2.5 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+              >
+                Remove bridge ({bridge.title})
+              </button>
+            )}
+            {threads
+              .filter((t) => t.id !== conversationId)
+              .map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => pickBridge(t.id, t.title)}
+                  className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition hover:bg-slate-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-900">
+                      {t.title}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500">
+                      {t.last_message || getTopic(t.topic_key).label}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            {threads.filter((t) => t.id !== conversationId).length === 0 && (
+              <p className="px-5 py-8 text-center text-sm text-slate-500">
+                No other topics to bridge yet.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <StockLookupDrawer
         open={!!stockDrawer}
         onOpenChange={(v) => !v && setStockDrawer(null)}
@@ -640,6 +768,7 @@ const AIAssistant = () => {
         onOpenChange={(v) => !v && setForward(null)}
         content={forward?.content ?? ""}
         prefix={forward?.prefix}
+        initialQuery={forward?.query}
         title={forward?.title ?? "Forward to staff"}
         onSent={(receipt) => {
           const idx = forward?.index;
