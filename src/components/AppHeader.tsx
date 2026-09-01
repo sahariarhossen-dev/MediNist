@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import LogoFull from "@/components/brand/LogoFull";
 import NotificationBell from "@/components/notifications/NotificationBell";
-import MessageBubble from "@/components/messaging/MessageBubble";
+
 
 const AppHeader = () => {
   const navigate = useNavigate();
