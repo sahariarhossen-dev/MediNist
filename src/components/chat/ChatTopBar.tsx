@@ -36,7 +36,7 @@ const ChatTopBar = ({
   menu,
   below,
 }: ChatTopBarProps) => (
-  <header className="sticky top-0 z-20 shrink-0 border-b border-border/40 bg-background/90 backdrop-blur-lg">
+  <header className="sticky top-0 z-20 shrink-0 border-b border-border/40 bg-background/90 backdrop-blur-md">
     <div className="flex items-center gap-1 px-1.5 py-1.5 sm:px-2.5">
       <button
         type="button"

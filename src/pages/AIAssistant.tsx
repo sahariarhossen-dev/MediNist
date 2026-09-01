@@ -17,6 +17,7 @@ import {
   Archive,
 } from "lucide-react";
 import ChatTopBar from "@/components/chat/ChatTopBar";
+import MediNistMark from "@/components/brand/MediNistMark";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -487,8 +488,8 @@ const AIAssistant = () => {
         onBack={() => navigate("/workspace")}
         onIdentityClick={() => setInfoOpen(true)}
         avatar={
-          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-[0_0_0_3px_hsl(160_84%_39%/0.12),0_4px_12px_-4px_hsl(160_84%_39%/0.55)]">
-            <TopicIcon className="h-4 w-4" />
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-border/60 shadow-sm">
+            <MediNistMark size={22} />
             <span
               aria-hidden
               className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background ${
