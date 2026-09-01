@@ -875,7 +875,21 @@ Deno.serve(async (req) => {
       console.warn("ai-chat: medex pipeline failed", safeErrorMessage(e));
     }
 
-    const systemPrompt = `${SYSTEM_BASE}\n\n${scopeHeader}\n\n${securityBlock}\n\n${context}${medexBlock}`;
+    // Topic focus / bridged summary are prompt-only hints. They never widen data
+    // access: scoping and redaction above already decided what this role may see.
+    const topicBlock =
+      typeof body?.topic_focus === "string" && body.topic_focus.trim()
+        ? `\n\n<thread_topic>\n${body.topic_focus.trim().slice(0, 600)}\n</thread_topic>`
+        : "";
+    const bridgeBlock =
+      typeof body?.bridged_context === "string" && body.bridged_context.trim()
+        ? `\n\n<bridged_context>\nThe user linked another topic thread. Use only if relevant:\n${body.bridged_context
+            .trim()
+            .slice(0, 1500)}\n</bridged_context>`
+        : "";
+
+    const systemPrompt = `${SYSTEM_BASE}\n\n${scopeHeader}\n\n${securityBlock}\n\n${context}${medexBlock}${topicBlock}${bridgeBlock}`;
+
 
     // Gemini content format: system prompt goes in systemInstruction, history in contents[].
     const contents = messages.map((m) => ({
