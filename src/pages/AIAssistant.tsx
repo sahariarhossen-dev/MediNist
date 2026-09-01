@@ -432,6 +432,51 @@ const AIAssistant = () => {
     toast.success(`Bridged context from “${threadTitle}”`);
   };
 
+  const renameThread = async () => {
+    const next = renameValue.trim();
+    if (!conversationId || !next) return;
+    setRenameOpen(false);
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ title: next })
+      .eq("id", conversationId);
+    if (error) {
+      toast.error("Could not rename this topic.");
+      return;
+    }
+    setTitle(next);
+    toast.success("Topic renamed.");
+  };
+
+  const clearHistory = async () => {
+    if (!conversationId) return;
+    const { error } = await supabase
+      .from("ai_messages")
+      .delete()
+      .eq("conversation_id", conversationId);
+    if (error) {
+      toast.error("Could not clear this thread.");
+      return;
+    }
+    setMessages([]);
+    setReceipts({});
+    toast.success("Chat history cleared.");
+  };
+
+  const archiveThread = async () => {
+    if (!conversationId) return;
+    const { error } = await supabase
+      .from("ai_conversations")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", conversationId);
+    if (error) {
+      toast.error("Could not archive this thread.");
+      return;
+    }
+    toast.success("Thread archived.");
+    navigate("/workspace", { replace: true });
+  };
+
   const isEmptyThread = messages.length === 0;
   const firstName = (profile?.full_name ?? "").trim().split(/\s+/)[0] || "there";
 
