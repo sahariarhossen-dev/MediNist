@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { BellOff, Pin, PinOff, Bell, Pencil, Archive } from "lucide-react";
+import { BellOff, Pin, PinOff, Bell, Pencil, Archive, Sparkles } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { relativeTime } from "@/lib/relativeTime";
 import { getTopic } from "@/lib/aiTopics";
@@ -84,22 +84,23 @@ const AiThreadRow = ({
           }
           onClick();
         }}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50/60 active:bg-slate-100/80"
+        className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-slate-50/70 active:bg-slate-100/70"
       >
-        <span
-          className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${topic.accent} text-white`}
-        >
-          <Icon className="h-5 w-5" />
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)] ring-1 ring-emerald-300/50">
+          <Icon className="h-[18px] w-[18px]" />
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-emerald-600 ring-1 ring-emerald-100">
+            <Sparkles className="h-3 w-3" />
+          </span>
           {thinking && (
-            <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-indigo-400/60" />
+            <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-emerald-400/60" />
           )}
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p
-              className={`truncate text-[15px] tracking-tight text-slate-900 ${
-                unread && !muted ? "font-semibold" : "font-medium"
+              className={`truncate text-[15px] tracking-tight ${
+                unread && !muted ? "font-semibold text-slate-900" : "font-medium text-slate-800"
               }`}
             >
               {thread.title}
