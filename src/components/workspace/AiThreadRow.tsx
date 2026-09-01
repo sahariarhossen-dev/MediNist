@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { BellOff, Pin, PinOff, Bell, Pencil, Archive } from "lucide-react";
+import { BellOff, Pin, PinOff, Bell, Pencil, Archive, Sparkles } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { relativeTime } from "@/lib/relativeTime";
 import { getTopic } from "@/lib/aiTopics";
@@ -84,22 +84,23 @@ const AiThreadRow = ({
           }
           onClick();
         }}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50/60 active:bg-slate-100/80"
+        className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-slate-50/70 active:bg-slate-100/70"
       >
-        <span
-          className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${topic.accent} text-white`}
-        >
-          <Icon className="h-5 w-5" />
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)] ring-1 ring-emerald-300/50">
+          <Icon className="h-[18px] w-[18px]" />
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-emerald-600 ring-1 ring-emerald-100">
+            <Sparkles className="h-3 w-3" />
+          </span>
           {thinking && (
-            <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-indigo-400/60" />
+            <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-emerald-400/60" />
           )}
         </span>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p
-              className={`truncate text-[15px] tracking-tight text-slate-900 ${
-                unread && !muted ? "font-semibold" : "font-medium"
+              className={`truncate text-[15px] tracking-tight ${
+                unread && !muted ? "font-semibold text-slate-900" : "font-medium text-slate-800"
               }`}
             >
               {thread.title}
@@ -108,18 +109,18 @@ const AiThreadRow = ({
             {muted && <BellOff className="h-3 w-3 shrink-0 text-slate-400" />}
           </div>
           {thinking ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-indigo-600">
+            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-medium text-emerald-600">
               Thinking
               <span className="flex gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.3s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.15s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
               </span>
             </p>
           ) : (
             <p
-              className={`mt-0.5 line-clamp-1 text-xs ${
-                unread && !muted ? "font-medium text-slate-900" : "text-slate-400"
+              className={`mt-1 truncate text-[12.5px] ${
+                unread && !muted ? "font-medium text-slate-700" : "text-slate-400"
               }`}
             >
               {thread.last_message || topic.label}
@@ -128,13 +129,17 @@ const AiThreadRow = ({
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="text-[11px] text-slate-400">
+          <span
+            className={`text-[11px] ${
+              unread && !muted ? "font-semibold text-emerald-600" : "text-slate-400"
+            }`}
+          >
             {relativeTime(thread.last_message_at ?? thread.updated_at)}
           </span>
           {unread && !thinking && (
             <span
               className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
-                muted ? "bg-slate-300" : "bg-indigo-500"
+                muted ? "bg-slate-300" : "bg-emerald-500"
               }`}
             >
               1
