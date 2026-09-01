@@ -8,11 +8,35 @@ import {
   ImagePlus,
   Loader2,
   X,
-  ChevronLeft,
   LayoutPanelLeft,
   Link2,
   AtSign,
+  Pencil,
+  Pin,
+  Eraser,
+  Archive,
 } from "lucide-react";
+import ChatTopBar from "@/components/chat/ChatTopBar";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { useThreadPrefs } from "@/lib/threadPrefs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
