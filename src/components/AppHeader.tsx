@@ -17,7 +17,6 @@ const AppHeader = () => {
       <LogoFull height={28} />
       <div className="flex items-center gap-2 sm:gap-3">
         <NotificationBell />
-        <MessageBubble />
         <Avatar className="h-9 w-9 cursor-pointer" onClick={() => navigate("/profile")}>
           {profile?.avatar_url ? (
             <AvatarImage src={profile.avatar_url} alt="Avatar" className="object-cover" />
