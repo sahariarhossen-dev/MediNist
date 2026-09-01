@@ -109,18 +109,18 @@ const AiThreadRow = ({
             {muted && <BellOff className="h-3 w-3 shrink-0 text-slate-400" />}
           </div>
           {thinking ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-indigo-600">
+            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-medium text-emerald-600">
               Thinking
               <span className="flex gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.3s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500 [animation-delay:-0.15s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-500" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
               </span>
             </p>
           ) : (
             <p
-              className={`mt-0.5 line-clamp-1 text-xs ${
-                unread && !muted ? "font-medium text-slate-900" : "text-slate-400"
+              className={`mt-1 truncate text-[12.5px] ${
+                unread && !muted ? "font-medium text-slate-700" : "text-slate-400"
               }`}
             >
               {thread.last_message || topic.label}
@@ -129,13 +129,17 @@ const AiThreadRow = ({
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="text-[11px] text-slate-400">
+          <span
+            className={`text-[11px] ${
+              unread && !muted ? "font-semibold text-emerald-600" : "text-slate-400"
+            }`}
+          >
             {relativeTime(thread.last_message_at ?? thread.updated_at)}
           </span>
           {unread && !thinking && (
             <span
               className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
-                muted ? "bg-slate-300" : "bg-indigo-500"
+                muted ? "bg-slate-300" : "bg-emerald-500"
               }`}
             >
               1
