@@ -118,6 +118,12 @@ const AIAssistant = () => {
   const [attachment, setAttachment] = useState<InlineImage | null>(null);
   const [recorder, setRecorder] = useState<VoiceRecorder | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const { isPinned, togglePin } = useThreadPrefs();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
