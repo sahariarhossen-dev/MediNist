@@ -669,8 +669,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = (await req.json()) as { messages: ChatMsg[]; images?: InlineImage[] };
+    const body = (await req.json()) as {
+      messages: ChatMsg[];
+      images?: InlineImage[];
+      /** Topic focus of the calling thread (client-supplied, prompt-only). */
+      topic_focus?: string;
+      /** Short summary bridged in from another topic thread. */
+      bridged_context?: string;
+    };
     const messages = body?.messages;
+
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
         status: 400,
