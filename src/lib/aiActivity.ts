@@ -1,13 +1,14 @@
 /**
- * Lightweight cross-page store for AI co-pilot activity, used by the pinned
- * "MediNist AI" row in the unified inbox.
+ * Lightweight cross-page store for AI co-pilot activity, used by the AI topic
+ * rows in the unified inbox.
  *
  * Kept in localStorage (plus a same-tab custom event) so the state survives
- * navigation between /workspace and /workspace/ai and syncs across tabs.
+ * navigation between /workspace and /workspace/ai/:id and syncs across tabs.
  */
 import { useEffect, useState } from "react";
 
 const KEY = "medinist.ai.activity.v1";
+const SEEN_KEY = "medinist.ai.threadseen.v1";
 const EVENT = "medinist:ai-activity";
 
 export interface AiActivity {
@@ -15,6 +16,8 @@ export interface AiActivity {
   thinking: boolean;
   /** When the in-flight request started (guards against a stale flag). */
   thinkingSince: string | null;
+  /** Which topic thread is currently generating, when known. */
+  thinkingThread: string | null;
   /** ISO timestamp of the newest assistant reply. */
   lastAssistantAt: string | null;
   /** ISO timestamp the user last had the AI thread in view. */
@@ -26,6 +29,7 @@ const STALE_MS = 90_000;
 const EMPTY: AiActivity = {
   thinking: false,
   thinkingSince: null,
+  thinkingThread: null,
   lastAssistantAt: null,
   lastSeenAt: null,
 };
@@ -40,6 +44,7 @@ export const readAiActivity = (): AiActivity => {
     return {
       thinking: !!parsed.thinking && !stale,
       thinkingSince: since,
+      thinkingThread: stale ? null : parsed.thinkingThread ?? null,
       lastAssistantAt: parsed.lastAssistantAt ?? null,
       lastSeenAt: parsed.lastSeenAt ?? null,
     };
@@ -57,11 +62,12 @@ const write = (next: AiActivity) => {
   window.dispatchEvent(new CustomEvent<AiActivity>(EVENT, { detail: next }));
 };
 
-export const setAiThinking = (thinking: boolean) =>
+export const setAiThinking = (thinking: boolean, threadId?: string | null) =>
   write({
     ...readAiActivity(),
     thinking,
     thinkingSince: thinking ? new Date().toISOString() : null,
+    thinkingThread: thinking ? threadId ?? null : null,
   });
 
 export const markAiReplied = () =>
@@ -69,6 +75,7 @@ export const markAiReplied = () =>
     ...readAiActivity(),
     thinking: false,
     thinkingSince: null,
+    thinkingThread: null,
     lastAssistantAt: new Date().toISOString(),
   });
 
@@ -79,6 +86,43 @@ export const hasUnseenAiReply = (a: AiActivity) => {
   if (!a.lastAssistantAt) return false;
   if (!a.lastSeenAt) return true;
   return new Date(a.lastAssistantAt).getTime() > new Date(a.lastSeenAt).getTime();
+};
+
+/* ---------------------------------------------------------------- per thread */
+
+type SeenMap = Record<string, string>;
+
+const readSeenMap = (): SeenMap => {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    return raw ? (JSON.parse(raw) as SeenMap) : {};
+  } catch {
+    return {};
+  }
+};
+
+/** Record that the user just viewed this topic thread. */
+export const markThreadSeen = (threadId: string) => {
+  const map = readSeenMap();
+  map[threadId] = new Date().toISOString();
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+  markAiSeen();
+};
+
+/** True when the thread's newest assistant turn arrived after the last view. */
+export const isThreadUnseen = (
+  threadId: string,
+  lastRole: string | null,
+  lastAt: string | null
+) => {
+  if (lastRole !== "assistant" || !lastAt) return false;
+  const seen = readSeenMap()[threadId];
+  if (!seen) return true;
+  return new Date(lastAt).getTime() > new Date(seen).getTime();
 };
 
 export const useAiActivity = (): AiActivity => {
