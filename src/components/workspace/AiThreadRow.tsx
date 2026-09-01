@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { BellOff, Pin, PinOff, Bell, Pencil, Archive, Sparkles } from "lucide-react";
+import { BellOff, Pin, PinOff, Bell, Pencil, Archive } from "lucide-react";
+import MediNistMark from "@/components/brand/MediNistMark";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { relativeTime } from "@/lib/relativeTime";
 import { getTopic } from "@/lib/aiTopics";
@@ -35,7 +36,6 @@ const AiThreadRow = ({
   const start = useRef<{ x: number; y: number } | null>(null);
   const longPressed = useRef(false);
   const topic = getTopic(thread.topic_key);
-  const Icon = topic.icon;
 
   const clear = () => {
     if (timer.current) {
@@ -86,13 +86,10 @@ const AiThreadRow = ({
         }}
         className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-slate-50/70 active:bg-slate-100/70"
       >
-        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.6)] ring-1 ring-emerald-300/50">
-          <Icon className="h-[18px] w-[18px]" />
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-emerald-600 ring-1 ring-emerald-100">
-            <Sparkles className="h-3 w-3" />
-          </span>
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white ring-1 ring-border/60 shadow-sm">
+          <MediNistMark size={26} />
           {thinking && (
-            <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-emerald-400/60" />
+            <span className="absolute inset-0 animate-ping rounded-2xl ring-2 ring-[#1E56A0]/40" />
           )}
         </span>
 
@@ -100,7 +97,7 @@ const AiThreadRow = ({
           <div className="flex items-center gap-1.5">
             <p
               className={`truncate text-[15px] tracking-tight ${
-                unread && !muted ? "font-semibold text-slate-900" : "font-medium text-slate-800"
+                unread && !muted ? "font-semibold text-[#0F172A]" : "font-normal text-[#0F172A]"
               }`}
             >
               {thread.title}
@@ -109,12 +106,12 @@ const AiThreadRow = ({
             {muted && <BellOff className="h-3 w-3 shrink-0 text-slate-400" />}
           </div>
           {thinking ? (
-            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-medium text-emerald-600">
+            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-medium text-[#1E56A0]">
               Thinking
               <span className="flex gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.3s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500 [animation-delay:-0.15s]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-500" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-[#1E56A0] [animation-delay:-0.3s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-[#1E56A0] [animation-delay:-0.15s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-[#1E56A0]" />
               </span>
             </p>
           ) : (
@@ -131,7 +128,7 @@ const AiThreadRow = ({
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span
             className={`text-[11px] ${
-              unread && !muted ? "font-semibold text-emerald-600" : "text-slate-400"
+              unread && !muted ? "font-medium text-[#1E56A0]" : "font-medium text-slate-400"
             }`}
           >
             {relativeTime(thread.last_message_at ?? thread.updated_at)}
@@ -139,7 +136,7 @@ const AiThreadRow = ({
           {unread && !thinking && (
             <span
               className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
-                muted ? "bg-slate-300" : "bg-emerald-500"
+                muted ? "bg-slate-300" : "bg-[#1E56A0]"
               }`}
             >
               1
