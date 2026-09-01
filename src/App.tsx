@@ -114,7 +114,9 @@ const App = () => (
             <Route path="/more/notes" element={<ProtectedRoute><AppLayout><Notes /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
             <Route path="/workspace" element={<ProtectedRoute><AppLayout><Workspace /></AppLayout></ProtectedRoute>} />
-            <Route path="/workspace/ai" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/ai" element={<ProtectedRoute><AppLayout><AiThreadResolver /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/ai/:conversationId" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+
             <Route path="/workspace/alerts" element={<ProtectedRoute><AppLayout><AlertsThread /></AppLayout></ProtectedRoute>} />
             <Route path="/workspace/room/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/messages" element={<Navigate to="/workspace" replace />} />
