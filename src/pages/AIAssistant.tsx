@@ -431,52 +431,87 @@ const AIAssistant = () => {
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] flex-col bg-chat-canvas">
-      {/* Thread header */}
-      <header className="shrink-0 border-b border-black/5 bg-chat-canvas">
-        <div className="flex items-center gap-2 px-2 py-2.5 sm:px-3">
-          <button
-            onClick={() => navigate("/workspace")}
-            aria-label="Back to chats"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 active:scale-95"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${topic.accent} text-white`}
-          >
+      {/* Telegram-style thread header */}
+      <ChatTopBar
+        onBack={() => navigate("/workspace")}
+        onIdentityClick={() => setInfoOpen(true)}
+        avatar={
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-[0_0_0_3px_hsl(160_84%_39%/0.12),0_4px_12px_-4px_hsl(160_84%_39%/0.55)]">
             <TopicIcon className="h-4 w-4" />
+            <span
+              aria-hidden
+              className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background ${
+                isLoading ? "animate-pulse" : ""
+              }`}
+            />
           </span>
-          <div className="min-w-0 flex-1 leading-tight">
-            <h1 className="truncate text-[15px] font-semibold tracking-tight text-slate-900">
-              {title}
-            </h1>
-            <p className="truncate text-[11px] text-slate-500">
-              {bridge ? `Bridged: ${bridge.title}` : topic.label}
-              {pharmacyName ? ` · ${pharmacyName}` : ""}
-            </p>
-          </div>
-          <button
-            onClick={() => setBridgeOpen(true)}
-            aria-label="Bridge another topic"
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-              bridge ? "text-indigo-600" : "text-slate-500"
-            }`}
-          >
-            <Link2 className="h-4.5 w-4.5" />
-          </button>
-          {topic.canvas !== "none" && (
+        }
+        title={title}
+        subtitle={
+          <>
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium text-emerald-700">
+              {bridge ? `Linked: ${bridge.title}` : topic.label}
+            </span>
+            <span className="truncate">
+              {isLoading ? "Thinking…" : pharmacyName ?? "MediNist AI"}
+            </span>
+          </>
+        }
+        actions={
+          topic.canvas !== "none" ? (
             <button
+              type="button"
               onClick={() => setCanvasOpen((v) => !v)}
-              aria-label="Toggle canvas"
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-slate-100 ${
-                canvasOpen ? "text-indigo-600" : "text-slate-500"
+              aria-label="Toggle canvas view"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none transition hover:bg-emerald-500/10 focus-visible:ring-2 focus-visible:ring-emerald-500/40 active:scale-95 ${
+                canvasOpen ? "text-emerald-600" : "text-foreground/70"
               }`}
             >
-              <LayoutPanelLeft className="h-4.5 w-4.5" />
+              <LayoutPanelLeft className="h-5 w-5" />
             </button>
-          )}
-        </div>
-      </header>
+          ) : null
+        }
+        menu={
+          <>
+            <DropdownMenuItem className="gap-2.5 rounded-xl py-2.5" onSelect={() => setBridgeOpen(true)}>
+              <Link2 className="h-4 w-4 text-emerald-600" />
+              Link Topic
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => {
+                setRenameValue(title);
+                setRenameOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4 text-emerald-600" />
+              Rename Topic
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => conversationId && togglePin(conversationId)}
+            >
+              <Pin className="h-4 w-4 text-emerald-600" />
+              {conversationId && isPinned(conversationId) ? "Unpin Thread" : "Pin Thread"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => setClearOpen(true)}
+            >
+              <Eraser className="h-4 w-4 text-muted-foreground" />
+              Clear History
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2.5 rounded-xl py-2.5"
+              onSelect={() => setArchiveOpen(true)}
+            >
+              <Archive className="h-4 w-4 text-muted-foreground" />
+              Archive Thread
+            </DropdownMenuItem>
+          </>
+        }
+      />
 
       <div className="flex min-h-0 flex-1">
         {/* Messages */}
