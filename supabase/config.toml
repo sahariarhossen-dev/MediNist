@@ -1,8 +1,5 @@
 project_id = "hjqcvidezzzkfipcneit"
 
-[functions.ai-chat]
-verify_jwt = false
-
 [functions.accept-invitation]
 verify_jwt = false
 
@@ -10,8 +7,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.cleanup-demo-sessions]
-verify_jwt = false
-
-
-[functions.voice-transcribe]
 verify_jwt = false

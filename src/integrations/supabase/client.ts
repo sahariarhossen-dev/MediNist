@@ -14,5 +14,12 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: brokeredPreviewStorage(),
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
+  global: {
+    fetch: (...args: Parameters<typeof fetch>) => {
+      const g = typeof window !== 'undefined' ? window : globalThis;
+      const fn = g.fetch || fetch;
+      return fn.apply(g, args);
+    },
+  },
 });

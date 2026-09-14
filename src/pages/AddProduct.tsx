@@ -75,9 +75,14 @@ const AddProduct = () => {
   const [mrp, setMrp] = useState("");
   const [pcsPerStrip, setPcsPerStrip] = useState("");
   const [stripPerBox, setStripPerBox] = useState("");
+  const [isSplittable, setIsSplittable] = useState<boolean>(true);
+  const [packagingType, setPackagingType] = useState<string>("strip");
 
   const standardizedType = getStandardizedType(productType);
-  const usesStripPack = standardizedType === "Tablet" || standardizedType === "Capsule";
+  const usesStripPack =
+    (standardizedType === "Tablet" || standardizedType === "Capsule") &&
+    isSplittable &&
+    packagingType !== "pot";
   const totalBoxSize = pcsPerStrip && stripPerBox ? Number(pcsPerStrip) * Number(stripPerBox) : null;
 
   // Load dynamic product types from this pharmacy's existing inventory
@@ -138,6 +143,9 @@ const AddProduct = () => {
     if (src.mrp) setMrp(src.mrp);
     if (src.pcsPerStrip) setPcsPerStrip(src.pcsPerStrip);
     if (src.stripPerBox) setStripPerBox(src.stripPerBox);
+    if (src.is_splittable !== undefined) setIsSplittable(Boolean(src.is_splittable));
+    else if (src.isSplittable !== undefined) setIsSplittable(Boolean(src.isSplittable));
+    if (src.packagingType) setPackagingType(src.packagingType);
   }, []);
 
   // Self-heal: when opening Edit for an existing product, look up the
@@ -246,6 +254,8 @@ const AddProduct = () => {
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
       price: mrp ? Number(mrp) : null,
+      is_splittable: isSplittable,
+      packaging_type: packagingType,
       // Persist whatever pack data the user entered (>0). Visibility of the
       // strip/box UI is no longer tied to product_type — it follows the
       // actual packaging numbers, matching the master JSON catalog shape.

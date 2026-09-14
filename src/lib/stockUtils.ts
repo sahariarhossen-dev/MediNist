@@ -129,13 +129,31 @@ const STRIP_ONLY_TYPE_RE = /^\s*(tablet|capsule)s?\s*$/i;
 
 export const looksSingleUnit = (
   med:
-    | (PackInfo & { product_type?: string | null; unit_format?: string | null; format?: string | null })
+    | (PackInfo & {
+        product_type?: string | null;
+        unit_format?: string | null;
+        format?: string | null;
+        is_splittable?: boolean | null;
+        isSplittable?: boolean | null;
+        packaging_type?: string | null;
+        pack_size?: string | null;
+      })
     | null
     | undefined
 ): boolean => {
-  // Hard rule: a Tablet or Capsule is never single-unit.
+  if (med?.is_splittable === false || med?.isSplittable === false || med?.packaging_type === "pot") {
+    return true;
+  }
+
+  // Hard rule: a Tablet or Capsule is never single-unit unless it is a sealed non-splittable pot/pack
   const typeRaw = (med?.product_type ?? med?.format ?? "").toString();
-  if (STRIP_ONLY_TYPE_RE.test(typeRaw)) return false;
+  if (STRIP_ONLY_TYPE_RE.test(typeRaw)) {
+    const packStr = (med?.pack_size || "").toLowerCase();
+    if (/\b(pack|pot|container|bottle|jar)\b/i.test(packStr) && !/\bstrip\b/i.test(packStr)) {
+      return true;
+    }
+    return false;
+  }
 
   if (isSingleUnit(med)) return true;
   const spp = Number(med?.strip_per_pack ?? 0);
@@ -160,6 +178,9 @@ export const parsePackSize = (val: string | null | undefined): number | null => 
 export interface CatalogPackInput {
   pack_size?: string | null;
   box_size?: string | null;
+  format?: string | null;
+  product_type?: string | null;
+  unit_format?: string | null;
 }
 
 export interface CatalogPackClassification {
@@ -196,20 +217,45 @@ export const parseNxMPack = (
  * "30s pot" sold as one pack) or as a strip/box-divided product.
  *
  * Rules:
- * - `pack_size` matches "NxM" → ALWAYS trust it: `strip_per_pack = N`,
- *   `pcs_per_strip = M`. This is MedEx's authoritative format and must
- *   never be re-derived from `box_size` (that historically caused the
- *   strips/pcs values to swap).
- * - `box_size` ≤ 1 (or missing) → SINGLE, regardless of `pack_size`.
- *   A 30s pot of Allion Gold is one unit, not 30 strips.
- * - `box_size` > 1 and `pack_size` > 1 → FULL strip+box.
- * - `box_size` > 1 with no usable `pack_size` → BOX only.
- * - Anything else falls back to SINGLE.
+ * - Liquid/Bottles/Sprays (Syrup, Spray, Inhaler, Drops, Ointment) → single unit, never multiplied.
+ * - Strip Tablets (e.g. '12s strip') → only allow loose/strip unit calculation if pack_size explicitly contains 'strip'.
+ * - Pots / Sealed Pack Tablets (e.g. '30s pack', '60s pot') → single unit pot pack.
  */
 export const classifyCatalogPack = (
   input: CatalogPackInput
 ): CatalogPackClassification => {
-  // 1. NxM is the source of truth when present.
+  const formatStr = `${input.format || ""} ${input.product_type || ""} ${input.unit_format || ""}`.toLowerCase();
+  const packStr = (input.pack_size || "").toLowerCase();
+
+  // 1. Liquid/Bottles/Sprays: strictly single unit, never multiply volume
+  const isLiquidOrSpray =
+    /\b(syrup|suspension|spray|inhaler|inhalation|drops?|ointment|cream|gel|lotion|liquid|solution|mouthwash|wash|shampoo)\b/i.test(formatStr) ||
+    (/\b\d+(?:\.\d+)?\s*ml\b/i.test(packStr) && !/\b(tablet|capsule)\b/i.test(formatStr));
+
+  if (isLiquidOrSpray) {
+    return { mode: "single", pcs_per_strip: null, strip_per_pack: null };
+  }
+
+  // 2. Strip Tablets (only allow loose/strip unit calculation if pack_size explicitly contains 'strip')
+  const hasStrip = /\bstrip\b/i.test(packStr);
+  const hasPackPot = /\b(pack|pot|container|bottle|jar)\b/i.test(packStr);
+
+  // If pack_size contains terms like 'pack', 'pot', 'container', or 'bottle' without 'strip'
+  // treat it as a non-splittable Pot/Pack
+  if (hasPackPot && !hasStrip) {
+    const potMatch =
+      input.pack_size?.match(/(\d+)\s*'?s?\s*(?:pack|pot|container|bottle|jar)\b/i) ||
+      input.pack_size?.match(/(\d+)\s*'?s\b/i) ||
+      input.pack_size?.match(/(\d+)/);
+    const potCount = potMatch ? parseInt(potMatch[1], 10) : 1;
+    return {
+      mode: "single",
+      pcs_per_strip: 1,
+      strip_per_pack: potCount > 1 ? potCount : null,
+    };
+  }
+
+  // 3. NxM is the source of truth when present.
   const nxm = parseNxMPack(input.pack_size);
   if (nxm) {
     if (nxm.strip_per_pack > 1) {
@@ -225,6 +271,18 @@ export const classifyCatalogPack = (
       pcs_per_strip: nxm.pcs_per_strip,
       strip_per_pack: 1,
     };
+  }
+
+  if (hasStrip) {
+    const stripMatch = input.pack_size?.match(/(\d+)\s*'?s?\s*strip/i);
+    if (stripMatch) {
+      const pps = parseInt(stripMatch[1], 10);
+      return {
+        mode: "strip",
+        pcs_per_strip: pps > 1 ? pps : 1,
+        strip_per_pack: 1,
+      };
+    }
   }
 
   const box = parsePackSize(input.box_size);
@@ -299,3 +357,220 @@ export const isLowStock = (med: {
   const qty = med.stock_quantity ?? 0;
   return qty <= getEffectiveStockAlert(med);
 };
+
+export interface PotItemInfo {
+  isPot: boolean;
+  potSize: number;
+  potLabel: string;
+}
+
+/**
+ * Identify Pot / Container / Bottle type medicines (e.g., Neuro-B 60s, Bextram Gold 30s)
+ * which cannot be opened to sell loose single tablets and must be sold in full pot multiples.
+ */
+export const getPotItemInfo = (
+  med:
+    | {
+        name?: string | null;
+        product_type?: string | null;
+        unit_format?: string | null;
+        format?: string | null;
+        packaging_type?: string | null;
+        pack_size?: string | null;
+        box_size?: string | null;
+        pcs_per_strip?: number | null;
+        strip_per_pack?: number | null;
+        product_size?: string | null;
+        is_splittable?: boolean | null;
+        isSplittable?: boolean | null;
+      }
+    | null
+    | undefined
+): PotItemInfo => {
+  if (!med) return { isPot: false, potSize: 1, potLabel: "" };
+
+  const name = (med.name || "").trim();
+  const pkgType = (med.packaging_type || "").toLowerCase();
+  const unitFmt = (med.unit_format || "").toLowerCase();
+  const prodType = (med.product_type || "").toLowerCase();
+  const formatStr = (med.format || "").toLowerCase();
+  const packSizeStr = (med.pack_size || "").toLowerCase();
+  const prodSizeStr = (med.product_size || "").toLowerCase();
+
+  // 1. Liquid/Bottles/Sprays (Syrup, Spray, Inhaler, Drops, Ointment):
+  // They are single liquid/topical units, not tablet pots.
+  const isLiquidOrSpray =
+    /\b(syrup|suspension|spray|inhaler|inhalation|drops?|ointment|cream|gel|lotion|liquid|solution|mouthwash|wash|shampoo)\b/i.test(
+      `${prodType} ${formatStr} ${unitFmt} ${name}`
+    ) ||
+    (/\b\d+(?:\.\d+)?\s*ml\b/i.test(packSizeStr) && !/\b(tablet|capsule)\b/i.test(`${prodType} ${formatStr} ${unitFmt}`));
+  if (isLiquidOrSpray) {
+    return { isPot: false, potSize: 1, potLabel: "" };
+  }
+
+  // 2. Strip Tablets (e.g. '12s strip'):
+  // If pack_size explicitly contains 'strip', it is a strip unit, not a pot.
+  if (/\bstrip\b/i.test(packSizeStr)) {
+    return { isPot: false, potSize: 1, potLabel: "" };
+  }
+
+  const combinedMeta = `${pkgType} ${unitFmt} ${prodType} ${formatStr} ${packSizeStr}`;
+  const hasExplicitPotKeyword = /\b(pack|pot|container|bottle|jar)\b/i.test(combinedMeta);
+  const nameHasPotKeyword = /\b(pack|pot|container|bottle|jar)\b/i.test(name);
+  const isMarkedSinglePot = /\bsingle-unit\/pot\b/i.test(`${unitFmt} ${prodType} ${formatStr}`) || pkgType === "pot";
+
+  const pps = Number(med.pcs_per_strip ?? 0);
+  const spp = Number(med.strip_per_pack ?? 0);
+
+  // Normal blister strip tablets/capsules (e.g. 10x10):
+  // If pps > 1 and spp > 1 and no explicit pot indicator, it is a blister strip and loose sale is allowed.
+  if (pps > 1 && spp > 1 && !hasExplicitPotKeyword && !nameHasPotKeyword && !isMarkedSinglePot) {
+    return { isPot: false, potSize: 1, potLabel: "" };
+  }
+
+  // Candidate pot size extraction:
+  const packParsed = parsePackSize(med.pack_size);
+  const boxParsed = parsePackSize(med.box_size);
+  const nameCountMatch = `${name} ${prodSizeStr} ${packSizeStr}`.match(/\b(\d+)\s*'?s\b/i);
+  const nameCount = nameCountMatch ? parseInt(nameCountMatch[1], 10) : null;
+
+  let candidatePotSize: number | null = null;
+  if (pps === 1 && spp > 1) {
+    candidatePotSize = spp;
+  } else if (spp === 1 && pps > 1 && (hasExplicitPotKeyword || nameHasPotKeyword || isMarkedSinglePot || nameCount)) {
+    candidatePotSize = pps;
+  } else if (boxParsed && boxParsed > 1 && (pps <= 1 || hasExplicitPotKeyword || nameHasPotKeyword || isMarkedSinglePot)) {
+    candidatePotSize = boxParsed;
+  } else if (packParsed && packParsed > 1 && (pps <= 1 || hasExplicitPotKeyword || nameHasPotKeyword || isMarkedSinglePot)) {
+    candidatePotSize = packParsed;
+  } else if (nameCount && nameCount > 1 && (pps <= 1 || hasExplicitPotKeyword || nameHasPotKeyword || isMarkedSinglePot)) {
+    candidatePotSize = nameCount;
+  }
+
+  // Qualifies as a pot if candidate size > 1 AND:
+  // - Explicit pack/pot/container/bottle keyword, OR
+  // - Marked as single-unit/pot or is_splittable === false, OR
+  // - Pcs per Strip = 1 with a fixed box/pot size (e.g. 60 pcs, 30 pcs), OR
+  // - Name/pack indicates fixed count (e.g. 60s, 30s) without blister strips
+  const isPot = Boolean(
+    candidatePotSize &&
+      candidatePotSize > 1 &&
+      (hasExplicitPotKeyword ||
+        nameHasPotKeyword ||
+        isMarkedSinglePot ||
+        med.is_splittable === false ||
+        med.isSplittable === false ||
+        (pps <= 1 && (spp > 1 || (boxParsed && boxParsed > 1) || (nameCount && nameCount > 1))) ||
+        (nameCount && nameCount > 1 && spp <= 1))
+  );
+
+  if (isPot && candidatePotSize && candidatePotSize > 1) {
+    const fullText = `${name} ${combinedMeta}`.toLowerCase();
+    let potLabel = "Pot";
+    if (/\bbottle\b/i.test(fullText)) potLabel = "Bottle";
+    else if (/\bcontainer\b/i.test(fullText)) potLabel = "Container";
+    else if (/\bjar\b/i.test(fullText)) potLabel = "Jar";
+    else if (/\bpack\b/i.test(fullText)) potLabel = "Pack";
+
+    return {
+      isPot: true,
+      potSize: candidatePotSize,
+      potLabel,
+    };
+  }
+
+  return { isPot: false, potSize: 1, potLabel: "" };
+};
+
+/**
+ * Validate and compute snap for a pot sale quantity.
+ */
+export const validatePotSaleQuantity = (
+  qty: number,
+  potInfo: PotItemInfo
+): { isValid: boolean; message: string; snappedQty: number } => {
+  if (!potInfo.isPot || potInfo.potSize <= 1) {
+    const validQty = Math.max(1, Math.floor(qty) || 1);
+    return { isValid: true, message: "", snappedQty: validQty };
+  }
+
+  const { potSize, potLabel } = potInfo;
+  const isMultiple = qty > 0 && qty % potSize === 0;
+
+  if (isMultiple) {
+    return { isValid: true, message: "", snappedQty: qty };
+  }
+
+  let snappedQty = Math.round(qty / potSize) * potSize;
+  if (snappedQty < potSize) {
+    snappedQty = potSize;
+  }
+
+  const message = `Cannot sell loose tablets for this ${potLabel.toLowerCase()} item. Must be sold as full ${potLabel.toLowerCase()} (${potSize} pcs).`;
+  return { isValid: false, message, snappedQty };
+};
+
+/**
+ * Step pot quantity up or down by 1 full pot (potSize).
+ */
+export const getPotSteppedQuantity = (
+  currentQty: number,
+  direction: "up" | "down",
+  potInfo: PotItemInfo
+): number => {
+  if (!potInfo.isPot || potInfo.potSize <= 1) {
+    return direction === "up" ? currentQty + 1 : Math.max(1, currentQty - 1);
+  }
+
+  const { potSize } = potInfo;
+  if (direction === "up") {
+    const currentPots = Math.floor(currentQty / potSize);
+    return Math.max(potSize, (currentPots + 1) * potSize);
+  } else {
+    const currentPots = Math.ceil(currentQty / potSize);
+    return Math.max(potSize, (currentPots - 1) * potSize);
+  }
+};
+
+/**
+ * Display formatted pot count with piece count.
+ */
+export const formatPotQuantityDisplay = (
+  qty: number,
+  potInfo: PotItemInfo
+): string => {
+  if (!potInfo.isPot || potInfo.potSize <= 1) {
+    return `${qty} pcs`;
+  }
+  const pots = qty / potInfo.potSize;
+  const isWhole = Number.isInteger(pots);
+  const potUnit = pots === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`;
+  if (isWhole && pots > 0) {
+    return `${pots} ${potUnit} (${qty} pcs)`;
+  }
+  return `${qty} pcs (loose invalid)`;
+};
+
+/**
+ * Calculate total pieces for a cart item quantity.
+ * For pot/bottle items, cart quantity represents number of pots/bottles.
+ * For regular items, cart quantity represents pieces directly.
+ */
+export const getCartItemPieces = (qty: number, potInfo: PotItemInfo): number => {
+  const safeQty = Math.max(1, Math.floor(qty) || 1);
+  return potInfo.isPot ? safeQty * potInfo.potSize : safeQty;
+};
+
+/**
+ * Calculate gross line total for a cart item before discounts.
+ * unitPrice is the price per piece (as stored in the database).
+ */
+export const getCartItemLineTotal = (
+  qty: number,
+  unitPrice: number,
+  potInfo: PotItemInfo
+): number => {
+  const pieces = getCartItemPieces(qty, potInfo);
+  return pieces * (unitPrice || 0);
+};
+

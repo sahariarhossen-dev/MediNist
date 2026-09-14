@@ -2,7 +2,70 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      /* Ensure window.fetch is writable and configurable to prevent "Cannot set property fetch of #<Window> which has only a getter" */
+      (function() {
+        // Defensive error suppression specifically for any external attempt to set fetch when restricted
+        if (typeof window !== 'undefined') {
+          window.addEventListener('error', function(event) {
+            if (event && event.message && event.message.indexOf('fetch') !== -1 && event.message.indexOf('getter') !== -1) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return true;
+            }
+          }, true);
+        }
+
+        function ensureFetchConfigurable(target) {
+          if (!target) return;
+          try {
+            var raw = target.fetch;
+            var bound = typeof raw === 'function' ? raw.bind(target) : raw;
+
+            // 1. Primary: define as writable, configurable value property directly on target
+            try {
+              Object.defineProperty(target, 'fetch', {
+                value: bound,
+                writable: true,
+                configurable: true,
+                enumerable: true
+              });
+            } catch (e1) {
+              // 2. Fallback: if value cannot be set, supply both getter and setter
+              var current = bound;
+              try {
+                Object.defineProperty(target, 'fetch', {
+                  get: function() { return current; },
+                  set: function(val) { current = val; },
+                  configurable: true,
+                  enumerable: true
+                });
+              } catch (e2) {}
+            }
+          } catch (e) {}
+        }
+
+        // Apply to window, Window.prototype, prototypes in chain, and globalThis
+        if (typeof window !== 'undefined') {
+          ensureFetchConfigurable(window);
+          var proto = Object.getPrototypeOf ? Object.getPrototypeOf(window) : window.__proto__;
+          while (proto && proto !== Object.prototype) {
+            ensureFetchConfigurable(proto);
+            proto = Object.getPrototypeOf ? Object.getPrototypeOf(proto) : proto.__proto__;
+          }
+        }
+        if (typeof Window !== 'undefined' && Window.prototype) {
+          ensureFetchConfigurable(Window.prototype);
+        }
+        if (typeof globalThis !== 'undefined') {
+          ensureFetchConfigurable(globalThis);
+        }
+        if (typeof self !== 'undefined') {
+          ensureFetchConfigurable(self);
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- TODO: Set the document title to the name of your application -->
     <title>MediNist</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -39,8 +102,8 @@
   
   <meta property="og:title" content="MediNist">
   <meta name="twitter:title" content="MediNist">
-  <meta property="og:description" content="MediNist — premium pharmacy management app">
-  <meta name="twitter:description" content="MediNist — premium pharmacy management app">
+  <meta property="og:description" content="MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.">
+  <meta name="twitter:description" content="MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.">
 </head>
 
   <body>

@@ -2,13 +2,12 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const ROOT_PATHS = ["/dashboard", "/sales", "/ai", "/more"];
+const ROOT_PATHS = ["/dashboard", "/sales", "/workspace", "/more"];
 
 /**
  * Smart back-button handler for root tabs.
  *
- * - On AI page: hardware back goes straight to Dashboard.
- * - On any other root tab: requires double-press to "exit" (shows toast).
+ * - On root tabs: requires double-press to "exit" (shows toast).
  * - On sub-pages: native back behavior (router pop) is preserved.
  *
  * We implement this by pushing a sentinel history entry whenever the user
@@ -28,13 +27,7 @@ export const useRootBackHandler = () => {
     window.history.pushState({ rootSentinel: true, path: pathname }, "");
 
     const onPopState = () => {
-      // AI page: jump straight to Dashboard, ignore intermediate history.
-      if (pathname === "/ai") {
-        navigate("/dashboard", { replace: true });
-        return;
-      }
-
-      // Other root tabs: double-press to exit.
+      // Root tabs: double-press to exit.
       const now = Date.now();
       if (now - lastBackPressRef.current < 2000) {
         // Allow the actual back navigation (will leave the app / SPA).

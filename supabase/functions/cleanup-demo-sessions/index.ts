@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       const tables = [
         "sale_items", "sales", "customer_ledger", "customers",
         "cash_transactions", "daily_closings", "medicines",
-        "ai_messages", "ai_conversations", "customer_prescriptions",
+        "customer_prescriptions",
         "product_targets", "staff_settings", "staff_activity_logs",
         "pharmacy_broadcasts", "pharmacy_settings", "subscription_payments",
         "shop_staff", "chat_messages", "chat_room_members", "chat_rooms", "notes",

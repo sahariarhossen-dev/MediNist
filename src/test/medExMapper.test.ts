@@ -122,3 +122,99 @@ describe("toAddProductState bridges to AddProduct form", () => {
     expect(s.mrp).toBe("90");
   });
 });
+
+describe("Master Database JSON parsing rules (Liquids, Pots, Strips)", () => {
+  it("Bextram Kids Syrup (100ml bottle) shows strictly 90 Tk (NOT 90 × 100) and is_splittable = false", () => {
+    const p = parseMedExProductData({
+      brand_name: "Bextram Kids",
+      brand_title: "Bextram Kids Syrup",
+      pack_size: "100 ml bottle: ৳ 90.00",
+      unit_price: 90,
+      unit_format: "Syrup",
+    });
+
+    expect(p.boxPrice).toBe(90);
+    expect(p.totalPrice).toBe(90);
+    expect(p.is_splittable).toBe(false);
+    expect(p.isPot).toBe(false);
+    expect(p.pcsPerBox).toBe(1);
+
+    const formState = toAddProductState(p);
+    expect(formState.mrp).toBe("90");
+    expect(formState.pcsPerStrip).toBe("");
+    expect(formState.stripPerBox).toBe("");
+    expect(formState.is_splittable).toBe(false);
+  });
+
+  it("Spray / Inhaler / Drops / Ointment are non-splittable and never multiply volume", () => {
+    const nasalSpray = parseMedExProductData({
+      brand_name: "Afrin",
+      brand_title: "Afrin Nasal Spray",
+      pack_size: "15 ml bottle: ৳ 120.00",
+      unit_price: 120,
+    });
+    expect(nasalSpray.boxPrice).toBe(120);
+    expect(nasalSpray.is_splittable).toBe(false);
+    expect(nasalSpray.isPot).toBe(false);
+
+    const ointment = parseMedExProductData({
+      brand_name: "Quadriderm",
+      brand_title: "Quadriderm Ointment",
+      pack_size: "10 gm tube: ৳ 85.00",
+      unit_price: 85,
+    });
+    expect(ointment.boxPrice).toBe(85);
+    expect(ointment.is_splittable).toBe(false);
+  });
+
+  it("Bextram Gold / Teen (30's pack) shows as non-splittable Pot with 1 Pot Price = 185.10 Tk", () => {
+    const p = parseMedExProductData({
+      brand_name: "Bextram Gold",
+      brand_title: "Bextram Gold Tablet",
+      pack_size: "30's pack: ৳ 185.10",
+      unit_price: 6.17,
+    });
+
+    expect(p.isPot).toBe(true);
+    expect(p.is_splittable).toBe(false);
+    expect(p.potSize).toBe(30);
+    expect(p.potPrice).toBe(185.1);
+    expect(p.totalPrice).toBe(185.1);
+    expect(p.boxPrice).toBe(185.1);
+
+    const formState = toAddProductState(p);
+    expect(formState.mrp).toBe("185.1");
+    expect(formState.is_splittable).toBe(false);
+    expect(formState.packagingType).toBe("pot");
+  });
+
+  it("60s pot tablet shows as non-splittable Pot with price = unit_price × 60", () => {
+    const p = parseMedExProductData({
+      brand_name: "Neuro-B",
+      brand_title: "Neuro-B Tablet",
+      pack_size: "60's pot: ৳ 600.00",
+      unit_price: 10,
+    });
+
+    expect(p.isPot).toBe(true);
+    expect(p.is_splittable).toBe(false);
+    expect(p.potSize).toBe(60);
+    expect(p.potPrice).toBe(600);
+    expect(p.totalPrice).toBe(600);
+  });
+
+  it("Strip Tablets ('12s strip') allows strip / splittable unit calculation", () => {
+    const p = parseMedExProductData({
+      brand_name: "StripMed",
+      brand_title: "StripMed Tablet",
+      pack_size: "12s strip: ৳ 36.00",
+      unit_price: 3,
+    });
+
+    expect(p.is_splittable).toBe(true);
+    expect(p.isPot).toBe(false);
+    expect(p.pcsPerStrip).toBe(12);
+    expect(p.pcsPerBox).toBe(12);
+    expect(p.totalPrice).toBe(36);
+  });
+});

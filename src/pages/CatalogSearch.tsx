@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { toFunctionalType } from "@/lib/productType";
 import { classifyCatalogPack } from "@/lib/stockUtils";
 import { useDebounce } from "@/hooks/useDebounce";
+import {
+  InventoryUpdateModal,
+  MedicineSelectionItem,
+  InventoryItemPayload,
+} from "@/components/inventory/InventoryUpdateModal";
 
 interface MasterMedicine {
   id: string;
@@ -32,8 +37,10 @@ const CatalogSearch = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState("");
   const [adding, setAdding] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedMedForSheet, setSelectedMedForSheet] = useState<MedicineSelectionItem | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const debouncedSearch = useDebounce(searchQuery.trim(), 300);
+  const debouncedSearch = useDebounce(searchQuery.trim(), 250);
 
   // Server-side search via RPC. Avoids PostgREST's 1000-row cap, which
   // previously meant only the first 1000 catalog rows were ever searchable.
@@ -66,12 +73,84 @@ const CatalogSearch = () => {
 
   const filtered = results;
 
+  const handleSelectMed = (med: MasterMedicine) => {
+    const hasMasterInts =
+      typeof med.pcs_per_strip === "number" || typeof med.strip_per_pack === "number";
+    const { pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack } = hasMasterInts
+      ? { pcs_per_strip: med.pcs_per_strip, strip_per_pack: med.strip_per_pack }
+      : classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
+
+    setSelectedMedForSheet({
+      masterId: med.id,
+      name: med.brand_name,
+      company_name: med.company,
+      product_type: toFunctionalType(med.format),
+      unit_format: med.format,
+      product_size: med.strength,
+      strength: med.strength,
+      generic_name: med.generic_name,
+      price: med.unit_price,
+      stock_quantity: 0,
+      stock_alert: 0,
+      pcs_per_strip: catalogPcsPerStrip,
+      strip_per_pack: catalogStripPerPack,
+      box_size: med.box_size,
+      pack_size: med.pack_size,
+      isFromCatalog: true,
+    });
+    setSheetOpen(true);
+  };
+
+  const handleSaveFromSheet = async (payload: InventoryItemPayload) => {
+    if (!profile?.pharmacy_id) {
+      toast.error("No pharmacy linked to your profile");
+      return;
+    }
+
+    const functionalType = toFunctionalType(payload.unitFormat);
+    const productTypeBucket =
+      functionalType === "Other" && payload.unitFormat ? payload.unitFormat : functionalType;
+
+    const addedPieces =
+      typeof payload.totalAddedPieces === "number"
+        ? payload.totalAddedPieces
+        : payload.totalQtyPieces + (payload.freeQty || 0);
+
+    const { error } = await supabase.from("medicines").insert({
+      pharmacy_id: profile.pharmacy_id,
+      name: payload.name,
+      company_name: payload.companyName || null,
+      product_type: productTypeBucket || "Tablet",
+      unit_format: payload.unitFormat || null,
+      product_size: payload.productSize || null,
+      price: payload.salePrice > 0 ? payload.salePrice : null,
+      stock_quantity: addedPieces,
+      stock_alert: payload.minQtyAlert ?? payload.minQty ?? 0,
+      pcs_per_strip: payload.pcsPerBox > 1 ? payload.pcsPerBox : 1,
+      strip_per_pack: 1,
+      generic_name: payload.genericName || null,
+      expiry_date: payload.expiryDate || null,
+    });
+
+    if (error) {
+      toast.error("Failed to add product: " + error.message);
+      throw error;
+    }
+
+    toast.success(`${payload.name} added to inventory with ${addedPieces} units!`);
+  };
+
   const handleExpand = useCallback(
     (id: string) => {
+      const found = results.find((r) => r.id === id);
+      if (found) {
+        handleSelectMed(found);
+        return;
+      }
       setExpandedId((prev) => (prev === id ? null : id));
       setQuantity("");
     },
-    []
+    [results]
   );
 
   const handleAddToInventory = async (med: MasterMedicine) => {
@@ -297,6 +376,16 @@ const CatalogSearch = () => {
           </>
         )}
       </div>
+
+      <InventoryUpdateModal
+        isOpen={sheetOpen}
+        onClose={() => {
+          setSheetOpen(false);
+          setSelectedMedForSheet(null);
+        }}
+        medicine={selectedMedForSheet}
+        onSaveInventory={handleSaveFromSheet}
+      />
     </div>
   );
 };

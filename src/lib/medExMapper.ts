@@ -94,10 +94,29 @@ export interface MedExMappedPayload {
 
   /** Per-piece price (MedEx "Unit Price"). */
   unitPrice: number | null;
-  /** Per-box price = unitPrice × pcsPerBox, rounded to 2 dp. */
+  /** Per-box / total price = unitPrice × pcsPerBox (or 1 Pot Price / single bottle price), rounded to 2 dp. */
   boxPrice: number | null;
 
   medexUrl: string | null;
+
+  /**
+   * Whether loose pieces or strips can be split/sold loose.
+   * false for liquids/sprays/syrups and sealed pots/packs.
+   * true only if pack_size explicitly contains 'strip'.
+   */
+  is_splittable: boolean;
+  isSplittable: boolean;
+
+  /** Whether this item is a non-splittable pot/pack (e.g. 30s pack, 60s pot). */
+  isPot: boolean;
+  /** Extracted pack count for pot items (e.g. 30, 60). */
+  potSize: number;
+  /** Calculated price for 1 full Pot (unit_price × extracted pack quantity). */
+  potPrice: number | null;
+  /** Total price for the container / pack (strictly unitPrice for liquid/bottles, potPrice for pots). */
+  totalPrice: number | null;
+  /** Packaging container type ("pot", "bottle", "strip", "tube", etc.). */
+  packagingType: string;
 }
 
 // --------------------------------------------------------------------------
@@ -112,8 +131,9 @@ export interface MedExMappedPayload {
 export function detectMedExFormat(
   brandTitle: string | null | undefined,
   packText: string | null | undefined,
+  formatOrType?: string | null | undefined,
 ): MedExFormat {
-  const t = (brandTitle || "").toLowerCase();
+  const t = `${brandTitle || ""} ${formatOrType || ""}`.toLowerCase();
   const p = (packText || "").toLowerCase();
   if (/\b(injection|infusion|iv|im|pfs)\b/.test(t)) return "single";
   if (/\b(vial|ampoule|amp)\b/.test(p) || /\b(vial|ampoule)\b/.test(t)) return "single";
@@ -249,15 +269,62 @@ export function parseMedExProductData(
   const productType = getStandardizedType(typeSource);
 
   const packSizeText = pickString(raw.pack_size, raw.pack_text);
-  const format = detectMedExFormat(raw.brand_title ?? name, packSizeText);
+  const format = detectMedExFormat(raw.brand_title ?? name, packSizeText, typeSource);
 
   const strength = pickString(raw.strength, raw.strength_text);
   const firstComp = extractFirstStrengthComponent(strength);
 
-  // Pack math
+  const formatStr = `${typeSource || ""} ${raw.format || ""} ${raw.unit_format || ""} ${raw.brand_title || ""} ${name || ""}`.toLowerCase();
+  const packStr = (packSizeText || "").toLowerCase();
+
+  // 1. Liquid/Bottles/Sprays (Syrup, Spray, Inhaler, Drops, Ointment)
+  const isLiquidOrSpray =
+    format === "liquid" ||
+    format === "semisolid" ||
+    format === "single" ||
+    /\b(syrup|suspension|spray|inhaler|inhalation|drops?|ointment|cream|gel|lotion|liquid|solution|mouthwash|wash|shampoo)\b/i.test(formatStr) ||
+    (/\b\d+(?:\.\d+)?\s*ml\b/i.test(packStr) && !/\b(tablet|capsule)\b/i.test(formatStr));
+
+  // 2. Strip Tablets vs Pots / Sealed Pack Tablets
+  const explicitlyContainsStrip = /\bstrip\b/i.test(packStr);
+  const containsPackPotContainerBottle = /\b(pack|pot|container|bottle|jar)\b/i.test(packStr);
+
+  const rawUnitPrice = toNumber(raw.unit_price ?? raw.unitPrice ?? (raw as any).price);
+
   let pcsPerStrip = 1;
   let stripPerBox = 1;
-  if (format === "strip") {
+  let pcsPerBox = 1;
+  let unitPrice: number | null = rawUnitPrice;
+  let boxPrice: number | null = null;
+  let totalPrice: number | null = null;
+  let potPrice: number | null = null;
+  let is_splittable = false;
+  let isPot = false;
+  let potSize = 1;
+  let packagingType = "unit";
+
+  if (isLiquidOrSpray) {
+    // Liquid/Bottles/Sprays (Syrup, Spray, Inhaler, Drops, Ointment):
+    // Do NOT multiply unit_price by volume/ml numbers in pack_size (e.g. 100ml bottle with unit_price = 90 → strictly 90 Tk).
+    // Set is_splittable = false.
+    pcsPerStrip = 1;
+    stripPerBox = 1;
+    pcsPerBox = 1;
+    is_splittable = false;
+    isPot = false;
+    potSize = 1;
+    boxPrice = unitPrice != null ? roundMoney(unitPrice) : null;
+    totalPrice = boxPrice;
+    potPrice = null;
+    packagingType = /\b(ointment|cream|gel)\b/i.test(formatStr) ? "tube" : "bottle";
+  } else if (explicitlyContainsStrip) {
+    // Strip Tablets (e.g., '12s strip'):
+    // Only allow loose/strip unit calculation if pack_size explicitly contains 'strip'.
+    is_splittable = true;
+    isPot = false;
+    potSize = 1;
+    packagingType = "strip";
+
     const nxm = parseNxMPack(packSizeText);
     if (nxm) {
       stripPerBox = nxm.strip_per_pack;
@@ -266,22 +333,64 @@ export function parseMedExProductData(
       pcsPerStrip = raw.pcs_per_strip;
       stripPerBox = raw.strip_per_pack;
     } else if (packSizeText) {
-      // "10's pack" → single strip of 10 pieces.
-      const ns = packSizeText.match(/(\d+)\s*'?s\s*pack/i);
-      if (ns) {
+      const stripMatch = packSizeText.match(/(\d+)\s*'?s?\s*strip/i);
+      if (stripMatch) {
         stripPerBox = 1;
-        pcsPerStrip = parseInt(ns[1], 10);
+        pcsPerStrip = parseInt(stripMatch[1], 10);
       }
     }
-  } else {
-    // Single-unit / liquid / semisolid: pack math is always 1×1×1.
-    pcsPerStrip = 1;
-    stripPerBox = 1;
-  }
-  const pcsPerBox = Math.max(1, pcsPerStrip * stripPerBox);
+    pcsPerBox = Math.max(1, pcsPerStrip * stripPerBox);
+    boxPrice = unitPrice != null ? roundMoney(unitPrice * pcsPerBox) : null;
+    totalPrice = boxPrice;
+    potPrice = null;
+  } else if (containsPackPotContainerBottle || format !== "strip") {
+    // Pots / Sealed Pack Tablets (e.g., '30s pack', '60s pot'):
+    // If pack_size contains terms like 'pack', 'pot', 'container', or 'bottle' (even if format is Tablet),
+    // treat it as a non-splittable Pot/Pack.
+    // Set is_splittable = false.
+    // 1 Pot Price = unit_price × extracted pack quantity (e.g., 6.17 × 30 = 185.10 Tk).
+    is_splittable = false;
+    isPot = true;
+    packagingType = "pot";
 
-  const unitPrice = toNumber(raw.unit_price ?? raw.unitPrice);
-  const boxPrice = unitPrice != null ? roundMoney(unitPrice * pcsPerBox) : null;
+    const potMatch =
+      packSizeText?.match(/(\d+)\s*'?s?\s*(?:pack|pot|container|bottle|jar)\b/i) ||
+      packSizeText?.match(/(\d+)\s*'?s\b/i) ||
+      packSizeText?.match(/(\d+)/);
+    const extractedPackQty = potMatch
+      ? parseInt(potMatch[1], 10)
+      : raw.pcs_per_strip && raw.strip_per_pack
+        ? raw.pcs_per_strip * raw.strip_per_pack
+        : 1;
+
+    potSize = Number.isFinite(extractedPackQty) && extractedPackQty > 0 ? extractedPackQty : 1;
+    pcsPerStrip = 1;
+    stripPerBox = potSize;
+    pcsPerBox = potSize;
+
+    potPrice = unitPrice != null ? roundMoney(unitPrice * potSize) : null;
+    boxPrice = potPrice;
+    totalPrice = potPrice;
+  } else {
+    // Other tablet/capsule without 'strip' keyword (e.g. raw NxM like '3 x 10' or '10 x 10'):
+    // Strip Tablets only allow loose/strip unit calculation if pack_size explicitly contains 'strip'.
+    const nxm = parseNxMPack(packSizeText);
+    if (nxm) {
+      stripPerBox = nxm.strip_per_pack;
+      pcsPerStrip = nxm.pcs_per_strip;
+    } else if (raw.pcs_per_strip && raw.strip_per_pack) {
+      pcsPerStrip = raw.pcs_per_strip;
+      stripPerBox = raw.strip_per_pack;
+    }
+    pcsPerBox = Math.max(1, pcsPerStrip * stripPerBox);
+    boxPrice = unitPrice != null ? roundMoney(unitPrice * pcsPerBox) : null;
+    totalPrice = boxPrice;
+    potPrice = null;
+    is_splittable = false;
+    isPot = false;
+    potSize = 1;
+    packagingType = "box";
+  }
 
   const medexUrl = pickString(raw.medex_url, raw.medexUrl);
 
@@ -302,8 +411,18 @@ export function parseMedExProductData(
     unitPrice,
     boxPrice,
     medexUrl,
+    is_splittable,
+    isSplittable: is_splittable,
+    isPot,
+    potSize,
+    potPrice,
+    totalPrice,
+    packagingType,
   };
 }
+
+/** Alias export for master database items */
+export const parseMasterDatabaseItem = parseMedExProductData;
 
 // --------------------------------------------------------------------------
 // Add Product form bridge
@@ -322,7 +441,20 @@ export function toAddProductState(payload: MedExMappedPayload): {
   mrp: string;
   pcsPerStrip: string;
   stripPerBox: string;
+  is_splittable: boolean;
+  isSplittable: boolean;
+  packagingType: string;
 } {
+  const isPot = payload.isPot;
+  const isSingle =
+    payload.format === "single" ||
+    payload.format === "liquid" ||
+    payload.format === "semisolid";
+  // For pots, mrp is the 1 Pot Price (e.g. 185.10); for all others (regular tablets, liquids, sprays), mrp is unitPrice (e.g. 2.5, 90).
+  const priceValue = isPot && payload.potPrice != null
+    ? payload.potPrice
+    : (payload.unitPrice ?? payload.totalPrice);
+
   return {
     name: payload.name,
     companyName: payload.companyName ?? "",
@@ -331,8 +463,11 @@ export function toAddProductState(payload: MedExMappedPayload): {
     productType: payload.unitFormat || payload.productType,
     strength:
       payload.strengthNumeric != null ? String(payload.strengthNumeric) : "",
-    mrp: payload.unitPrice != null ? String(payload.unitPrice) : "",
-    pcsPerStrip: payload.pcsPerStrip > 1 ? String(payload.pcsPerStrip) : "",
-    stripPerBox: payload.stripPerBox > 1 ? String(payload.stripPerBox) : "",
+    mrp: priceValue != null ? String(priceValue) : "",
+    pcsPerStrip: !isPot && !isSingle && payload.pcsPerStrip > 1 ? String(payload.pcsPerStrip) : "",
+    stripPerBox: !isPot && !isSingle && payload.stripPerBox > 1 ? String(payload.stripPerBox) : "",
+    is_splittable: payload.is_splittable,
+    isSplittable: payload.isSplittable,
+    packagingType: payload.packagingType,
   };
 }

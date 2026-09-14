@@ -1,0 +1,10 @@
+{
+  "name": "MediNist",
+  "description": "MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

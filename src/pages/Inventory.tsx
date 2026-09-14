@@ -15,6 +15,11 @@ import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
 import { useDebounce } from "@/hooks/useDebounce";
 import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
+import {
+  InventoryUpdateModal,
+  MedicineSelectionItem,
+  InventoryItemPayload,
+} from "@/components/inventory/InventoryUpdateModal";
 
 interface Medicine {
   id: string;
@@ -28,6 +33,10 @@ interface Medicine {
   unit_format: string | null;
   product_size: string | null;
   stock_alert: number | null;
+  generic_name?: string | null;
+  box_size?: string | null;
+  pack_size?: string | null;
+  expiry_date?: string | null;
 }
 
 interface MasterMedicine {
@@ -89,6 +98,10 @@ const Inventory = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
   const [companySearch, setCompanySearch] = useState("");
+
+  // Bottom Sheet Modal state for 1-screen inventory addition
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedSheetMed, setSelectedSheetMed] = useState<MedicineSelectionItem | null>(null);
 
   // Long press state
   const [pressingId, setPressingId] = useState<string | null>(null);
@@ -267,9 +280,169 @@ const Inventory = () => {
     searchRef.current?.focus();
   };
 
+  const handleOpenSheetForInventory = (med: Medicine) => {
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      return;
+    }
+    setSelectedSheetMed({
+      id: med.id,
+      name: med.name,
+      company_name: med.company_name,
+      product_type: med.product_type,
+      unit_format: med.unit_format,
+      product_size: med.product_size,
+      generic_name: med.generic_name,
+      price: med.price,
+      stock_quantity: med.stock_quantity,
+      stock_alert: med.stock_alert,
+      pcs_per_strip: med.pcs_per_strip,
+      strip_per_pack: med.strip_per_pack,
+      box_size: med.box_size,
+      pack_size: med.pack_size,
+      expiry_date: med.expiry_date,
+      isFromCatalog: false,
+    });
+    setSheetOpen(true);
+  };
+
+  const handleOpenSheetForCatalog = (med: MasterMedicine) => {
+    const existing = medicines.find(
+      (m) =>
+        m.name.trim().toLowerCase() === med.brand_name.trim().toLowerCase() &&
+        (med.company ? (m.company_name || "").trim().toLowerCase() === med.company.trim().toLowerCase() : true)
+    );
+
+    const hasMasterInts =
+      typeof med.pcs_per_strip === "number" || typeof med.strip_per_pack === "number";
+    const { pcs_per_strip: catalogPcsPerStrip, strip_per_pack: catalogStripPerPack } = hasMasterInts
+      ? { pcs_per_strip: med.pcs_per_strip, strip_per_pack: med.strip_per_pack }
+      : classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
+
+    setSelectedSheetMed({
+      id: existing?.id,
+      masterId: med.id,
+      name: med.brand_name,
+      company_name: med.company,
+      product_type: toFunctionalType(med.format),
+      unit_format: med.format,
+      product_size: med.strength,
+      strength: med.strength,
+      generic_name: med.generic_name,
+      price: existing?.price ?? med.unit_price,
+      stock_quantity: existing?.stock_quantity ?? 0,
+      stock_alert: existing?.stock_alert ?? 0,
+      pcs_per_strip: existing?.pcs_per_strip ?? catalogPcsPerStrip,
+      strip_per_pack: existing?.strip_per_pack ?? catalogStripPerPack,
+      box_size: existing?.box_size ?? med.box_size,
+      pack_size: med.pack_size,
+      expiry_date: existing?.expiry_date,
+      isFromCatalog: !existing,
+    });
+    setSheetOpen(true);
+  };
+
+  const handleSaveFromSheet = async (payload: InventoryItemPayload) => {
+    if (!profile?.pharmacy_id) {
+      toast.error("No pharmacy linked");
+      return;
+    }
+
+    let targetId = payload.medicineId;
+    let existingMed = targetId ? medicines.find((m) => m.id === targetId) : undefined;
+
+    if (!existingMed) {
+      const { data: found } = await supabase
+        .from("medicines")
+        .select("*")
+        .eq("pharmacy_id", profile.pharmacy_id)
+        .eq("name", payload.name)
+        .maybeSingle();
+      if (found) {
+        existingMed = found as Medicine;
+        targetId = found.id;
+      }
+    }
+
+    const addedPieces =
+      typeof payload.totalAddedPieces === "number"
+        ? payload.totalAddedPieces
+        : payload.totalQtyPieces + (payload.freeQty || 0);
+
+    if (existingMed && targetId) {
+      const currentStock = existingMed.stock_quantity || 0;
+      const newStock = currentStock + addedPieces;
+      const updateData: any = {
+        stock_quantity: newStock,
+      };
+      if (payload.salePrice > 0) updateData.price = payload.salePrice;
+      const minAlert = payload.minQtyAlert ?? payload.minQty;
+      if (typeof minAlert === "number" && minAlert >= 0) updateData.stock_alert = minAlert;
+      if (payload.expiryDate) updateData.expiry_date = payload.expiryDate;
+      if (payload.pcsPerBox > 1 && !existingMed.pcs_per_strip) {
+        updateData.pcs_per_strip = payload.pcsPerBox;
+        updateData.strip_per_pack = 1;
+      }
+
+      const { error } = await supabase
+        .from("medicines")
+        .update(updateData)
+        .eq("id", targetId);
+
+      if (error) {
+        toast.error("Failed to update stock: " + error.message);
+        throw error;
+      }
+
+      toast.success(`${payload.name}: +${addedPieces} units added to stock`);
+      setMedicines((prev) =>
+        prev.map((m) => (m.id === targetId ? { ...m, ...updateData, stock_quantity: newStock } : m))
+      );
+    } else {
+      const functionalType = toFunctionalType(payload.unitFormat);
+      const productTypeBucket =
+        functionalType === "Other" && payload.unitFormat ? payload.unitFormat : functionalType;
+
+      const { data: inserted, error } = await supabase
+        .from("medicines")
+        .insert({
+          pharmacy_id: profile.pharmacy_id,
+          name: payload.name,
+          company_name: payload.companyName || null,
+          product_type: productTypeBucket || "Tablet",
+          unit_format: payload.unitFormat || null,
+          product_size: payload.productSize || null,
+          price: payload.salePrice > 0 ? payload.salePrice : null,
+          stock_quantity: addedPieces,
+          stock_alert: payload.minQtyAlert ?? payload.minQty ?? 0,
+          pcs_per_strip: payload.pcsPerBox > 1 ? payload.pcsPerBox : 1,
+          strip_per_pack: 1,
+          generic_name: payload.genericName || null,
+          expiry_date: payload.expiryDate || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        toast.error("Failed to add product: " + error.message);
+        throw error;
+      }
+
+      toast.success(`${payload.name} added to inventory with ${addedPieces} units!`);
+      if (inserted) {
+        setMedicines((prev) => [...prev, inserted as Medicine].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    }
+  };
+
   const handleCardClick = (id: string) => {
     if (longPressFiredRef.current) {
       longPressFiredRef.current = false;
+      return;
+    }
+    const med = medicines.find((m) => m.id === id);
+    if (med) {
+      handleOpenSheetForInventory(med);
       return;
     }
     if (!searchOpen) return;
@@ -279,6 +452,11 @@ const Inventory = () => {
   };
 
   const handleCatalogCardClick = (id: string) => {
+    const med = catalog.find((c) => c.id === id);
+    if (med) {
+      handleOpenSheetForCatalog(med);
+      return;
+    }
     setExpandedCatalogId((prev) => (prev === id ? null : id));
     setExpandedId(null);
     setCatalogQty("");
@@ -881,6 +1059,28 @@ const Inventory = () => {
           </div>
         </div>
       )}
+
+      {/* 1-Step Inventory Update Bottom Sheet Modal */}
+      <InventoryUpdateModal
+        isOpen={sheetOpen}
+        onClose={() => {
+          setSheetOpen(false);
+          setSelectedSheetMed(null);
+        }}
+        medicine={selectedSheetMed}
+        onSaveInventory={handleSaveFromSheet}
+        onRemove={
+          selectedSheetMed?.id
+            ? () => {
+                const medId = selectedSheetMed.id!;
+                setSheetOpen(false);
+                setSelectedSheetMed(null);
+                setLongPressId(medId);
+                setDeleteConfirmId(medId);
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };

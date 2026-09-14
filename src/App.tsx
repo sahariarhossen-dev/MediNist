@@ -25,8 +25,6 @@ import StaffPerformanceDetails from "./pages/StaffPerformanceDetails.tsx";
 import CatalogSearch from "./pages/CatalogSearch.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
-import AIAssistant from "./pages/AIAssistant.tsx";
-import AiThreadResolver from "./pages/AiThreadResolver.tsx";
 
 import AcceptInvitation from "./pages/AcceptInvitation.tsx";
 import DailyTransactions from "./pages/DailyTransactions.tsx";
@@ -84,7 +82,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
           <SubscriptionProvider>
           <Routes>
@@ -95,7 +93,7 @@ const App = () => (
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Index /></AppLayout></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
-            <Route path="/ai" element={<Navigate to="/workspace/ai" replace />} />
+            <Route path="/ai" element={<Navigate to="/workspace" replace />} />
             <Route path="/more" element={<ProtectedRoute><AppLayout><More /></AppLayout></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
             <Route path="/add-product" element={<ProtectedRoute><AppLayout><AddProduct /></AppLayout></ProtectedRoute>} />
@@ -115,9 +113,9 @@ const App = () => (
             <Route path="/more/customers/:id" element={<ProtectedRoute><AppLayout><CustomerProfile /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes" element={<ProtectedRoute><AppLayout><Notes /></AppLayout></ProtectedRoute>} />
             <Route path="/more/notes/:id" element={<ProtectedRoute><NoteEditor /></ProtectedRoute>} />
-            <Route path="/workspace" element={<ProtectedRoute><AppLayout><Workspace /></AppLayout></ProtectedRoute>} />
-            <Route path="/workspace/ai" element={<ProtectedRoute><AppLayout><AiThreadResolver /></AppLayout></ProtectedRoute>} />
-            <Route path="/workspace/ai/:conversationId" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+            <Route path="/chat-list" element={<Workspace />} />
+            <Route path="/workspace" element={<ProtectedRoute><AppLayout showHeader={false}><Workspace /></AppLayout></ProtectedRoute>} />
+            <Route path="/workspace/ai/*" element={<Navigate to="/workspace" replace />} />
 
             <Route path="/workspace/alerts" element={<ProtectedRoute><AppLayout><AlertsThread /></AppLayout></ProtectedRoute>} />
             <Route path="/workspace/room/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />

@@ -5,9 +5,14 @@ import { Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { totalPiecesToTriUnit, looksSingleUnit } from "@/lib/stockUtils";
-import { truncateName, truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
-import { getDisplayFormat, getStandardizedType, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
+import {
+  totalPiecesToTriUnit,
+  looksSingleUnit,
+  getPotItemInfo,
+  getCartItemPieces,
+} from "@/lib/stockUtils";
+import { truncateStrength, roundMoney, formatMoney } from "@/lib/formatUtils";
+import { getDisplayFormat, getProductTypeChipClasses, getDisplayCategory } from "@/lib/productType";
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
@@ -23,6 +28,10 @@ interface Medicine {
   product_type: string | null;
   unit_format: string | null;
   product_size: string | null;
+  packaging_type?: string | null;
+  box_size?: string | null;
+  pack_size?: string | null;
+  format?: string | null;
 }
 
 interface CartItem {
@@ -112,7 +121,7 @@ const CreateSale = () => {
         const medIds = items.map((it) => it.medicine_id);
         const { data: medicines } = await supabase
           .from("medicines")
-          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+          .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format")
           .in("id", medIds);
 
         const medMap = new Map((medicines || []).map((m) => [m.id, m]));
@@ -131,9 +140,14 @@ const CreateSale = () => {
               unit_format: null,
               product_size: null,
           };
+          const potInfo = getPotItemInfo(resolvedMed);
+          let initialQty = it.quantity;
+          if (potInfo.isPot) {
+            initialQty = Math.max(1, Math.round(it.quantity / potInfo.potSize));
+          }
           return {
             medicine: resolvedMed,
-            quantity: it.quantity, // drafts stored quantity in pieces
+            quantity: initialQty,
             discountPercent: (it as any).discount_percent ?? 0,
           };
         });
@@ -204,7 +218,7 @@ const CreateSale = () => {
     if (presc.medicine_id) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format")
         .eq("id", presc.medicine_id)
         .maybeSingle();
       med = (data as Medicine | null) ?? null;
@@ -212,7 +226,7 @@ const CreateSale = () => {
     if (!med) {
       const { data } = await supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format")
         .eq("pharmacy_id", profile.pharmacy_id)
         .ilike("name", presc.medicine_name)
         .limit(1)
@@ -223,9 +237,16 @@ const CreateSale = () => {
       toast.error(`"${presc.medicine_name}" not in inventory`);
       return;
     }
+    const initialQty = 1;
+
     setCartItems((prev) => {
-      if (prev.find((c) => c.medicine.id === med!.id)) return prev;
-      return [{ medicine: med!, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+      const existing = prev.find((c) => c.medicine.id === med!.id);
+      if (existing) {
+        return prev.map((c) =>
+          c.medicine.id === med!.id ? { ...c, quantity: c.quantity + initialQty } : c
+        );
+      }
+      return [{ medicine: med!, quantity: initialQty, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(med.id);
   }, [profile?.pharmacy_id, saleType, defaultDiscount]);
@@ -256,7 +277,11 @@ const CreateSale = () => {
   const addToCart = useCallback((medicine: Medicine) => {
     setCartItems((prev) => {
       const existing = prev.find((c) => c.medicine.id === medicine.id);
-      if (existing) return prev;
+      if (existing) {
+        return prev.map((c) =>
+          c.medicine.id === medicine.id ? { ...c, quantity: c.quantity + 1 } : c
+        );
+      }
       return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
     setExpandedId(medicine.id);
@@ -268,10 +293,35 @@ const CreateSale = () => {
     setCartItems((prev) => prev.filter((c) => c.medicine.id !== id));
   }, []);
 
+  const stepQuantity = useCallback((id: string, direction: "up" | "down") => {
+    setCartItems((prev) =>
+      prev.map((c) => {
+        if (c.medicine.id !== id) return c;
+        const nextQty = direction === "up" ? c.quantity + 1 : Math.max(1, c.quantity - 1);
+        return { ...c, quantity: nextQty };
+      })
+    );
+  }, []);
+
+  const handleQuantityInputChange = useCallback((id: string, val: number) => {
+    setCartItems((prev) =>
+      prev.map((c) => (c.medicine.id === id ? { ...c, quantity: val } : c))
+    );
+  }, []);
+
+  const handleQuantityInputBlur = useCallback((id: string, val: number) => {
+    setCartItems((prev) =>
+      prev.map((c) => {
+        if (c.medicine.id !== id) return c;
+        return { ...c, quantity: Math.max(1, Math.floor(val) || 1) };
+      })
+    );
+  }, []);
+
   const updateQuantity = useCallback((id: string, qty: number) => {
     if (qty < 1) return;
     setCartItems((prev) =>
-      prev.map((c) => (c.medicine.id === id ? { ...c, quantity: qty } : c))
+      prev.map((c) => (c.medicine.id === id ? { ...c, quantity: Math.floor(qty) } : c))
     );
   }, []);
 
@@ -291,12 +341,17 @@ const CreateSale = () => {
     );
   }, [defaultDiscount]);
 
-  // Quantity is always stored as total pieces directly.
-  const getItemPieces = useCallback((item: CartItem) => item.quantity, []);
+  // For pot items, cart quantity represents number of pots/bottles.
+  // For regular items, cart quantity represents pieces.
+  const getItemPieces = useCallback((item: CartItem) => {
+    const potInfo = getPotItemInfo(item.medicine);
+    return getCartItemPieces(item.quantity, potInfo);
+  }, []);
 
   // Calculate line total for an item (after item-wise discount in wholesale)
   const getLineTotal = useCallback((item: CartItem) => {
-    const gross = getItemPieces(item) * (item.medicine.price || 0);
+    const pieces = getItemPieces(item);
+    const gross = pieces * (item.medicine.price || 0);
     if (saleType === "wholesale") {
       return roundMoney(gross * (1 - item.discountPercent / 100));
     }
@@ -330,6 +385,16 @@ const CreateSale = () => {
       toast.error("No pharmacy linked to your account");
       return;
     }
+
+    // Validate that pot items are not sold in loose partial quantities
+    for (const item of cartItems) {
+      if (!item.quantity || item.quantity < 1) {
+        toast.error(`"${item.medicine.name}": Quantity must be at least 1`);
+        setExpandedId(item.medicine.id);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const items = cartItems.map((c) => ({
@@ -536,37 +601,67 @@ const CreateSale = () => {
 
         {searchResults.length > 0 && (
           <div className="mt-2 border border-gray-200 rounded-xl shadow-lg bg-white overflow-hidden">
-            {searchResults.map((med) => (
-              <button
-                key={med.id}
-                onClick={() => addToCart(med)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left transition border-b border-gray-100 last:border-0 hover:bg-gray-50"
-              >
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-50">
-                  <Pill className="w-4 h-4 text-emerald-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 flex items-center gap-1">
-                    <span className="truncate">{truncateName(med.name)}</span>
-                    {med.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">{truncateStrength(med.product_size)}</span>}
-                    {(med.product_type || med.unit_format) && (
-                      <span
-                        title={getDisplayFormat(med) || undefined}
-                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
-                      >
-                        {getDisplayCategory(med.product_type || med.unit_format)}
-                      </span>
-                    )}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {med.company_name && <span className="text-[10px] text-secondary-foreground truncate max-w-[100px]">{med.company_name}</span>}
-                    {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
-                    <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">STK: {looksSingleUnit(med) ? `${med.stock_quantity ?? 0} Pcs` : totalPiecesToTriUnit(med.stock_quantity ?? 0, med.strip_per_pack, med.pcs_per_strip)}</span>
+            {searchResults.map((med) => {
+              const potInfo = getPotItemInfo(med);
+              const totalStk = med.stock_quantity ?? 0;
+              return (
+                <button
+                  key={med.id}
+                  onClick={() => addToCart(med)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition border-b border-gray-100 last:border-0 hover:bg-gray-50"
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-50">
+                    <Pill className="w-4 h-4 text-emerald-500" />
                   </div>
-                </div>
-                <p className="text-lime-900 text-sm font-bold">৳{formatMoney(med.price ?? 0)}</p>
-              </button>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{med.name}</span>
+                      {med.product_size && (
+                        <span className="text-[10px] font-normal flex-shrink-0 text-muted-foreground">
+                          {truncateStrength(med.product_size)}
+                        </span>
+                      )}
+                      {!potInfo.isPot && (med.product_type || med.unit_format) ? (
+                        <span
+                          title={getDisplayFormat(med) || undefined}
+                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
+                        >
+                          {getDisplayCategory(med.product_type || med.unit_format)}
+                        </span>
+                      ) : null}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {med.company_name && <span className="text-[10px] text-secondary-foreground truncate max-w-[120px]">{med.company_name}</span>}
+                      {med.company_name && <span className="text-[10px] text-gray-300">·</span>}
+                      {potInfo.isPot ? (() => {
+                        const pots = Math.floor(totalStk / potInfo.potSize);
+                        const rem = totalStk % potInfo.potSize;
+                        return (
+                          <span className="text-[10px] font-mono font-bold text-amber-800 flex-shrink-0">
+                            STK: {pots} {pots === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`}
+                            {rem > 0 ? ` + ${rem}p` : ""} ({totalStk} pcs)
+                          </span>
+                        );
+                      })() : (
+                        <span className="text-[10px] font-mono font-bold text-primary flex-shrink-0">
+                          STK: {looksSingleUnit(med) ? `${totalStk} Pcs` : totalPiecesToTriUnit(totalStk, med.strip_per_pack, med.pcs_per_strip)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-gray-900 text-sm font-bold font-mono">
+                      ৳{formatMoney(potInfo.isPot ? (med.price ?? 0) * potInfo.potSize : (med.price ?? 0))}
+                    </p>
+                    {potInfo.isPot && (
+                      <p className="text-[10px] text-gray-400 font-mono">
+                        ৳{formatMoney(med.price ?? 0)}/pc
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
         {searching && (
@@ -640,53 +735,76 @@ const CreateSale = () => {
           <div className="space-y-2">
             {cartItems.map((item, idx) => {
               const unitPrice = item.medicine.price || 0;
+              const potInfo = getPotItemInfo(item.medicine);
               const pieces = getItemPieces(item);
               const grossTotal = pieces * unitPrice;
               const lineTotal = getLineTotal(item);
               const isExpanded = expandedId === item.medicine.id;
+              const potPrice = potInfo.isPot ? potInfo.potSize * unitPrice : unitPrice;
 
               if (isExpanded) {
                 return (
-                  <div key={item.medicine.id} className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4">
-                    {/* Row 1: Name + type | MRP | Company */}
-                    <div className="flex items-center gap-2 flex-nowrap">
-                      <p className="text-sm font-bold text-gray-900 min-w-0 truncate flex items-center gap-1">
-                        <span className="truncate">{truncateName(item.medicine.name)}</span>
-                        {item.medicine.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(item.medicine.product_size)}</span>}
-                        {(item.medicine.product_type || item.medicine.unit_format) && (
-                          <span
-                            title={getDisplayFormat(item.medicine) || undefined}
-                            className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
-                          >
-                            {getDisplayCategory(item.medicine.product_type || item.medicine.unit_format)}
-                          </span>
-                        )}
-                      </p>
-                      <span className="flex-shrink-0 text-right text-secondary-foreground text-xs font-medium ml-auto">MRP:{formatMoney(unitPrice)}</span>
-                      {item.medicine.company_name && (
-                        <span className="text-[10px] text-emerald-600 flex-shrink-0 font-medium truncate max-w-[60px]">{item.medicine.company_name}</span>
-                      )}
+                  <div
+                    key={item.medicine.id}
+                    className="bg-white rounded-2xl shadow-sm border border-gray-300 p-4 transition-all"
+                  >
+                    {/* Row 1: Medicine Name & strength + company | Line Total & MRP */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <h4 className="text-sm font-bold text-gray-900 leading-snug">
+                            {item.medicine.name}
+                          </h4>
+                          {item.medicine.product_size && (
+                            <span className="text-xs text-gray-500 font-normal">
+                              {item.medicine.product_size}
+                            </span>
+                          )}
+                          {item.medicine.company_name && (
+                            <span className="text-[11px] text-gray-400 font-normal truncate max-w-[130px]">
+                              · {item.medicine.company_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-sm font-bold text-gray-900 font-mono">
+                          ৳{formatMoney(lineTotal)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 font-medium font-mono">
+                          {potInfo.isPot
+                            ? `৳${formatMoney(potPrice)}/${potInfo.potLabel.toLowerCase()} (৳${formatMoney(unitPrice)}/pc)`
+                            : `MRP: ৳${formatMoney(unitPrice)}`}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Row 2: [Trash | STK | calc/discount] .......... [Qty stepper] */}
-                    <div className="flex flex-row justify-between items-center w-full mt-2 gap-2 flex-nowrap">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-nowrap overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-gray-100">
+                      <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                         <button
+                          type="button"
                           onClick={() => removeFromCart(item.medicine.id)}
-                          className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50 transition flex-shrink-0"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0"
+                          title="Remove item"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                        <span className="text-[10px] font-mono text-secondary-foreground whitespace-nowrap truncate min-w-0">
+                        <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">
                           {(() => {
                             const total = item.medicine.stock_quantity ?? 0;
-                            if (looksSingleUnit(item.medicine)) return `stk ${total}`;
+                            if (potInfo.isPot) {
+                              const pots = Math.floor(total / potInfo.potSize);
+                              const rem = total % potInfo.potSize;
+                              return `STK: ${pots} ${pots === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`}${rem > 0 ? ` + ${rem}p` : ""} (${total} pcs)`;
+                            }
+                            if (looksSingleUnit(item.medicine)) return `STK: ${total}`;
                             const tri = totalPiecesToTriUnit(
                               total,
                               item.medicine.strip_per_pack,
                               item.medicine.pcs_per_strip,
                             );
-                            return `stk ${tri} / ${total}`;
+                            return `STK: ${tri}`;
                           })()}
                         </span>
 
@@ -699,39 +817,61 @@ const CreateSale = () => {
                               max={100}
                               value={item.discountPercent}
                               onChange={(e) => updateItemDiscount(item.medicine.id, parseFloat(e.target.value) || 0)}
-                              className="w-10 text-xs text-center font-bold text-blue-700 outline-none bg-blue-50 py-1.5 appearance-none"
+                              className="w-10 text-xs text-center font-bold text-blue-700 outline-none bg-blue-50 py-1 appearance-none"
                             />
                             <span className="px-1.5 text-xs font-bold text-blue-600 bg-blue-50 border-l border-blue-300">%</span>
                           </div>
                         )}
 
-                        {/* Retail: show calculation */}
+                        {/* Retail: calculation string */}
                         {!isWholesale && (
-                          <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap truncate min-w-0">
-                            {pieces}*{formatMoney(unitPrice)}={formatMoney(grossTotal)}৳
+                          <span className="text-[11px] font-medium text-emerald-700 whitespace-nowrap">
+                            {potInfo.isPot
+                              ? `${item.quantity} ${item.quantity === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`} × ${potInfo.potSize} pcs × ৳${formatMoney(unitPrice)} = ৳${formatMoney(grossTotal)}`
+                              : `${item.quantity} pcs × ৳${formatMoney(unitPrice)} = ৳${formatMoney(grossTotal)}`}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center border-gray-900 rounded-xl overflow-hidden flex-shrink-0 border-solid border">
+                      {/* Quantity stepper: clean, aligned, no extra sub-badges below */}
+                      <div className="flex items-center rounded-xl overflow-hidden border border-gray-900 bg-white flex-shrink-0 shadow-xs">
                         <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity - 1)}
-                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
+                          type="button"
+                          onClick={() => stepQuantity(item.medicine.id, "down")}
+                          disabled={item.quantity <= 1}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Decrease"
                         >
                           <Minus className="w-3.5 h-3.5 text-gray-900" />
                         </button>
                         <input
                           type="number"
                           min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.medicine.id, parseInt(e.target.value) || 1)}
+                          step={1}
+                          value={item.quantity === 0 ? "" : item.quantity}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            handleQuantityInputChange(item.medicine.id, isNaN(val) ? 0 : val);
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            handleQuantityInputBlur(item.medicine.id, isNaN(val) ? 1 : val);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const val = parseInt((e.target as HTMLInputElement).value, 10);
+                              handleQuantityInputBlur(item.medicine.id, isNaN(val) ? 1 : val);
+                            }
+                          }}
                           onFocus={(e) => e.currentTarget.select()}
                           onClick={(e) => e.currentTarget.select()}
-                          className="w-9 font-bold text-gray-900 outline-none bg-transparent border-x-2 border-gray-900 py-1 text-xs text-center"
+                          className="w-10 font-bold text-gray-900 outline-none bg-transparent border-x border-gray-900 py-1 text-xs text-center font-mono"
                         />
                         <button
-                          onClick={() => updateQuantity(item.medicine.id, item.quantity + 1)}
+                          type="button"
+                          onClick={() => stepQuantity(item.medicine.id, "up")}
                           className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 transition"
+                          title="Increase"
                         >
                           <Plus className="w-3.5 h-3.5 text-gray-900" />
                         </button>
@@ -740,9 +880,12 @@ const CreateSale = () => {
 
                     {/* Row 3: Wholesale calculation string */}
                     {isWholesale && (
-                      <div className="mt-3 pt-2 border-t border-gray-100">
+                      <div className="mt-2.5 pt-2 border-t border-gray-100">
                         <p className="text-xs font-mono text-gray-500 text-center">
-                          {formatMoney(unitPrice)} × {pieces} pcs = {formatMoney(grossTotal)} - {item.discountPercent}% = <span className="font-bold text-emerald-700">{formatMoney(lineTotal)} ৳</span>
+                          {potInfo.isPot
+                            ? `${item.quantity} ${item.quantity === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`} × ${potInfo.potSize} pcs × ৳${formatMoney(unitPrice)} = ৳${formatMoney(grossTotal)} - ${item.discountPercent}% = `
+                            : `${item.quantity} pcs × ৳${formatMoney(unitPrice)} = ৳${formatMoney(grossTotal)} - ${item.discountPercent}% = `}
+                          <span className="font-bold text-emerald-700 font-mono">৳{formatMoney(lineTotal)}</span>
                         </p>
                       </div>
                     )}
@@ -755,37 +898,36 @@ const CreateSale = () => {
                 <div
                   key={item.medicine.id}
                   onClick={() => setExpandedId(item.medicine.id)}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-gray-50 transition"
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50 transition"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold w-4 text-right text-slate-700">{idx + 1}.</span>
-                    <p className="text-sm font-bold text-gray-900 flex-1 min-w-0 flex items-center gap-1">
-                      <span className="truncate">{truncateName(item.medicine.name)}</span>
-                      {item.medicine.product_size && <span className="text-[10px] font-normal flex-shrink-0 text-slate-800">{truncateStrength(item.medicine.product_size)}</span>}
-                      {(item.medicine.product_type || item.medicine.unit_format) && (
-                        <span
-                          title={getDisplayFormat(item.medicine) || undefined}
-                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(item.medicine.product_type || item.medicine.unit_format)}`}
-                        >
-                          {getDisplayCategory(item.medicine.product_type || item.medicine.unit_format)}
-                        </span>
-                      )}
-                    </p>
-                    {isWholesale ? (
-                      <>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{item.quantity}*{formatMoney(unitPrice)}-{item.discountPercent}%</span>
-                        <span className="text-xs font-bold text-blue-700">{formatMoney(lineTotal)} ৳</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-[10px] text-secondary">{item.quantity}×{formatMoney(unitPrice)}</span>
-                        <span className="text-xs font-bold text-emerald-600">{formatMoney(grossTotal)} ৳</span>
-                      </>
-                    )}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs font-bold w-4 text-right text-gray-400 flex-shrink-0">{idx + 1}.</span>
+                      <div className="min-w-0 flex-1 flex items-baseline gap-1.5 truncate">
+                        <span className="text-sm font-bold text-gray-900 truncate">{item.medicine.name}</span>
+                        {item.medicine.product_size && (
+                          <span className="text-xs text-gray-500 font-normal flex-shrink-0">
+                            {item.medicine.product_size}
+                          </span>
+                        )}
+                        {item.medicine.company_name && (
+                          <span className="text-[11px] text-gray-400 font-normal truncate max-w-[100px]">
+                            · {item.medicine.company_name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 text-right">
+                      <span className="text-xs text-gray-500 font-medium font-mono">
+                        {potInfo.isPot
+                          ? `${item.quantity} ${item.quantity === 1 ? potInfo.potLabel : `${potInfo.potLabel}s`}`
+                          : `${item.quantity} pcs`}
+                      </span>
+                      <span className="text-sm font-bold text-gray-900 font-mono">
+                        ৳{formatMoney(lineTotal)}
+                      </span>
+                    </div>
                   </div>
-                  {item.medicine.company_name && (
-                    <p className="text-[10px] ml-6 mt-0.5 text-secondary-foreground">{item.medicine.company_name}</p>
-                  )}
                 </div>
               );
             })}

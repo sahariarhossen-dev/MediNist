@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, Download, FileText } from "lucide-react";
+import { X, Download, FileText, Share2, Loader2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { formatMoney } from "@/lib/formatUtils";
+import { toast } from "sonner";
 
 interface SaleData {
   id: string;
@@ -52,6 +53,8 @@ const Invoice = () => {
   const [sellerPhone, setSellerPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const cachedPdfBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (!saleId) return;
@@ -179,14 +182,93 @@ const Invoice = () => {
         }
       }
 
+      const pdfBlob = pdf.output("blob");
+      cachedPdfBlobRef.current = pdfBlob;
       pdf.save(`${invoiceId}.pdf`);
     } catch (e) {
       console.error("PDF generation failed", e);
+      toast.error("Failed to generate PDF. Please try again.");
     } finally {
       // Restore original layout so the on-screen preview snaps back.
       element.style.width = originalWidth;
       element.style.maxWidth = originalMaxWidth;
       setDownloading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!sale) return;
+    setSharing(true);
+    const invoiceUrl = window.location.href;
+    const shareTitle = `Invoice ${invoiceId}`;
+    const pharmacyName = pharmacy?.name || "MediNist";
+    const shareText = `Invoice #${invoiceId} from ${pharmacyName} · ৳${formatMoney(sale.total)}`;
+
+    // 1. Try native Web Share API (mobile devices & supported browsers)
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        // If we already have a generated PDF blob and the device supports sharing files
+        if (cachedPdfBlobRef.current && navigator.canShare) {
+          try {
+            const pdfFile = new File(
+              [cachedPdfBlobRef.current],
+              `${invoiceId}.pdf`,
+              { type: "application/pdf" }
+            );
+            if (navigator.canShare({ files: [pdfFile] })) {
+              await navigator.share({
+                files: [pdfFile],
+                title: shareTitle,
+                text: shareText,
+              });
+              setSharing(false);
+              return;
+            }
+          } catch (fileShareErr) {
+            console.warn("File sharing not permitted, falling back to link sharing", fileShareErr);
+          }
+        }
+
+        // Native share with invoice link (WhatsApp, Telegram, Messenger, etc.)
+        await navigator.share({
+          title: shareTitle,
+          text: `${shareText}\nView invoice:`,
+          url: invoiceUrl,
+        });
+        setSharing(false);
+        return;
+      } catch (err: any) {
+        setSharing(false);
+        // User closed or dismissed the native share sheet without picking an app
+        if (err?.name === "AbortError") {
+          return;
+        }
+        console.warn("navigator.share encountered an issue, falling back to clipboard", err);
+      }
+    }
+
+    // 2. Fallback: Copy invoice link to clipboard
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(invoiceUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = invoiceUrl;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        textArea.remove();
+      }
+      toast.success("Invoice link copied to clipboard!");
+    } catch (copyErr) {
+      console.error("Clipboard copy failed", copyErr);
+      toast.error("Could not copy link to clipboard");
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -219,18 +301,59 @@ const Invoice = () => {
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white">
       {/* Top bar */}
-      <div className="no-print sticky top-0 z-10 bg-white border-b border-gray-200 py-3 flex items-center justify-between max-w-3xl mx-auto px-4">
-        <button onClick={() => navigate("/sales")} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition text-sm">
-          <X className="w-4 h-4" /> Close
-        </button>
-        <button
-          onClick={handleDownloadPDF}
-          disabled={downloading}
-          className="flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-800 transition text-sm disabled:opacity-50"
-        >
-          <Download className="w-4 h-4" />
-          {downloading ? "Generating..." : "Download PDF"}
-        </button>
+      <div className="no-print sticky top-0 z-20 bg-white/95 backdrop-blur-xs border-b border-gray-200 py-2.5 px-4 shadow-xs">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
+          {/* Close button */}
+          <button
+            id="invoice-close-btn"
+            type="button"
+            onClick={() => navigate("/sales")}
+            className="inline-flex items-center gap-1.5 text-gray-600 hover:text-gray-900 active:scale-95 transition text-xs sm:text-sm font-medium py-1.5 px-2 rounded-lg hover:bg-gray-100"
+          >
+            <X className="w-4 h-4" />
+            <span>Close</span>
+          </button>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Share button */}
+            <button
+              id="invoice-share-btn"
+              type="button"
+              onClick={handleShare}
+              disabled={sharing}
+              className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 active:scale-95 transition text-xs sm:text-sm font-medium shadow-xs disabled:opacity-50"
+              title="Share invoice"
+              aria-label="Share invoice"
+            >
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600" />
+              <span>Share</span>
+            </button>
+
+            {/* Compact Download PDF button */}
+            <button
+              id="invoice-download-btn"
+              type="button"
+              onClick={handleDownloadPDF}
+              disabled={downloading}
+              className="inline-flex items-center justify-center gap-1.5 bg-red-700 text-white px-3 sm:px-3.5 py-1.5 rounded-lg font-medium hover:bg-red-800 active:scale-95 transition text-xs sm:text-sm disabled:opacity-50 shadow-xs"
+              title="Download PDF"
+              aria-label="Download PDF"
+            >
+              {downloading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Download PDF</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Invoice content */}
