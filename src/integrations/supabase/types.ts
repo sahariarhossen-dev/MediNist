@@ -179,25 +179,34 @@ export type Database = {
       }
       ai_messages: {
         Row: {
+          audio_url: string | null
           content: string
           conversation_id: string
           created_at: string
           id: string
+          pharmacy_id: string | null
           role: string
+          user_id: string | null
         }
         Insert: {
+          audio_url?: string | null
           content: string
           conversation_id: string
           created_at?: string
           id?: string
+          pharmacy_id?: string | null
           role: string
+          user_id?: string | null
         }
         Update: {
+          audio_url?: string | null
           content?: string
           conversation_id?: string
           created_at?: string
           id?: string
+          pharmacy_id?: string | null
           role?: string
+          user_id?: string | null
         }
         Relationships: [
           {

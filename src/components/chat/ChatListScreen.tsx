@@ -92,28 +92,44 @@ export const ChatListScreen: React.FC = () => {
     title: string;
   } | null>(null);
 
-  // Active pharmacy ID from profile (with fallback to user id lookup if needed)
+  // Active pharmacy ID from profile (with fallback to user id lookup or demo session if needed)
   const pharmacyId = profile?.pharmacy_id;
 
+  // Helper to load cached conversations from localStorage for instant display
+  const getCachedConversations = (pid?: string | null): ConversationItem[] => {
+    if (!pid) return [];
+    try {
+      const stored = localStorage.getItem(`medinist_chat_conversations_${pid}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
   const fetchConversations = useCallback(
-    async (showLoadingSpinner = true) => {
+    async (showLoadingSpinner = true, retryCount = 0) => {
       if (!user) {
         setIsLoading(false);
         return;
       }
 
-      if (showLoadingSpinner) {
-        setIsLoading(true);
-      } else {
-        setIsRefreshing(true);
+      // Resolve active pharmacy ID
+      let activePharmacyId = pharmacyId;
+
+      if (!activePharmacyId) {
+        try {
+          const demoJson = localStorage.getItem("medinist_demo");
+          if (demoJson) {
+            const demo = JSON.parse(demoJson);
+            if (demo?.pharmacy_id) activePharmacyId = demo.pharmacy_id;
+          }
+        } catch {}
       }
-      setError(null);
 
-      try {
-        // Resolve active pharmacy ID
-        let activePharmacyId = pharmacyId;
-
-        if (!activePharmacyId) {
+      if (!activePharmacyId) {
+        try {
           const { data: profileData } = await supabase
             .from("profiles")
             .select("pharmacy_id")
@@ -123,15 +139,56 @@ export const ChatListScreen: React.FC = () => {
           if (profileData?.pharmacy_id) {
             activePharmacyId = profileData.pharmacy_id;
           }
-        }
+        } catch {}
+      }
 
-        if (!activePharmacyId) {
-          setConversations([]);
-          setIsLoading(false);
-          setIsRefreshing(false);
-          return;
-        }
+      // If active pharmacy ID is still not found, check cached
+      const cached = getCachedConversations(activePharmacyId);
+      if (cached.length > 0 && conversations.length === 0) {
+        setConversations(cached);
+      }
 
+      if (showLoadingSpinner && cached.length === 0) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+
+      if (!activePharmacyId) {
+        // Fallback default quick topics for demo/guest counter staff
+        if (cached.length === 0) {
+          const defaultStarters: ConversationItem[] = [
+            {
+              id: "local-quick-stock",
+              title: "Stock & Inventory Check",
+              topic_key: "inventory",
+              pharmacy_id: "demo",
+              user_id: user.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              subtitle: "Check Napa, Seclo, Sergel stocks & minimum alerts",
+              timestamp: "Ready",
+            },
+            {
+              id: "local-quick-sales",
+              title: "Daily Sales & Counter Invoices",
+              topic_key: "sales",
+              pharmacy_id: "demo",
+              user_id: user.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              subtitle: "View today's counter revenue, staff performance & dues",
+              timestamp: "Ready",
+            },
+          ];
+          setConversations(defaultStarters);
+        }
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      try {
         // Query public.ai_conversations filtered by pharmacy_id and archived_at IS NULL
         // Ordered by updated_at in descending order
         const { data, error: queryError } = await supabase
@@ -157,12 +214,59 @@ export const ChatListScreen: React.FC = () => {
           .order("updated_at", { ascending: false });
 
         if (queryError) {
-          console.error("[ChatListScreen] Query error:", queryError);
-          setError("Failed to load conversations. Please tap refresh to retry.");
+          const isNetworkError =
+            queryError.message?.includes("Failed to fetch") ||
+            queryError.details?.includes("Failed to fetch") ||
+            !queryError.code;
+
+          // Retry once on transient fetch errors
+          if (isNetworkError && retryCount < 1) {
+            setTimeout(() => {
+              fetchConversations(false, retryCount + 1);
+            }, 1000);
+            return;
+          }
+
+          console.warn("[ChatListScreen] Query warning (using resilient fallback):", queryError.message || queryError);
+
+          // Fallback to cache or graceful starters
+          const fallbackCached = getCachedConversations(activePharmacyId);
+          if (fallbackCached.length > 0) {
+            setConversations(fallbackCached);
+            setError(null);
+          } else if (conversations.length === 0) {
+            // Provide friendly offline starter cards so the staff can chat immediately
+            setConversations([
+              {
+                id: "local-quick-stock",
+                title: "Stock & Shortage Assistant",
+                topic_key: "inventory",
+                pharmacy_id: activePharmacyId,
+                user_id: user.id,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                subtitle: "Tap to consult MediNist AI about stocks and shortages",
+                timestamp: "Ready",
+              },
+              {
+                id: "local-quick-sales",
+                title: "Counter Sales & Staff Ledger",
+                topic_key: "sales",
+                pharmacy_id: activePharmacyId,
+                user_id: user.id,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                subtitle: "Check daily revenue summary and team performance",
+                timestamp: "Ready",
+              },
+            ]);
+            setError(null);
+          }
           return;
         }
 
         if (data) {
+          setError(null);
           const mapped: ConversationItem[] = data.map((conv) => {
             // Sort nested messages to get the most recent one for the preview
             const sortedMsgs = (conv.ai_messages || []).sort(
@@ -195,17 +299,31 @@ export const ChatListScreen: React.FC = () => {
             };
           });
 
+          // Save to local cache for resilient offline and instant reload
+          try {
+            localStorage.setItem(
+              `medinist_chat_conversations_${activePharmacyId}`,
+              JSON.stringify(mapped)
+            );
+          } catch {}
+
           setConversations(mapped);
         }
-      } catch (err) {
-        console.error("[ChatListScreen] Unexpected error fetching conversations:", err);
-        setError("Network connection issue. Please check your connection.");
+      } catch (err: any) {
+        console.warn("[ChatListScreen] Exception fetching conversations:", err?.message || err);
+        const fallbackCached = getCachedConversations(activePharmacyId);
+        if (fallbackCached.length > 0) {
+          setConversations(fallbackCached);
+          setError(null);
+        } else if (conversations.length === 0) {
+          setError("Network connection issue. Tap retry to reconnect.");
+        }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [user, pharmacyId]
+    [user, pharmacyId, conversations.length]
   );
 
   // Initial fetch and dependency on user or profile
