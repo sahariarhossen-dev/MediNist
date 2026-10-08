@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
       .eq("id", user.id)
       .single();
 
-    if (!profile || profile.role !== "admin" || !profile.pharmacy_id) {
-      return new Response(JSON.stringify({ error: "Only admins can invite staff" }), {
+    if (!profile || !profile.pharmacy_id || (profile.role !== "owner" && profile.role !== "admin" && profile.role !== "manager")) {
+      return new Response(JSON.stringify({ error: "Only shop owners and managers can invite staff" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -68,6 +68,17 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Strict Hierarchy Guard: Managers can ONLY send invitations for the 'salesman' role
+    if (profile.role === "manager" && role !== "salesman") {
+      return new Response(
+        JSON.stringify({ error: "Managers are strictly restricted to inviting staff with the 'salesman' role." }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Get pharmacy name for the email

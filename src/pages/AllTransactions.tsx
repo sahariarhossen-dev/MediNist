@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { format } from "date-fns";
 import { Plus, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { cn } from "@/lib/utils";
 
 type CashTx = {
@@ -14,6 +14,7 @@ type CashTx = {
   party_name: string | null;
   amount: number;
   note: string | null;
+  location_id?: string | null;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -30,23 +31,33 @@ const formatBDT = (n: number) =>
 
 const AllTransactions = () => {
   const { profile } = useAuth();
+  const { locations, activeLocation } = useLocationStore();
+
   const [loading, setLoading] = useState(true);
   const [txs, setTxs] = useState<CashTx[]>([]);
 
+  const load = useCallback(async () => {
+    if (!profile?.pharmacy_id) return;
+    setLoading(true);
+
+    let query = supabase
+      .from("cash_transactions")
+      .select("id,occurred_at,direction,category,party_name,amount,note,location_id")
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .order("occurred_at", { ascending: false });
+
+    if (activeLocation?.id) {
+      query = query.eq("location_id", activeLocation.id);
+    }
+
+    const { data } = await query;
+    setTxs((data ?? []) as CashTx[]);
+    setLoading(false);
+  }, [profile?.pharmacy_id, activeLocation?.id]);
+
   useEffect(() => {
-    const load = async () => {
-      if (!profile?.pharmacy_id) return;
-      setLoading(true);
-      const { data } = await supabase
-        .from("cash_transactions")
-        .select("id,occurred_at,direction,category,party_name,amount,note")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .order("occurred_at", { ascending: false });
-      setTxs((data ?? []) as CashTx[]);
-      setLoading(false);
-    };
     load();
-  }, [profile?.pharmacy_id]);
+  }, [load]);
 
   // Group by date for cleaner scrolling
   const grouped = useMemo(() => {
@@ -61,9 +72,15 @@ const AllTransactions = () => {
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
-
-      <div className="flex items-center gap-2 px-page pt-3 pb-2">
-        <h1 className="font-semibold text-fluid-base text-gray-800">All Transactions</h1>
+      <div className="px-page pt-3 pb-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-semibold text-fluid-base text-gray-800">All Transactions</h1>
+            <p className="text-[11px] text-gray-400 font-medium">
+              {activeLocation?.name ? `${activeLocation.name} • Transaction History` : "Complete cash movement records"}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="px-page mt-2">
@@ -71,7 +88,7 @@ const AllTransactions = () => {
           <div className="text-center py-10 text-gray-400 text-fluid-sm">Loading…</div>
         ) : grouped.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
-            <p className="text-fluid-sm text-gray-500">No manual transactions yet.</p>
+            <p className="text-fluid-sm text-gray-500">No transactions recorded for this selection.</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -81,42 +98,52 @@ const AllTransactions = () => {
                   {format(new Date(date), "d MMM yyyy")}
                 </h4>
                 <div className="space-y-3">
-                  {items.map((t) => (
-                    <div
-                      key={t.id}
-                      className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3"
-                    >
+                  {items.map((t) => {
+                    const txLoc = locations.find((l) => l.id === t.location_id);
+                    return (
                       <div
-                        className={cn(
-                          "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
-                          t.direction === "in" ? "bg-green-100" : "bg-red-100",
-                        )}
+                        key={t.id}
+                        className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3"
                       >
-                        {t.direction === "in" ? (
-                          <Plus size={18} className="text-green-600" strokeWidth={3} />
-                        ) : (
-                          <Minus size={18} className="text-red-600" strokeWidth={3} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 text-fluid-sm truncate">
-                          {t.party_name || "—"}
+                        <div
+                          className={cn(
+                            "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
+                            t.direction === "in" ? "bg-green-100" : "bg-red-100",
+                          )}
+                        >
+                          {t.direction === "in" ? (
+                            <Plus size={18} className="text-green-600" strokeWidth={3} />
+                          ) : (
+                            <Minus size={18} className="text-red-600" strokeWidth={3} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-semibold text-gray-900 text-fluid-sm truncate">
+                              {t.party_name || "—"}
+                            </p>
+                            {txLoc && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-medium">
+                                {txLoc.code || txLoc.name.split(" ")[0]}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-fluid-xs text-gray-500 truncate">
+                            {CATEGORY_LABELS[t.category] || t.category} ·{" "}
+                            {format(new Date(t.occurred_at), "h:mm a")}
+                          </p>
+                        </div>
+                        <p
+                          className={cn(
+                            "font-bold text-fluid-sm whitespace-nowrap tabular-nums",
+                            t.direction === "in" ? "text-green-600" : "text-red-600",
+                          )}
+                        >
+                          {t.direction === "in" ? "+" : "−"}৳{formatBDT(Number(t.amount))}
                         </p>
-                        <p className="text-fluid-xs text-gray-500 truncate">
-                          {CATEGORY_LABELS[t.category] || t.category} ·{" "}
-                          {format(new Date(t.occurred_at), "h:mm a")}
-                        </p>
                       </div>
-                      <p
-                        className={cn(
-                          "font-bold text-fluid-sm whitespace-nowrap tabular-nums",
-                          t.direction === "in" ? "text-green-600" : "text-red-600",
-                        )}
-                      >
-                        {t.direction === "in" ? "+" : "−"}৳{formatBDT(Number(t.amount))}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

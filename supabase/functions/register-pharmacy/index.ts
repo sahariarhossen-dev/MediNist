@@ -164,7 +164,62 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Create auth user
+    // 2. Provision initial physical branch outlet in shop_locations with the user's exact inputs
+    let initialBranchId: string | null = null;
+    try {
+      const { data: existingBranch } = await supabaseAdmin
+        .from("shop_locations")
+        .select("id")
+        .eq("pharmacy_id", pharmacy.id)
+        .maybeSingle();
+
+      if (existingBranch?.id) {
+        // If a database trigger already created a branch, update it with user's exact details
+        const { data: updatedBranch } = await supabaseAdmin
+          .from("shop_locations")
+          .update({
+            name: trimmedShopName,
+            type: "branch",
+            code: "MAIN",
+            address: fullAddress,
+            phone: trimmedPhone,
+            email: email.trim(),
+            proprietor_name: trimmedFullName,
+            is_main: true,
+            is_active: true,
+          })
+          .eq("id", existingBranch.id)
+          .select("id")
+          .single();
+        initialBranchId = updatedBranch?.id || existingBranch.id;
+      } else {
+        const { data: newBranch, error: branchErr } = await supabaseAdmin
+          .from("shop_locations")
+          .insert({
+            pharmacy_id: pharmacy.id,
+            name: trimmedShopName,
+            type: "branch",
+            code: "MAIN",
+            address: fullAddress,
+            phone: trimmedPhone,
+            email: email.trim(),
+            proprietor_name: trimmedFullName,
+            is_main: true,
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+        if (branchErr) {
+          console.warn("register-pharmacy: branch insert warning:", branchErr);
+        }
+        initialBranchId = newBranch?.id || null;
+      }
+    } catch (branchEx) {
+      console.warn("register-pharmacy: branch provisioning error:", branchEx);
+    }
+
+    // 3. Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim(),
       password,
@@ -173,7 +228,8 @@ Deno.serve(async (req) => {
 
     if (authError) {
       console.error("register-pharmacy: createUser failed:", authError);
-      // Rollback pharmacy
+      // Rollback pharmacy and branch
+      await supabaseAdmin.from("shop_locations").delete().eq("pharmacy_id", pharmacy.id);
       await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
       // Only surface the allow-listed "already registered" case; everything
       // else returns a generic message so internal details stay in the logs.
@@ -190,31 +246,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 3. Update profile (created by trigger) with pharmacy_id, name, phone, role
+    // 4. Update profile (created by trigger) with pharmacy_id, name, phone, role, assigned_location_id
     // The first user to register a pharmacy is its admin. We verify the role
     // landed correctly and roll back the whole signup if it didn't, so an
     // owner never gets stuck as 'salesman'.
+    const profileUpdate: Record<string, unknown> = {
+      pharmacy_id: pharmacy.id,
+      full_name: trimmedFullName,
+      phone: trimmedPhone,
+      role: "owner",
+      terms_accepted: true,
+      terms_accepted_at: new Date().toISOString(),
+    };
+    if (initialBranchId) {
+      profileUpdate.assigned_location_id = initialBranchId;
+    }
+
     const { data: updatedProfile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update({
-        pharmacy_id: pharmacy.id,
-        full_name: trimmedFullName,
-        phone: trimmedPhone,
-        role: "admin",
-        terms_accepted: true,
-        terms_accepted_at: new Date().toISOString(),
-      })
+      .update(profileUpdate)
       .eq("id", authData.user.id)
-      .select("id, role, pharmacy_id")
+      .select("id, role, pharmacy_id, assigned_location_id")
       .maybeSingle();
 
-    if (profileError || !updatedProfile || updatedProfile.role !== "admin" || updatedProfile.pharmacy_id !== pharmacy.id) {
-      console.error("Profile admin promotion failed:", profileError, updatedProfile);
-      // Roll back: remove the auth user and the pharmacy so registration can be retried cleanly.
+    if (profileError || !updatedProfile || (updatedProfile.role !== "owner" && updatedProfile.role !== "admin") || updatedProfile.pharmacy_id !== pharmacy.id) {
+      console.error("Profile owner promotion failed:", profileError, updatedProfile);
+      // Roll back: remove the auth user, branch, and pharmacy so registration can be retried cleanly.
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
+      await supabaseAdmin.from("shop_locations").delete().eq("pharmacy_id", pharmacy.id);
       await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
       return new Response(
-        JSON.stringify({ error: "Failed to set up admin account. Please try again." }),
+        JSON.stringify({ error: "Failed to set up owner account. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

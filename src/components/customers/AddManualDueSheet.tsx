@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { toast } from "sonner";
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
 const AddManualDueSheet = ({
   open, onOpenChange, customerId, customerName, pharmacyId, userId, onSaved,
 }: Props) => {
+  const { activeLocation } = useLocationStore();
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -44,6 +46,7 @@ const AddManualDueSheet = ({
         customer_id: customerId,
         pharmacy_id: pharmacyId,
         user_id: userId,
+        location_id: activeLocation?.id || null,
         entry_type: "due",
         amount: amt,
         description: description.trim() || `Manual due for ${customerName}`,

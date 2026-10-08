@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pencil, Check, Camera, Store, FileText, Percent } from "lucide-react";
+import { Pencil, Check, Camera, Store, FileText, Percent, MapPin, Building2, Warehouse } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { toast } from "@/hooks/use-toast";
 
-interface PharmacyData {
+interface BranchProfileData {
   id: string;
   name: string;
+  type: "branch" | "warehouse";
   proprietor_name: string | null;
   address: string | null;
   phone: string | null;
@@ -23,15 +24,29 @@ interface PharmacyData {
   logo_url: string | null;
   cover_url: string | null;
   default_discount: number | null;
+  code?: string | null;
 }
 
 const ShopProfile = () => {
-  const { profile } = useAuth();
-  const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
+  const { profile, pharmacyName } = useAuth();
+  const { 
+    activeLocation, 
+    locations, 
+    setActiveLocation, 
+    updateLocation, 
+    currentUserRole 
+  } = useLocationStore();
+
+  const [branchData, setBranchData] = useState<BranchProfileData | null>(null);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: "", proprietor_name: "", address: "", phone: "", email: "",
-    drug_license: "", trade_license: "",
+    name: "",
+    proprietor_name: "",
+    address: "",
+    phone: "",
+    email: "",
+    drug_license: "",
+    trade_license: "",
   });
   const [invoiceFooter, setInvoiceFooter] = useState("");
   const [defaultDiscount, setDefaultDiscount] = useState("10");
@@ -39,170 +54,258 @@ const ShopProfile = () => {
   const [savingFooter, setSavingFooter] = useState(false);
   const [savingDiscount, setSavingDiscount] = useState(false);
 
-  const isAdmin = profile?.role === "admin";
+  const effectiveRole = (currentUserRole || profile?.role || "").toLowerCase().trim();
+  const isOwner = effectiveRole === "owner" || effectiveRole === "admin";
 
+  // Re-fetch or sync branch profile whenever the active location changes
   useEffect(() => {
-    if (profile?.pharmacy_id) {
-      fetchPharmacy();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.pharmacy_id, isAdmin]);
+    if (!activeLocation?.id) return;
 
-  const fetchPharmacy = async () => {
-    if (isAdmin) {
-      // Admins can read the full row (including license + contact fields)
-      const { data } = await supabase
-        .from("pharmacies")
-        .select("*")
-        .eq("id", profile!.pharmacy_id!)
-        .single();
-      if (data) {
-        const p = data as unknown as PharmacyData;
-        setPharmacy(p);
+    let isMounted = true;
+    const fetchActiveBranch = async () => {
+      // 1. Pre-fill immediately from activeLocation in context
+      const initialBranch: BranchProfileData = {
+        id: activeLocation.id,
+        name: activeLocation.name || "Branch",
+        type: activeLocation.type,
+        proprietor_name: activeLocation.proprietor_name || null,
+        address: activeLocation.address || null,
+        phone: activeLocation.phone || null,
+        email: activeLocation.email || null,
+        drug_license: activeLocation.drug_license || null,
+        trade_license: activeLocation.trade_license || null,
+        invoice_footer: activeLocation.invoice_footer || null,
+        logo_url: activeLocation.logo_url || null,
+        cover_url: activeLocation.cover_url || null,
+        default_discount: activeLocation.default_discount ?? 10,
+        code: activeLocation.code || null,
+      };
+
+      if (isMounted) {
+        setBranchData(initialBranch);
         setEditForm({
-          name: p.name || "",
-          proprietor_name: p.proprietor_name || "",
-          address: p.address || "",
-          phone: p.phone || "",
-          email: p.email || "",
-          drug_license: p.drug_license || "",
-          trade_license: p.trade_license || "",
+          name: initialBranch.name,
+          proprietor_name: initialBranch.proprietor_name || "",
+          address: initialBranch.address || "",
+          phone: initialBranch.phone || "",
+          email: initialBranch.email || "",
+          drug_license: initialBranch.drug_license || "",
+          trade_license: initialBranch.trade_license || "",
         });
-        setInvoiceFooter(p.invoice_footer || "");
-        setDefaultDiscount(String(p.default_discount ?? 10));
+        setInvoiceFooter(initialBranch.invoice_footer || "");
+        setDefaultDiscount(String(initialBranch.default_discount ?? 10));
       }
-    } else {
-      // Non-admins see only non-sensitive fields via security-definer RPC
-      const { data } = await supabase.rpc("get_my_pharmacy_public" as any);
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row) {
-        const p: PharmacyData = {
-          id: row.id,
-          name: row.name,
-          proprietor_name: null,
-          address: row.address,
-          phone: null,
-          email: null,
-          drug_license: null,
-          trade_license: null,
-          invoice_footer: row.invoice_footer,
-          logo_url: row.logo_url,
-          cover_url: row.cover_url,
-          default_discount: row.default_discount,
-        };
-        setPharmacy(p);
-        setInvoiceFooter(p.invoice_footer || "");
-        setDefaultDiscount(String(p.default_discount ?? 10));
-      }
-    }
-  };
 
+      // 2. Fetch fresh details from shop_locations for the active branch
+      try {
+        const { data, error } = await supabase
+          .from("shop_locations" as any)
+          .select("*")
+          .eq("id", activeLocation.id)
+          .maybeSingle();
+
+        if (!error && data && isMounted) {
+          const freshBranch: BranchProfileData = {
+            id: (data as any).id,
+            name: (data as any).name || "Branch",
+            type: (data as any).type as "branch" | "warehouse",
+            proprietor_name: (data as any).proprietor_name || null,
+            address: (data as any).address || null,
+            phone: (data as any).phone || null,
+            email: (data as any).email || null,
+            drug_license: (data as any).drug_license || null,
+            trade_license: (data as any).trade_license || null,
+            invoice_footer: (data as any).invoice_footer || null,
+            logo_url: (data as any).logo_url || null,
+            cover_url: (data as any).cover_url || null,
+            default_discount: (data as any).default_discount !== null ? Number((data as any).default_discount) : 10,
+            code: (data as any).code || null,
+          };
+          setBranchData(freshBranch);
+          setEditForm({
+            name: freshBranch.name,
+            proprietor_name: freshBranch.proprietor_name || "",
+            address: freshBranch.address || "",
+            phone: freshBranch.phone || "",
+            email: freshBranch.email || "",
+            drug_license: freshBranch.drug_license || "",
+            trade_license: freshBranch.trade_license || "",
+          });
+          setInvoiceFooter(freshBranch.invoice_footer || "");
+          setDefaultDiscount(String(freshBranch.default_discount ?? 10));
+        }
+      } catch (err) {
+        console.warn("[ShopProfile] Error fetching fresh shop_locations details:", err);
+      }
+    };
+
+    fetchActiveBranch();
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLocation?.id]);
 
   const handleImageUpload = async (type: "logo" | "cover", e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !pharmacy) return;
+    if (!file || !activeLocation?.id) return;
     const ext = file.name.split(".").pop();
-    const path = `${pharmacy.id}/${type}.${ext}`;
+    const path = `branch-${activeLocation.id}/${type}.${ext}`;
+    
     const { error } = await supabase.storage.from("pharmacy-assets").upload(path, file, { upsert: true });
-    if (error) { toast({ title: "Upload failed", description: error.message, variant: "destructive" }); return; }
+    if (error) { 
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" }); 
+      return; 
+    }
     const { data: urlData } = supabase.storage.from("pharmacy-assets").getPublicUrl(path);
     const url = urlData.publicUrl + "?t=" + Date.now();
     const col = type === "logo" ? "logo_url" : "cover_url";
-    await supabase.from("pharmacies").update({ [col]: url } as any).eq("id", pharmacy.id);
-    setPharmacy({ ...pharmacy, [col]: url });
-    toast({ title: `${type === "logo" ? "Logo" : "Cover"} updated!` });
+
+    const success = await updateLocation(activeLocation.id, { [col]: url });
+    if (success) {
+      setBranchData((prev) => (prev ? { ...prev, [col]: url } : null));
+      toast({ title: `Branch ${type === "logo" ? "Logo" : "Cover"} updated!` });
+    }
   };
 
   const handleSaveInfo = async () => {
-    if (!pharmacy) return;
+    if (!activeLocation?.id) return;
     setSaving(true);
-    const { error } = await supabase.from("pharmacies").update({
-      name: editForm.name,
-      proprietor_name: editForm.proprietor_name,
-      address: editForm.address,
-      phone: editForm.phone,
-      email: editForm.email,
-      drug_license: editForm.drug_license,
-      trade_license: editForm.trade_license,
-    } as any).eq("id", pharmacy.id);
+
+    const updatePayload = {
+      name: editForm.name.trim(),
+      proprietor_name: editForm.proprietor_name.trim(),
+      address: editForm.address.trim(),
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      drug_license: editForm.drug_license.trim(),
+      trade_license: editForm.trade_license.trim(),
+    };
+
+    const success = await updateLocation(activeLocation.id, updatePayload);
     setSaving(false);
-    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
-    setPharmacy({ ...pharmacy, ...editForm });
-    setEditing(false);
-    toast({ title: "Shop info updated!" });
+
+    if (success) {
+      setBranchData((prev) => (prev ? { ...prev, ...updatePayload } : null));
+      setEditing(false);
+      toast({ title: "Branch outlet details updated successfully!" });
+    }
   };
 
   const handleSaveFooter = async () => {
-    if (!pharmacy) return;
+    if (!activeLocation?.id) return;
     setSavingFooter(true);
-    const { error } = await supabase.from("pharmacies").update({ invoice_footer: invoiceFooter } as any).eq("id", pharmacy.id);
+    const success = await updateLocation(activeLocation.id, { invoice_footer: invoiceFooter.trim() });
     setSavingFooter(false);
-    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
-    setPharmacy({ ...pharmacy, invoice_footer: invoiceFooter });
-    toast({ title: "Invoice footer saved!" });
+    if (success) {
+      setBranchData((prev) => (prev ? { ...prev, invoice_footer: invoiceFooter.trim() } : null));
+      toast({ title: "Branch invoice footer saved!" });
+    }
   };
 
   const handleSaveDiscount = async () => {
-    if (!pharmacy) return;
+    if (!activeLocation?.id) return;
     const val = parseFloat(defaultDiscount);
     if (isNaN(val) || val < 0 || val > 100) {
       toast({ title: "Invalid discount", description: "Enter a value between 0 and 100", variant: "destructive" });
       return;
     }
     setSavingDiscount(true);
-    const { error } = await supabase.from("pharmacies").update({ default_discount: val } as any).eq("id", pharmacy.id);
+    const success = await updateLocation(activeLocation.id, { default_discount: val });
     setSavingDiscount(false);
-    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
-    setPharmacy({ ...pharmacy, default_discount: val });
-    toast({ title: "Default discount saved!" });
+    if (success) {
+      setBranchData((prev) => (prev ? { ...prev, default_discount: val } : null));
+      toast({ title: "Branch default discount saved!" });
+    }
   };
 
-
-
   const infoFields = [
-    { label: "Pharmacy Name", key: "name" as const },
-    { label: "Proprietor Name", key: "proprietor_name" as const },
-    { label: "Shop Mobile Number", key: "phone" as const },
-    { label: "Shop Email Address", key: "email" as const },
+    { label: "Branch Outlet Name", key: "name" as const },
+    { label: "Proprietor / Branch In-charge", key: "proprietor_name" as const },
+    { label: "Branch Phone Number", key: "phone" as const },
+    { label: "Branch Email Address", key: "email" as const },
     { label: "Drug License No.", key: "drug_license" as const },
     { label: "Trade License No.", key: "trade_license" as const },
-    { label: "Address", key: "address" as const },
+    { label: "Physical Address", key: "address" as const },
   ];
 
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-background pb-10">
-      {/* Header */}
-      <div className="px-4 pt-5 pb-3 flex items-center gap-3">
-        <h1 className="text-lg font-bold text-foreground">Shop Profile</h1>
+    <div className="min-h-[calc(100vh-72px)] bg-background pb-12">
+      {/* Header & Hierarchy Breadcrumb */}
+      <div className="px-4 pt-5 pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">Shop & Branch Profile</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Configuring live identity and invoice details for active branch
+            </p>
+          </div>
+          {pharmacyName && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+              <Building2 size={13} className="text-slate-500" />
+              <span>Mother Tenant: <strong className="text-slate-900">{pharmacyName}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* Branch Workspace Switcher Tabs */}
+        {locations.length > 1 && (
+          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider shrink-0 mr-1">
+              Select Outlet:
+            </span>
+            {locations.map((loc) => {
+              const isActive = loc.id === activeLocation?.id;
+              const isWh = loc.type === "warehouse";
+              return (
+                <button
+                  key={loc.id}
+                  onClick={() => setActiveLocation(loc.id)}
+                  type="button"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                    isActive
+                      ? "bg-[#CC3333] text-white border-[#CC3333] shadow-xs"
+                      : "bg-card text-foreground hover:bg-muted border-border"
+                  }`}
+                >
+                  {isWh ? <Warehouse size={13} /> : <Store size={13} />}
+                  <span>{loc.name}</span>
+                  {isActive && <Check size={12} className="stroke-[3]" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Cover & Logo */}
       <div className="relative mx-4 rounded-3xl overflow-hidden bg-muted" style={{ height: 180 }}>
-        {pharmacy?.cover_url ? (
-          <img src={pharmacy.cover_url} alt="Cover" className="w-full h-full object-cover" />
+        {branchData?.cover_url ? (
+          <img src={branchData.cover_url} alt="Cover" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-emerald-50">
-            <Store size={48} className="text-emerald-300" />
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-50 to-slate-100">
+            <Store size={48} className="text-emerald-400 mb-1" />
+            <span className="text-xs font-medium text-slate-500">{branchData?.name || "Branch Outlet"}</span>
           </div>
         )}
-        {isAdmin && (
-          <label className="absolute top-3 right-3 p-2 rounded-full bg-white/80 backdrop-blur cursor-pointer shadow border-secondary-foreground border">
-            <Camera size={18} className="text-emerald-600" />
+        {isOwner && (
+          <label className="absolute top-3 right-3 p-2 rounded-full bg-white/90 backdrop-blur cursor-pointer shadow hover:bg-white transition border border-slate-200">
+            <Camera size={18} className="text-[#CC3333]" />
             <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("cover", e)} />
           </label>
         )}
         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
           <div className="relative">
-            <label className={isAdmin ? "cursor-pointer py-0 my-0 mt-0 px-0 pt-0 mx-0 mr-0 ml-0 pb-0 pl-[350px] mb-0" : ""}>
-              <Avatar className="h-24 w-24 border-4 border-background shadow-lg mt-0 my-[2px] py-[10px] px-0 pb-0 pt-0 mb-[20px] mr-0 ml-0">
-                {pharmacy?.logo_url ? <AvatarImage src={pharmacy.logo_url} className="object-cover mx-0 mt-0 mb-0 pt-0 pb-0" /> : null}
-                <AvatarFallback className="bg-emerald-100 text-emerald-700 text-2xl font-bold">
-                  {pharmacy?.name?.[0] || "P"}
+            <label className={isOwner ? "cursor-pointer" : ""}>
+              <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
+                {branchData?.logo_url ? <AvatarImage src={branchData.logo_url} className="object-cover" /> : null}
+                <AvatarFallback className="bg-red-50 text-[#CC3333] text-2xl font-bold border border-red-100">
+                  {branchData?.name?.[0] || "B"}
                 </AvatarFallback>
               </Avatar>
-              {isAdmin && (
+              {isOwner && (
                 <>
-                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-emerald-600 shadow border-2 border-background px-[6px] mt-0 mb-[30px] mr-[10px]">
+                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-[#CC3333] shadow border-2 border-background">
                     <Camera size={14} className="text-white" />
                   </div>
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload("logo", e)} />
@@ -213,27 +316,51 @@ const ShopProfile = () => {
         </div>
       </div>
 
-      <div className="mt-14 px-4">
-        <Accordion type="multiple" className="space-y-4">
-          {/* Shop Information */}
-          <AccordionItem value="shop-info" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
+      {/* Active Branch Badge */}
+      <div className="mt-12 text-center px-4">
+        <h2 className="text-xl font-extrabold text-foreground tracking-tight">
+          {branchData?.name || "Active Branch"}
+        </h2>
+        <div className="inline-flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+          <MapPin size={13} className="text-[#CC3333]" />
+          <span>{branchData?.address || "Address not configured"}</span>
+        </div>
+      </div>
+
+      <div className="mt-6 px-4">
+        <Accordion type="multiple" defaultValue={["branch-info"]} className="space-y-4">
+          {/* Outlet Details */}
+          <AccordionItem value="branch-info" className="bg-card rounded-3xl border border-border shadow-xs overflow-hidden">
             <AccordionTrigger className="px-5 py-4 hover:no-underline">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50">
-                  <Store size={18} className="text-emerald-600" />
+                <div className="p-2 rounded-xl bg-red-50 text-[#CC3333]">
+                  <Store size={18} />
                 </div>
-                <span className="text-base font-bold text-foreground">Shop Information</span>
+                <div className="text-left">
+                  <span className="text-base font-bold text-foreground block">Branch Information</span>
+                  <span className="text-xs text-muted-foreground">Outlet name, phone, address, and license data</span>
+                </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-5 pb-5">
               <div className="flex justify-end mb-3">
-                {isAdmin && (
+                {isOwner && (
                   <button
-                    onClick={() => editing ? handleSaveInfo() : setEditing(true)}
-                    className="p-2 rounded-full bg-emerald-50"
+                    onClick={() => (editing ? handleSaveInfo() : setEditing(true))}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 text-[#CC3333] hover:bg-red-100 font-medium text-xs transition"
                     disabled={saving}
                   >
-                    {editing ? <Check size={16} className="text-emerald-600" /> : <Pencil size={16} className="text-emerald-600" />}
+                    {editing ? (
+                      <>
+                        <Check size={15} />
+                        <span>{saving ? "Saving..." : "Save Details"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pencil size={15} />
+                        <span>Edit Details</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -245,10 +372,12 @@ const ShopProfile = () => {
                       <Input
                         value={editForm[key]}
                         onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
-                        className="mt-1 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
+                        className="mt-1 rounded-xl border-border focus-visible:ring-[#CC3333]"
                       />
                     ) : (
-                      <p className="text-sm text-foreground mt-0.5">{(pharmacy as any)?.[key] || "—"}</p>
+                      <p className="text-sm font-medium text-foreground mt-0.5">
+                        {(branchData as any)?.[key] || "—"}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -256,16 +385,17 @@ const ShopProfile = () => {
             </AccordionContent>
           </AccordionItem>
 
-
-
-          {/* Billing Customization */}
-          <AccordionItem value="billing" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
+          {/* Billing & Invoice Customization */}
+          <AccordionItem value="billing" className="bg-card rounded-3xl border border-border shadow-xs overflow-hidden">
             <AccordionTrigger className="px-5 py-4 hover:no-underline">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50">
-                  <FileText size={18} className="text-emerald-600" />
+                <div className="p-2 rounded-xl bg-red-50 text-[#CC3333]">
+                  <FileText size={18} />
                 </div>
-                <span className="text-base font-bold text-foreground">Billing Customization</span>
+                <div className="text-left">
+                  <span className="text-base font-bold text-foreground block">Branch Invoice Customization</span>
+                  <span className="text-xs text-muted-foreground">Footer notes printed on invoices issued by this branch</span>
+                </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-5 pb-5">
@@ -273,60 +403,62 @@ const ShopProfile = () => {
               <Textarea
                 value={invoiceFooter}
                 onChange={(e) => setInvoiceFooter(e.target.value)}
-                placeholder='e.g. "No returns after 7 days"'
-                className="mt-1 rounded-xl border-emerald-200 focus-visible:ring-emerald-500 min-h-[80px]"
-                disabled={!isAdmin}
+                placeholder='e.g. "No returns after 7 days. Thank you for shopping with us!"'
+                className="mt-1 rounded-xl border-border focus-visible:ring-[#CC3333] min-h-[80px]"
+                disabled={!isOwner}
               />
-              {isAdmin && (
+              {isOwner && (
                 <Button
                   onClick={handleSaveFooter}
                   disabled={savingFooter}
-                  className="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="mt-3 w-full rounded-xl bg-[#CC3333] hover:bg-red-700 text-white"
                 >
-                  {savingFooter ? "Saving..." : "Save Footer"}
+                  {savingFooter ? "Saving..." : "Save Branch Footer"}
                 </Button>
               )}
             </AccordionContent>
           </AccordionItem>
 
-          {/* Default Discount Settings */}
-          <AccordionItem value="discount" className="bg-card rounded-3xl border border-emerald-100 shadow-sm overflow-hidden">
+          {/* Branch Default Discount */}
+          <AccordionItem value="discount" className="bg-card rounded-3xl border border-border shadow-xs overflow-hidden">
             <AccordionTrigger className="px-5 py-4 hover:no-underline">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50">
-                  <Percent size={18} className="text-emerald-600" />
+                <div className="p-2 rounded-xl bg-red-50 text-[#CC3333]">
+                  <Percent size={18} />
                 </div>
-                <span className="text-base font-bold text-foreground">Default Discount Settings</span>
+                <div className="text-left">
+                  <span className="text-base font-bold text-foreground block">Default Discount Settings</span>
+                  <span className="text-xs text-muted-foreground">Default discount applied at checkout in this branch</span>
+                </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-5 pb-5">
               <p className="text-xs text-muted-foreground mb-3">
-                This discount will auto-apply to every new sale. Staff can override it per transaction.
+                This discount will auto-apply to every new sale in this branch. Staff can adjust per transaction if authorized.
               </p>
-              <label className="text-xs text-muted-foreground font-medium">Global Default Discount (%)</label>
+              <label className="text-xs text-muted-foreground font-medium">Branch Default Discount (%)</label>
               <Input
                 type="number"
                 min={0}
                 max={100}
                 value={defaultDiscount}
                 onChange={(e) => setDefaultDiscount(e.target.value)}
-                className="mt-1 rounded-xl border-emerald-200 focus-visible:ring-emerald-500"
-                disabled={!isAdmin}
+                className="mt-1 rounded-xl border-border focus-visible:ring-[#CC3333]"
+                disabled={!isOwner}
               />
-              {isAdmin && (
+              {isOwner && (
                 <Button
                   onClick={handleSaveDiscount}
                   disabled={savingDiscount}
-                  className="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="mt-3 w-full rounded-xl bg-[#CC3333] hover:bg-red-700 text-white"
                 >
-                  {savingDiscount ? "Saving..." : "Save Discount"}
+                  {savingDiscount ? "Saving..." : "Save Branch Discount"}
                 </Button>
               )}
             </AccordionContent>
           </AccordionItem>
         </Accordion>
       </div>
-
     </div>
   );
 };

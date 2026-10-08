@@ -97,12 +97,14 @@ const ActivityFeed = ({
   refreshKey = 0,
   filter,
   onFilterChange,
+  allowedUserIds,
 }: {
   nameOf: (id: string) => string;
   userFilter?: string;
   refreshKey?: number;
   filter?: "all" | Severity;
   onFilterChange?: (f: "all" | Severity) => void;
+  allowedUserIds?: string[];
 }) => {
   const { profile } = useAuth();
   const [rows, setRows] = useState<FeedItem[]>([]);
@@ -134,7 +136,15 @@ const ActivityFeed = ({
           .order("created_at", { ascending: false })
           .limit(PAGE);
         if (activeFilter !== "all") q = q.eq("severity", activeFilter);
-        if (userFilter !== "all") q = q.eq("user_id", userFilter);
+        if (userFilter !== "all") {
+          if (allowedUserIds && !allowedUserIds.includes(userFilter)) {
+            return [];
+          }
+          q = q.eq("user_id", userFilter);
+        } else if (allowedUserIds) {
+          if (allowedUserIds.length === 0) return [];
+          q = q.in("user_id", allowedUserIds);
+        }
         if (before) q = q.lt("created_at", before);
         // Routine (info-level) sale entries are never shown in this feed
         q = q.or("action_type.neq.sale_create,severity.neq.info");
@@ -159,7 +169,15 @@ const ActivityFeed = ({
           .eq("pharmacy_id", profile.pharmacy_id)
           .order("started_at", { ascending: false })
           .limit(PAGE);
-        if (userFilter !== "all") q = q.eq("user_id", userFilter);
+        if (userFilter !== "all") {
+          if (allowedUserIds && !allowedUserIds.includes(userFilter)) {
+            return [];
+          }
+          q = q.eq("user_id", userFilter);
+        } else if (allowedUserIds) {
+          if (allowedUserIds.length === 0) return [];
+          q = q.in("user_id", allowedUserIds);
+        }
         if (before) q = q.lt("started_at", before);
         const { data } = await q;
         return ((data as any[]) || []).map((r) => ({

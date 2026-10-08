@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Receipt, ArrowUp } from "lucide-react";
 import { ResponsiveContainer, Area, AreaChart } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { format, isToday, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/formatUtils";
@@ -22,34 +23,47 @@ interface SaleRow {
   created_at: string;
   status: string;
   sale_type: string;
+  location_id?: string | null;
 }
 
 const Sales = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { locations, activeLocation } = useLocationStore();
+  const isOwner = (profile?.role || "").toLowerCase().trim() === "owner";
+
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchSales = useCallback(async () => {
     if (!profile?.pharmacy_id || !profile?.id) return;
-    const fetchSales = async () => {
-      setLoading(true);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+    setLoading(true);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-      const { data } = await supabase
-        .from("sales")
-        .select("id, total, subtotal, discount_amount, discount_percent, created_at, status, sale_type")
-        .eq("pharmacy_id", profile.pharmacy_id!)
-        .eq("user_id", profile.id)
-        .gte("created_at", todayStart.toISOString())
-        .order("created_at", { ascending: false });
+    let query = supabase
+      .from("sales")
+      .select("id, total, subtotal, discount_amount, discount_percent, created_at, status, sale_type, location_id")
+      .eq("pharmacy_id", profile.pharmacy_id!)
+      .gte("created_at", todayStart.toISOString())
+      .order("created_at", { ascending: false });
 
-      setSales((data as SaleRow[]) || []);
-      setLoading(false);
-    };
+    if (!isOwner) {
+      query = query.eq("user_id", profile.id);
+    }
+
+    if (activeLocation?.id) {
+      query = query.eq("location_id", activeLocation.id);
+    }
+
+    const { data } = await query;
+    setSales((data as SaleRow[]) || []);
+    setLoading(false);
+  }, [profile?.pharmacy_id, profile?.id, isOwner, activeLocation?.id]);
+
+  useEffect(() => {
     fetchSales();
-  }, [profile?.pharmacy_id, profile?.id]);
+  }, [fetchSales]);
 
   const todayTotal = sales
     .filter((s) => s.status === "completed")
@@ -78,9 +92,16 @@ const Sales = () => {
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-gray-50 w-full max-w-md mx-auto pb-28">
+      {/* Header */}
       <div className="px-page pt-6 pb-2">
-        <h1 className="text-fluid-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
-        <p className="text-fluid-sm text-gray-400 mt-0.5">Manage your daily transactions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-fluid-2xl font-bold text-gray-900 tracking-tight">Sales</h1>
+            <p className="text-fluid-sm text-gray-400 mt-0.5">
+              {activeLocation?.name ? `${activeLocation.name} • Today's Transactions` : "Manage daily transactions and history"}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="px-page space-y-5 mt-2">
@@ -107,7 +128,9 @@ const Sales = () => {
         <div className="rounded-2xl bg-white shadow-lg shadow-gray-200/60 border border-gray-100 p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-fluid-xs font-medium text-gray-400 uppercase tracking-wide">Today's Total Sale</p>
+              <p className="text-fluid-xs font-medium text-gray-400 uppercase tracking-wide">
+                {activeLocation?.name ? `${activeLocation.name} Today's Total Sale` : "Today's Total Sale"}
+              </p>
               <p className="text-fluid-2xl font-extrabold text-emerald-600 mt-1.5 tracking-tight tabular-nums truncate">৳{formatMoney(todayTotal)}</p>
               <div className="flex items-center gap-1.5 mt-2">
                 <span className="inline-flex items-center gap-0.5 text-fluid-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
@@ -144,44 +167,53 @@ const Sales = () => {
             ) : sales.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-gray-400">No sales today yet</div>
             ) : (
-              sales.map((sale, i) => (
-                <div
-                  key={sale.id}
-                  onClick={() => handleSaleClick(sale)}
-                  className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-gray-50 transition ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== sales.length - 1 ? "border-b border-gray-100/80" : ""}`}
-                >
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                    <Receipt className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-bold text-gray-800">{shortId(sale.id)}</p>
-                      <Badge
-                        className={`text-[10px] px-2 py-0.5 font-semibold ${
-                          sale.status === "completed"
-                            ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                            : sale.status === "pending_approval"
-                              ? "bg-amber-100 text-amber-800 border-amber-200"
-                              : sale.status === "voided"
-                                ? "bg-red-100 text-red-700 border-red-200"
-                                : "bg-gray-100 text-gray-500 border-gray-200"
-                        }`}
-                      >
-                        {sale.status === "completed"
-                          ? "Complete"
-                          : sale.status === "pending_approval"
-                            ? "Awaiting approval"
-                            : sale.status === "voided"
-                              ? "Voided"
-                              : "Draft"}
-                      </Badge>
-
+              sales.map((sale, i) => {
+                const saleLoc = locations.find((l) => l.id === sale.location_id);
+                return (
+                  <div
+                    key={sale.id}
+                    onClick={() => handleSaleClick(sale)}
+                    className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-gray-50 transition ${i % 2 === 1 ? "bg-emerald-50/40" : ""} ${i !== sales.length - 1 ? "border-b border-gray-100/80" : ""}`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                      <Receipt className="w-5 h-5 text-emerald-500" />
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatTime(sale.created_at)}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-gray-800">{shortId(sale.id)}</p>
+                          {saleLoc && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-medium">
+                              {saleLoc.code || saleLoc.name.split(" ")[0]}
+                            </span>
+                          )}
+                        </div>
+                        <Badge
+                          className={`text-[10px] px-2 py-0.5 font-semibold ${
+                            sale.status === "completed"
+                              ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                              : sale.status === "pending_approval"
+                                ? "bg-amber-100 text-amber-800 border-amber-200"
+                                : sale.status === "voided"
+                                  ? "bg-red-100 text-red-700 border-red-200"
+                                  : "bg-gray-100 text-gray-500 border-gray-200"
+                          }`}
+                        >
+                          {sale.status === "completed"
+                            ? "Complete"
+                            : sale.status === "pending_approval"
+                              ? "Awaiting approval"
+                              : sale.status === "voided"
+                                ? "Voided"
+                                : "Draft"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatTime(sale.created_at)}</p>
+                    </div>
+                    <p className="text-sm font-bold text-emerald-600">৳{formatMoney(sale.total)}</p>
                   </div>
-                  <p className="text-sm font-bold text-emerald-600">৳{formatMoney(sale.total)}</p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

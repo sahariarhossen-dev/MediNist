@@ -40,10 +40,11 @@ interface Props {
   pharmacyId: string;
   userId: string;
   cashInHand: number;
+  locationId?: string | null;
   onSaved: () => void;
 }
 
-const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, cashInHand, onSaved }: Props) => {
+const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, cashInHand, locationId, onSaved }: Props) => {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -112,6 +113,7 @@ const LogTransactionSheet = ({ open, onOpenChange, date, pharmacyId, userId, cas
       category,
       party_name: values.party_name,
       amount: values.amount,
+      location_id: locationId || null,
       occurred_at: occurred.toISOString(),
     });
 

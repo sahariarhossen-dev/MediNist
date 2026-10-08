@@ -17,10 +17,13 @@ import {
 import { SmallCircularProgress as CircularProgress } from "@/components/staff/PerformanceWidgets";
 import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
 import ProductTargetsList from "@/components/staff/ProductTargetsList";
+import ActiveBranchCard from "@/components/profile/ActiveBranchCard";
+import { useLocationStore } from "@/contexts/LocationContext";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user, profile, pharmacyName, signOut, refreshProfile } = useAuth();
+  const { activeLocation } = useLocationStore();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -36,7 +39,7 @@ const Profile = () => {
   const [securityOpen, setSecurityOpen] = useState(false);
 
   // ---- Personal performance analytics (self only) ----
-  const isAdmin = profile?.role === "admin";
+  const isOwner = (profile?.role || "").toLowerCase().trim() === "owner";
   const [monthSales, setMonthSales] = useState(0);
   const [monthCount, setMonthCount] = useState(0);
   const [weekSales, setWeekSales] = useState(0);
@@ -165,7 +168,7 @@ const Profile = () => {
     : 0;
 
   const saveTarget = async () => {
-    if (!user?.id || !profile?.pharmacy_id || !isAdmin) return;
+    if (!user?.id || !profile?.pharmacy_id || !isOwner) return;
     setSavingTarget(true);
     const { error } = await supabase
       .from("staff_settings" as any)
@@ -327,7 +330,12 @@ const Profile = () => {
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
         <p className="mt-3 text-base font-semibold text-foreground">{profile?.full_name || "User"}</p>
-        <p className="text-xs text-muted-foreground">{pharmacyName || "—"}</p>
+        <p className="text-xs text-muted-foreground">{activeLocation?.name || "—"}</p>
+      </div>
+
+      {/* Active Branch / Current Workspace Card */}
+      <div className="px-5 pb-4">
+        <ActiveBranchCard />
       </div>
 
       {/* Identity Card */}
@@ -403,7 +411,7 @@ const Profile = () => {
         <Card className="border-0 shadow-sm rounded-2xl bg-card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-foreground">Monthly Target</h2>
-            {isAdmin && !editingTarget && (
+            {isOwner && !editingTarget && (
               <button
                 onClick={() => { setDraftTarget(monthlyTarget); setEditingTarget(true); }}
                 className="p-1.5 rounded-full hover:bg-muted transition"

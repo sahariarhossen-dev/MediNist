@@ -4,6 +4,7 @@ import { Crown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocationStore } from "@/contexts/LocationContext";
 
 interface Row {
   user_id: string;
@@ -38,6 +39,7 @@ const TopSalesPerformers = ({
   pharmacyId: string | undefined;
   timeRange?: string;
 }) => {
+  const { activeLocation } = useLocationStore();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,14 +48,20 @@ const TopSalesPerformers = ({
     const from = getRangeStart(timeRange).toISOString();
     const to = endOfDay(new Date()).toISOString();
 
+    let salesQ = supabase
+      .from("sales")
+      .select("user_id,total,location_id")
+      .eq("pharmacy_id", pharmacyId)
+      .eq("status", "completed")
+      .gte("created_at", from)
+      .lte("created_at", to);
+
+    if (activeLocation?.id) {
+      salesQ = salesQ.eq("location_id", activeLocation.id);
+    }
+
     const [salesRes, namesRes] = await Promise.all([
-      supabase
-        .from("sales")
-        .select("user_id,total")
-        .eq("pharmacy_id", pharmacyId)
-        .eq("status", "completed")
-        .gte("created_at", from)
-        .lte("created_at", to),
+      salesQ,
       supabase.rpc("get_pharmacy_member_names"),
     ]);
 
@@ -78,7 +86,7 @@ const TopSalesPerformers = ({
 
     setRows(aggregated);
     setLoading(false);
-  }, [pharmacyId, timeRange]);
+  }, [pharmacyId, timeRange, activeLocation?.id]);
 
   useEffect(() => {
     fetchData();

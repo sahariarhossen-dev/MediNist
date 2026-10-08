@@ -20,11 +20,19 @@ const PAGE = 1000;
 
 async function pageAll<T>(
   build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  fallbackBuild?: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const out: T[] = [];
+  let useFallback = false;
   for (let from = 0; ; from += PAGE) {
     const to = from + PAGE - 1;
-    const { data, error } = await build(from, to);
+    let { data, error } = useFallback && fallbackBuild ? await fallbackBuild(from, to) : await build(from, to);
+    if (error && !useFallback && fallbackBuild && /location_id/i.test((error as any)?.message || "")) {
+      useFallback = true;
+      const res = await fallbackBuild(from, to);
+      data = res.data;
+      error = res.error;
+    }
     if (error || !data || data.length === 0) break;
     out.push(...data);
     if (data.length < PAGE) break;
@@ -35,34 +43,86 @@ async function pageAll<T>(
 export async function getOpeningBalance(
   pharmacyId: string,
   dayStartISO: string,
+  locationId?: string | null,
 ): Promise<number> {
+  const isBranchSpecific = Boolean(locationId && locationId !== "all");
+
   const [salesRows, duesRows, txRows, settingsRes] = await Promise.all([
-    pageAll<{ total: number | string }>((f, t) =>
-      supabase
-        .from("sales")
-        .select("total")
-        .eq("pharmacy_id", pharmacyId)
-        .eq("status", "completed")
-        .lt("created_at", dayStartISO)
-        .range(f, t),
+    pageAll<{ total: number | string }>(
+      (f, t) => {
+        let q = supabase
+          .from("sales")
+          .select("total")
+          .eq("pharmacy_id", pharmacyId)
+          .eq("status", "completed")
+          .lt("created_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
+      (f, t) => {
+        let q = supabase
+          .from("sales")
+          .select("total")
+          .eq("pharmacy_id", pharmacyId)
+          .eq("status", "completed")
+          .lt("created_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
     ),
-    pageAll<{ amount: number | string }>((f, t) =>
-      supabase
-        .from("customer_ledger")
-        .select("amount")
-        .eq("pharmacy_id", pharmacyId)
-        .eq("entry_type", "due")
-        .lt("occurred_at", dayStartISO)
-        .range(f, t),
+    pageAll<{ amount: number | string }>(
+      (f, t) => {
+        let q = supabase
+          .from("customer_ledger")
+          .select("amount")
+          .eq("pharmacy_id", pharmacyId)
+          .eq("entry_type", "due")
+          .lt("occurred_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
+      (f, t) => {
+        let q = supabase
+          .from("customer_ledger")
+          .select("amount")
+          .eq("pharmacy_id", pharmacyId)
+          .eq("entry_type", "due")
+          .lt("occurred_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
     ),
     pageAll<{ direction: string; category: string; amount: number | string }>(
-      (f, t) =>
-        supabase
+      (f, t) => {
+        let q = supabase
           .from("cash_transactions")
           .select("direction,category,amount")
           .eq("pharmacy_id", pharmacyId)
-          .lt("occurred_at", dayStartISO)
-          .range(f, t),
+          .lt("occurred_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
+      (f, t) => {
+        let q = supabase
+          .from("cash_transactions")
+          .select("direction,category,amount")
+          .eq("pharmacy_id", pharmacyId)
+          .lt("occurred_at", dayStartISO);
+        if (isBranchSpecific) {
+          q = q.eq("location_id", locationId!);
+        }
+        return q.range(f, t);
+      },
     ),
     supabase
       .from("pharmacy_settings")
@@ -71,10 +131,12 @@ export async function getOpeningBalance(
       .maybeSingle(),
   ]);
 
-  const startingCash = Number(
-    (settingsRes.data as { starting_cash_balance?: number | string } | null)
-      ?.starting_cash_balance ?? 0,
-  );
+  const startingCash = isBranchSpecific
+    ? 0
+    : Number(
+        (settingsRes.data as { starting_cash_balance?: number | string } | null)
+          ?.starting_cash_balance ?? 0,
+      );
 
   const totalSales = salesRows.reduce((s, r) => s + Number(r.total || 0), 0);
   const totalDues = duesRows.reduce((s, r) => s + Number(r.amount || 0), 0);

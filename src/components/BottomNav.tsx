@@ -1,16 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutGrid, ShoppingCart, MoreHorizontal, MessagesSquare } from "lucide-react";
+import { LayoutGrid, ShoppingCart, Truck, MoreHorizontal, MessagesSquare } from "lucide-react";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useScrollContainer } from "@/contexts/ScrollContainerContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
-  { label: "Sales", icon: ShoppingCart, path: "/sales" },
-  { label: "Chats", icon: MessagesSquare, path: "/workspace" },
-  { label: "More", icon: MoreHorizontal, path: "/more" },
-];
 
 const BottomNav = () => {
   const { pathname } = useLocation();
@@ -18,6 +12,22 @@ const BottomNav = () => {
   const { element } = useScrollContainer();
   const direction = useScrollDirection(element);
   const keyboardOpen = useKeyboardOpen();
+  const { activeLocation, isWarehouse: ctxIsWarehouse } = useLocationStore();
+
+  const isWarehouse =
+    ctxIsWarehouse ??
+    (activeLocation?.type === "warehouse" || (activeLocation?.type as string) === "godown");
+
+  const navItems = [
+    { label: "Dashboard", icon: LayoutGrid, path: "/dashboard" },
+    {
+      label: isWarehouse ? "Movements" : "Sales",
+      icon: isWarehouse ? Truck : ShoppingCart,
+      path: isWarehouse ? "/stock-movements" : "/sales",
+    },
+    { label: "Chats", icon: MessagesSquare, path: "/workspace" },
+    { label: "More", icon: MoreHorizontal, path: "/more" },
+  ];
 
   const hidden = keyboardOpen || direction === "down";
 
@@ -40,8 +50,6 @@ const BottomNav = () => {
               type="button"
               onClick={() => {
                 if (isActive) return;
-                // Root-tab switches always replace, so the history stack
-                // never accumulates tab-to-tab entries.
                 navigate(path, { replace: true });
               }}
               className="flex flex-col items-center gap-0.5 flex-1 py-1"

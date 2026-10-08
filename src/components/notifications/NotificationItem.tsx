@@ -1,4 +1,4 @@
-import { AlertCircle, FileText, Megaphone } from "lucide-react";
+import { AlertCircle, FileText, Megaphone, Tag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/relativeTime";
@@ -15,6 +15,7 @@ const ICON_MAP: Record<NotificationCategory, { Icon: any; bg: string; fg: string
   due: { Icon: AlertCircle, bg: "bg-orange-100", fg: "text-orange-600" },
   note: { Icon: FileText, bg: "bg-blue-100", fg: "text-blue-600" },
   broadcast: { Icon: Megaphone, bg: "bg-purple-100", fg: "text-purple-600" },
+  price_update: { Icon: Tag, bg: "bg-emerald-100", fg: "text-emerald-600" },
 };
 
 const NotificationItem = ({ notification, unread, onRead, onClose }: Props) => {

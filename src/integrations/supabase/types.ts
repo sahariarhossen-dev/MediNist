@@ -264,6 +264,7 @@ export type Database = {
           created_at: string
           direction: string
           id: string
+          location_id: string | null
           note: string | null
           occurred_at: string
           party_name: string | null
@@ -277,6 +278,7 @@ export type Database = {
           created_at?: string
           direction: string
           id?: string
+          location_id?: string | null
           note?: string | null
           occurred_at?: string
           party_name?: string | null
@@ -290,6 +292,7 @@ export type Database = {
           created_at?: string
           direction?: string
           id?: string
+          location_id?: string | null
           note?: string | null
           occurred_at?: string
           party_name?: string | null
@@ -470,6 +473,7 @@ export type Database = {
           description: string | null
           entry_type: string
           id: string
+          location_id: string | null
           occurred_at: string
           pharmacy_id: string
           sale_id: string | null
@@ -482,6 +486,7 @@ export type Database = {
           description?: string | null
           entry_type: string
           id?: string
+          location_id?: string | null
           occurred_at?: string
           pharmacy_id: string
           sale_id?: string | null
@@ -494,6 +499,7 @@ export type Database = {
           description?: string | null
           entry_type?: string
           id?: string
+          location_id?: string | null
           occurred_at?: string
           pharmacy_id?: string
           sale_id?: string | null
@@ -602,6 +608,7 @@ export type Database = {
           declared_cash: number | null
           discrepancy: number | null
           id: string
+          location_id: string | null
           net_balance: number
           notes: string | null
           pharmacy_id: string
@@ -621,6 +628,7 @@ export type Database = {
           declared_cash?: number | null
           discrepancy?: number | null
           id?: string
+          location_id?: string | null
           net_balance?: number
           notes?: string | null
           pharmacy_id: string
@@ -640,6 +648,7 @@ export type Database = {
           declared_cash?: number | null
           discrepancy?: number | null
           id?: string
+          location_id?: string | null
           net_balance?: number
           notes?: string | null
           pharmacy_id?: string
@@ -846,6 +855,7 @@ export type Database = {
           format: string | null
           generic_name: string | null
           id: string
+          location_id: string | null
           name: string
           pack_size: string | null
           packaging_type: string | null
@@ -870,6 +880,7 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          location_id?: string | null
           name: string
           pack_size?: string | null
           packaging_type?: string | null
@@ -894,6 +905,7 @@ export type Database = {
           format?: string | null
           generic_name?: string | null
           id?: string
+          location_id?: string | null
           name?: string
           pack_size?: string | null
           packaging_type?: string | null
@@ -1409,6 +1421,7 @@ export type Database = {
           discount_amount: number
           discount_percent: number
           id: string
+          location_id: string | null
           pharmacy_id: string
           sale_type: string
           status: string
@@ -1421,6 +1434,7 @@ export type Database = {
           discount_amount?: number
           discount_percent?: number
           id?: string
+          location_id?: string | null
           pharmacy_id: string
           sale_type?: string
           status?: string
@@ -1433,6 +1447,7 @@ export type Database = {
           discount_amount?: number
           discount_percent?: number
           id?: string
+          location_id?: string | null
           pharmacy_id?: string
           sale_type?: string
           status?: string

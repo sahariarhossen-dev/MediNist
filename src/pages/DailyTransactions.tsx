@@ -7,6 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { cn } from "@/lib/utils";
 import LogTransactionSheet from "@/components/transactions/LogTransactionSheet";
 import { getOpeningBalance } from "@/lib/openingBalance";
@@ -19,6 +20,7 @@ type CashTx = {
   party_name: string | null;
   amount: number;
   note: string | null;
+  location_id?: string | null;
   synthetic?: boolean;
 };
 
@@ -27,6 +29,7 @@ type SaleRow = {
   created_at: string;
   total: number;
   sale_type: string;
+  location_id?: string | null;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -49,6 +52,8 @@ type PreviousClosing = {
 const DailyTransactions = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { activeLocation } = useLocationStore();
+  const isOwner = (profile?.role || "").toLowerCase().trim() === "owner";
   const isManager = profile?.role === "manager";
   const isSalesman = profile?.role === "salesman";
   const minManagerDate = useMemo(() => subDays(startOfDay(new Date()), 6), []);
@@ -60,6 +65,7 @@ const DailyTransactions = () => {
       setDate(new Date());
     }
   }, [isManager, date, minManagerDate]);
+
   const [loading, setLoading] = useState(true);
   const [salesRows, setSalesRows] = useState<SaleRow[]>([]);
   const [txs, setTxs] = useState<CashTx[]>([]);
@@ -74,30 +80,42 @@ const DailyTransactions = () => {
     const from = startOfDay(date).toISOString();
     const to = endOfDay(date).toISOString();
 
+    let salesQuery = supabase
+      .from("sales")
+      .select("id,created_at,total,sale_type,location_id")
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .eq("status", "completed")
+      .gte("created_at", from)
+      .lte("created_at", to)
+      .order("created_at", { ascending: false });
+
+    let txQuery = supabase
+      .from("cash_transactions")
+      .select("id,occurred_at,direction,category,party_name,amount,note,location_id")
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .gte("occurred_at", from)
+      .lte("occurred_at", to)
+      .order("occurred_at", { ascending: false });
+
+    let duesQuery = supabase
+      .from("customer_ledger")
+      .select("amount,entry_type,location_id")
+      .eq("pharmacy_id", profile.pharmacy_id)
+      .eq("entry_type", "due")
+      .gte("occurred_at", from)
+      .lte("occurred_at", to);
+
+    if (activeLocation?.id) {
+      salesQuery = salesQuery.eq("location_id", activeLocation.id);
+      txQuery = txQuery.eq("location_id", activeLocation.id);
+      duesQuery = duesQuery.eq("location_id", activeLocation.id);
+    }
+
     const [salesRes, txRes, duesRes, opening] = await Promise.all([
-      supabase
-        .from("sales")
-        .select("id,created_at,total,sale_type")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .eq("status", "completed")
-        .gte("created_at", from)
-        .lte("created_at", to)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("cash_transactions")
-        .select("id,occurred_at,direction,category,party_name,amount,note")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .gte("occurred_at", from)
-        .lte("occurred_at", to)
-        .order("occurred_at", { ascending: false }),
-      supabase
-        .from("customer_ledger")
-        .select("amount,entry_type")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .eq("entry_type", "due")
-        .gte("occurred_at", from)
-        .lte("occurred_at", to),
-      getOpeningBalance(profile.pharmacy_id, from),
+      salesQuery,
+      txQuery,
+      duesQuery,
+      getOpeningBalance(profile.pharmacy_id, from, activeLocation?.id || null),
     ]);
 
     setSalesRows((salesRes.data ?? []) as SaleRow[]);
@@ -114,7 +132,7 @@ const DailyTransactions = () => {
     );
     setStartingBalance(opening);
     setLoading(false);
-  }, [profile?.pharmacy_id, profile?.id, date]);
+  }, [profile?.pharmacy_id, profile?.id, date, activeLocation?.id]);
 
   useEffect(() => {
     loadData();
@@ -134,6 +152,7 @@ const DailyTransactions = () => {
     const channel = supabase
       .channel(`daily-tx-${pharmacyId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "sales", filter }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_transactions", filter }, debounced)
       .on("postgres_changes", { event: "*", schema: "public", table: "customer_ledger", filter }, debounced)
       .subscribe();
     return () => {
@@ -215,11 +234,16 @@ const DailyTransactions = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-10">
 
       {/* Title row */}
-      <div className="flex items-center justify-between px-page pt-3 pb-2">
-        <h1 className="font-semibold text-fluid-base text-gray-800">Daily Transactions</h1>
+      <div className="flex items-center justify-between px-page pt-3 pb-1">
+        <div>
+          <h1 className="font-semibold text-fluid-base text-gray-800">Daily Transactions</h1>
+          <p className="text-[11px] text-gray-400 font-medium">
+            {activeLocation?.name ? `${activeLocation.name} • Daily Activity` : "Daily cash & sales activity"}
+          </p>
+        </div>
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 h-9 rounded-xl bg-white">
+            <Button variant="outline" size="sm" className="gap-2 h-9 rounded-xl bg-white shadow-xs">
               <CalendarIcon size={16} className="text-blue-600" />
               <span className="text-fluid-xs font-medium">{format(date, "d MMM")}</span>
             </Button>
@@ -249,10 +273,26 @@ const DailyTransactions = () => {
 
       {/* Summary cards */}
       <div className="px-page grid grid-cols-2 gap-3 mt-2">
-        <SummaryCard label="Total Sales" value={salesTotal} tone="blue" />
-        <SummaryCard label="Cash Sales" value={cashSalesTotal} tone="blue-soft" />
-        <SummaryCard label="Total Payments" value={totalPayments} tone="teal" />
-        <SummaryCard label="Today's Due" value={duesOpen} tone="teal-soft" />
+        <SummaryCard
+          label="Total Gross Sales"
+          value={salesTotal}
+          tone="blue"
+        />
+        <SummaryCard
+          label="Total Cash Sales"
+          value={cashSalesTotal}
+          tone="blue-soft"
+        />
+        <SummaryCard
+          label="Total Payments"
+          value={totalPayments}
+          tone="teal"
+        />
+        <SummaryCard
+          label="Today's Due"
+          value={duesOpen}
+          tone="teal-soft"
+        />
       </div>
 
       {/* Cash in Hand */}
@@ -261,7 +301,9 @@ const DailyTransactions = () => {
           <Wallet size={20} className="text-blue-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-fluid-xs text-gray-500">Cash in Hand</p>
+          <p className="text-fluid-xs text-gray-500">
+            Cash in Drawer
+          </p>
           <p className="text-fluid-lg font-bold text-gray-900 tabular-nums truncate">৳{formatBDT(cashInHand)}</p>
         </div>
         <p className="text-fluid-xs text-gray-400 text-right leading-tight whitespace-nowrap">
@@ -378,6 +420,7 @@ const DailyTransactions = () => {
             pharmacyId={profile.pharmacy_id}
             userId={profile.id}
             cashInHand={cashInHand}
+            locationId={activeLocation?.id || null}
             onSaved={loadData}
           />
         </>

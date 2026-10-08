@@ -9,12 +9,39 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useLocationStore } from "@/contexts/LocationContext";
+import { StockDistributionItem } from "@/types/inventory";
+import { MOCK_INVENTORY_MEDICINES } from "@/data/mockMedicines";
+import {
+  calculateTotalStock,
+  getStockForLocation,
+  getLocationBreakdown,
+} from "@/lib/multiLocationStock";
+import { cn } from "@/lib/utils";
 import { totalPiecesToTriUnitObj, boxesToPieces, isSingleUnit, looksSingleUnit, classifyCatalogPack } from "@/lib/stockUtils";
 import { truncateName, truncateStrength } from "@/lib/formatUtils";
 import { normalizeForSearch } from "@/lib/searchUtils";
 import { toFunctionalType, getProductTypeChipClasses, getStandardizedType, getDisplayFormat, getDisplayCategory } from "@/lib/productType";
 import { useDebounce } from "@/hooks/useDebounce";
 import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
+import {
+  normalizePricing,
+  resolveItemSellingPrice,
+  resolvePcsPerBox,
+} from "@/lib/pricingUtils";
 import {
   InventoryUpdateModal,
   MedicineSelectionItem,
@@ -27,6 +54,11 @@ interface Medicine {
   company_name: string | null;
   price: number | null;
   stock_quantity: number | null;
+  stock_distribution?: StockDistributionItem[];
+  location_id?: string | null;
+  branch_id?: string | null;
+  medicine_id?: string | null;
+  master_medicine_id?: string | null;
   strip_per_pack: number | null;
   pcs_per_strip: number | null;
   product_type: string | null;
@@ -38,6 +70,33 @@ interface Medicine {
   pack_size?: string | null;
   expiry_date?: string | null;
 }
+
+/**
+ * Returns a consistent canonical key representing a unique medicine
+ * to safely group duplicate rows across multiple branches.
+ */
+const getMedicineIdentityKey = (m: {
+  id?: string;
+  medicine_id?: string | null;
+  master_medicine_id?: string | null;
+  masterId?: string | null;
+  name?: string | null;
+  company_name?: string | null;
+  company?: string | null;
+  product_size?: string | null;
+  strength?: string | null;
+  product_type?: string | null;
+  unit_format?: string | null;
+}): string => {
+  if (m.medicine_id) return `med_${m.medicine_id}`;
+  if (m.master_medicine_id) return `master_${m.master_medicine_id}`;
+  if (m.masterId) return `master_${m.masterId}`;
+  const name = (m.name || "").trim().toLowerCase();
+  const company = (m.company_name || m.company || "").trim().toLowerCase();
+  const size = (m.product_size || m.strength || "").trim().toLowerCase();
+  const format = (m.product_type || m.unit_format || "").trim().toLowerCase();
+  return `${name}|${company}|${size}|${format}`;
+};
 
 interface MasterMedicine {
   id: string;
@@ -56,31 +115,100 @@ interface MasterMedicine {
 // Catalog search is hyphen- and space-insensitive via the
 // `search_master_medicines` RPC (normalizes both sides to [a-z0-9]).
 
-const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
+export const getHumanStockBreakdown = (
+  totalPcs: number,
+  stripPerPack: number | null,
+  pcsPerStrip: number | null,
+  productType?: string | null
+): { primary: string; subtext: string | null } => {
   if (looksSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack, product_type: productType })) {
-    return (
-      <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap">
-        {totalPcs}
-      </span>
-    );
+    return {
+      primary: `${totalPcs} Pcs`,
+      subtext: null,
+    };
   }
+
   const { boxes, strips, pcs } = totalPiecesToTriUnitObj(totalPcs, stripPerPack, pcsPerStrip);
+  const spp = stripPerPack || 1;
+  const pps = pcsPerStrip || 1;
+  const hasBoxes = spp > 1;
+  const hasStrips = pps > 1;
+
+  if (hasBoxes && hasStrips) {
+    const primary = `${boxes} Bx ${strips} St${pcs > 0 ? ` ${pcs} Pcs` : ""}`;
+    return {
+      primary,
+      subtext: `${totalPcs} Pcs`,
+    };
+  }
+
+  if (hasBoxes) {
+    return {
+      primary: `${boxes} Bx${pcs > 0 ? ` ${pcs} Pcs` : ""}`,
+      subtext: `${totalPcs} Pcs`,
+    };
+  }
+
+  if (hasStrips) {
+    return {
+      primary: `${strips} St${pcs > 0 ? ` ${pcs} Pcs` : ""}`,
+      subtext: `${totalPcs} Pcs`,
+    };
+  }
+
+  return {
+    primary: `${totalPcs} Pcs`,
+    subtext: null,
+  };
+};
+
+const TriUnitDisplay = ({ totalPcs, stripPerPack, pcsPerStrip, productType }: { totalPcs: number; stripPerPack: number | null; pcsPerStrip: number | null; productType?: string | null }) => {
+  const stock = getHumanStockBreakdown(totalPcs, stripPerPack, pcsPerStrip, productType);
   return (
-    <span className="font-mono font-bold text-gray-900 tabular-nums whitespace-nowrap text-[11px]">
-      {boxes}
-      <span className="text-gray-300 mx-1">•</span>
-      {strips}
-      <span className="text-gray-300 mx-1">•</span>
-      {pcs}
+    <span className="font-bold text-slate-900 tabular-nums whitespace-nowrap text-xs">
+      {stock.primary}
     </span>
   );
+};
+
+const BRANCH_COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
+
+const formatDosageForm = (form?: string | null): string => {
+  if (!form) return "";
+  const trimmed = form.trim();
+  if (trimmed.length > 15) {
+    return `${trimmed.slice(0, 14)}...`;
+  }
+  return trimmed;
 };
 
 const Inventory = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const refreshToken = (location.state as { refresh?: number } | null)?.refresh ?? 0;
+  const [refreshToken, setRefreshToken] = useState<number>(
+    () => (location.state as { refresh?: number } | null)?.refresh ?? 0
+  );
+
+  useEffect(() => {
+    const navRefresh = (location.state as { refresh?: number } | null)?.refresh;
+    if (typeof navRefresh === "number") {
+      setRefreshToken((prev) => prev + 1);
+    }
+  }, [location.state]);
   const { profile, pharmacyName } = useAuth();
+  const { locations, activeLocation, currentUserRole } = useLocationStore();
+  const effectiveRole = (currentUserRole || profile?.role || "").toLowerCase();
+  const isSalesman = effectiveRole === "salesman";
+
+  // Location filter state: defaults to activeLocation.id if present, or "all"
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => activeLocation?.id || "all");
+
+  useEffect(() => {
+    if (activeLocation?.id) {
+      setSelectedLocationId(activeLocation.id);
+    }
+  }, [activeLocation?.id]);
+
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [catalog, setCatalog] = useState<MasterMedicine[]>([]);
   const [catalogCompanies, setCatalogCompanies] = useState<string[]>([]);
@@ -114,18 +242,28 @@ const Inventory = () => {
   useEffect(() => {
     const fetchData = async () => {
       if (!profile?.pharmacy_id) {
+        setMedicines([]);
         setLoading(false);
         return;
       }
-      const medsQuery = supabase
-        .from("medicines")
-        .select("*")
-        .eq("pharmacy_id", profile.pharmacy_id)
-        .order("name", { ascending: true });
-      // Products awaiting the owner's deletion decision are hidden from staff
-      if (profile.role !== "admin") medsQuery.is("deletion_requested_at" as any, null);
-      const medsRes = await medsQuery;
-      setMedicines(medsRes.data || []);
+      try {
+        const medsQuery = supabase
+          .from("medicines")
+          .select("*")
+          .eq("pharmacy_id", profile.pharmacy_id)
+          .order("name", { ascending: true });
+        // Products awaiting the owner's deletion decision are hidden from staff
+        if ((profile?.role || "").toLowerCase().trim() !== "owner") medsQuery.is("deletion_requested_at" as any, null);
+        const medsRes = await medsQuery;
+        if (medsRes.data && medsRes.data.length > 0) {
+          setMedicines(medsRes.data as Medicine[]);
+        } else {
+          setMedicines([]);
+        }
+      } catch (err) {
+        console.warn("[Inventory] Fetch failed:", err);
+        setMedicines([]);
+      }
 
       setLoading(false);
 
@@ -156,6 +294,17 @@ const Inventory = () => {
     };
     fetchData();
   }, [profile?.pharmacy_id, profile?.role, refreshToken]);
+
+  // Auto-refresh when transfer is accepted or stock is modified elsewhere in the app
+  useEffect(() => {
+    const handleInventoryUpdate = () => {
+      setRefreshToken((prev) => prev + 1);
+    };
+    window.addEventListener("inventory-updated", handleInventoryUpdate);
+    return () => {
+      window.removeEventListener("inventory-updated", handleInventoryUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (searchOpen && searchRef.current) {
@@ -190,23 +339,155 @@ const Inventory = () => {
     setCompanySearch("");
   };
 
-  // Filter local medicines
-  const filteredMedicines = useMemo(
-    () => {
-      let result = medicines;
-      if (searchQuery) {
-        const q = normalizeForSearch(searchQuery);
-        if (q) {
-          result = result.filter((m) => normalizeForSearch(m.name).includes(q));
+  // Selected location resolution
+  const selectedLocation = isSalesman ? activeLocation.id : selectedLocationId;
+  const isViewingAll = !isSalesman && selectedLocation === "all";
+
+  // Filter local medicines with efficient grouping and branch-wise filtering
+  const filteredMedicines = useMemo(() => {
+    let result = medicines;
+    if (searchQuery) {
+      const q = normalizeForSearch(searchQuery);
+      if (q) {
+        result = result.filter((m) => normalizeForSearch(m.name).includes(q));
+      }
+    }
+    if (selectedCompanies.size > 0) {
+      result = result.filter((m) => m.company_name && selectedCompanies.has(m.company_name));
+    }
+
+    if (isViewingAll) {
+      // 1. DATA GROUPING LOGIC (All Locations / Global):
+      // - Do NOT render duplicate rows for the same medicine.
+      // - Group inventory items by unique medicine_id (or unique medicine identity).
+      // - Aggregate the stock: Calculate total stock by summing up quantities across all branches for that medicine.
+      // - Render exactly ONE card per medicine in the list.
+      const groupedMap = result.reduce((acc, item) => {
+        const key = getMedicineIdentityKey(item);
+        const existing = acc.get(key);
+
+        if (!existing) {
+          // Normalize initial stock_distribution
+          let initialDist: StockDistributionItem[] = [];
+          if (Array.isArray(item.stock_distribution) && item.stock_distribution.length > 0) {
+            initialDist = item.stock_distribution.map((d) => ({
+              location_id: d.location_id,
+              qty: Number(d.qty) || 0,
+            }));
+          } else if (item.branch_id || item.location_id) {
+            const loc = (item.branch_id || item.location_id)!;
+            initialDist = [{ location_id: loc, qty: Number(item.stock_quantity) || 0 }];
+          }
+
+          const totalStock = initialDist.length > 0
+            ? calculateTotalStock(initialDist, null)
+            : Number(item.stock_quantity) || 0;
+
+          acc.set(key, {
+            ...item,
+            stock_quantity: totalStock,
+            stock_distribution: initialDist,
+          });
+        } else {
+          // Merge multi-branch stock distribution
+          const distMap = new Map<string, number>();
+
+          // Existing distributions
+          if (Array.isArray(existing.stock_distribution)) {
+            for (const d of existing.stock_distribution) {
+              if (d.location_id) {
+                distMap.set(d.location_id, (distMap.get(d.location_id) || 0) + (Number(d.qty) || 0));
+              }
+            }
+          }
+
+          // Item's distributions or location stock
+          if (Array.isArray(item.stock_distribution) && item.stock_distribution.length > 0) {
+            for (const d of item.stock_distribution) {
+              if (d.location_id) {
+                distMap.set(d.location_id, (distMap.get(d.location_id) || 0) + (Number(d.qty) || 0));
+              }
+            }
+          } else if (item.branch_id || item.location_id) {
+            const loc = (item.branch_id || item.location_id)!;
+            const q = Number(item.stock_quantity) || 0;
+            distMap.set(loc, (distMap.get(loc) || 0) + q);
+          }
+
+          const mergedDist = Array.from(distMap.entries()).map(([location_id, qty]) => ({
+            location_id,
+            qty,
+          }));
+
+          const aggregatedStock = mergedDist.length > 0
+            ? calculateTotalStock(mergedDist, null)
+            : (existing.stock_quantity || 0) + (Number(item.stock_quantity) || 0);
+
+          existing.stock_quantity = aggregatedStock;
+          existing.stock_distribution = mergedDist;
+
+          // Preserve non-empty fields
+          if (!existing.company_name && item.company_name) existing.company_name = item.company_name;
+          if (!existing.generic_name && item.generic_name) existing.generic_name = item.generic_name;
+          if (!existing.price && item.price) existing.price = item.price;
+          if (!existing.product_size && (item.product_size || item.strength)) {
+            existing.product_size = item.product_size || item.strength;
+          }
         }
-      }
-      if (selectedCompanies.size > 0) {
-        result = result.filter((m) => m.company_name && selectedCompanies.has(m.company_name));
-      }
-      return result;
-    },
-    [medicines, searchQuery, selectedCompanies]
-  );
+
+        return acc;
+      }, new Map<string, Medicine>());
+
+      return Array.from(groupedMap.values());
+    } else {
+      // 2. DATA FILTERING LOGIC (Specific Branch selected):
+      // - Strict branch isolation: A medicine row belongs strictly to ONE location_id.
+      // - Display only medicines existing in that specific branch.
+      // - Zero-Stock Visibility: Never auto-hide items with 0 stock.
+      const targetFilterLoc =
+        locations.find((l) => l.id === selectedLocation || l.code === selectedLocation) || {
+          id: selectedLocation,
+        };
+
+      const targetId = (selectedLocation || "").trim().toLowerCase();
+      const targetCode = targetFilterLoc.code?.trim().toLowerCase();
+
+      // Strict branch filter: only include rows that belong explicitly to this branch
+      const branchItems = result.filter((item: any) => {
+        const itemBranch = (item.location_id || item.branch_id || "").trim().toLowerCase();
+        return Boolean(itemBranch) && (itemBranch === targetId || (targetCode && itemBranch === targetCode));
+      });
+
+      // Group medicines by unique identity for the specific branch so no duplicate rows exist within a branch
+      const branchGroupedMap = branchItems.reduce((acc, item: any) => {
+        const key = getMedicineIdentityKey(item);
+        const branchStock = Number(item.stock_quantity) || 0;
+        const existing = acc.get(key);
+
+        if (!existing) {
+          acc.set(key, {
+            ...item,
+            branch_id: selectedLocation,
+            location_id: selectedLocation,
+            stock_quantity: branchStock,
+          });
+        } else {
+          existing.stock_quantity = (existing.stock_quantity || 0) + branchStock;
+        }
+
+        return acc;
+      }, new Map<string, Medicine>());
+
+      return Array.from(branchGroupedMap.values());
+    }
+  }, [
+    medicines,
+    searchQuery,
+    selectedCompanies,
+    selectedLocation,
+    isViewingAll,
+    locations,
+  ]);
 
   // Dual-section view is active whenever the user is filtering by company
   // or actively searching. Otherwise we show only the default inventory list.
@@ -245,23 +526,50 @@ const Inventory = () => {
     };
   }, [isDualMode, selectedCompanies, debouncedSearch]);
 
-  // Filter catalog results (exclude items already in local inventory).
-  // Server already filtered by company/search; we just dedupe against
-  // medicines already present in the local inventory.
+  // Filter catalog results (exclude items already present in the active branch's local inventory).
+  // Filter catalog results (exclude items already present in the active branch's local inventory).
+  // Uses localKeys mapped strictly over the active branch's filteredMedicines array (NOT the global medicines array).
+  // This ensures that if Branch B owns a product, Branch A and Branch C can still see it under "FROM CATALOG".
   const filteredCatalog = useMemo(() => {
     if (!isDualMode) return [];
     const norm = (s: string | null | undefined) => (s || "").trim().toLowerCase();
+    const normalizeStrict = (s: string | null | undefined) =>
+      (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // 1. Exact triple-key set from active branch's filteredMedicines
     const localKeys = new Set(
-      medicines.map(
+      filteredMedicines.map(
         (m) => `${norm(m.name)}|${norm(m.company_name)}|${norm(m.product_size)}`
       )
     );
-    const result = catalog.filter(
-      (m) =>
-        !localKeys.has(`${norm(m.brand_name)}|${norm(m.company)}|${norm(m.strength)}`)
+
+    // 2. Normalized brand+strength composite set to match despite spacing/symbol differences
+    const localCompositeKeys = new Set(
+      filteredMedicines.map(
+        (m) => `${normalizeStrict(m.name)}|${normalizeStrict(m.product_size)}`
+      )
     );
+
+    // 3. Fallback normalized full string (e.g. "Osartil 50" combined)
+    const localCombinedStrings = new Set(
+      filteredMedicines.map((m) =>
+        normalizeStrict(`${m.name || ""}${m.product_size || ""}`)
+      )
+    );
+
+    const result = catalog.filter((m) => {
+      const exactKey = `${norm(m.brand_name)}|${norm(m.company)}|${norm(m.strength)}`;
+      const compositeKey = `${normalizeStrict(m.brand_name)}|${normalizeStrict(m.strength)}`;
+      const combinedString = normalizeStrict(`${m.brand_name || ""}${m.strength || ""}`);
+
+      if (localKeys.has(exactKey)) return false;
+      if (localCompositeKeys.has(compositeKey)) return false;
+      if (combinedString && localCombinedStrings.has(combinedString)) return false;
+      return true;
+    });
+
     return result.sort((a, b) => a.brand_name.localeCompare(b.brand_name));
-  }, [catalog, medicines, isDualMode]);
+  }, [catalog, filteredMedicines, isDualMode]);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
@@ -285,19 +593,43 @@ const Inventory = () => {
       longPressFiredRef.current = false;
       return;
     }
+    const matchingMaster = (catalog || []).find(
+      (m) => m.brand_name.trim().toLowerCase() === med.name.trim().toLowerCase()
+    );
+    const pps = Number(med.pcs_per_strip) || Number(matchingMaster?.pcs_per_strip) || 1;
+    const spp = Number(med.strip_per_pack) || Number(matchingMaster?.strip_per_pack) || 1;
+    const pBox = Math.max(1, pps * spp);
+
+    const pricing = normalizePricing({
+      rawPrice: med.price,
+      pcsPerBox: pBox,
+      masterUnitPrice: matchingMaster?.unit_price,
+      productType: med.product_type || med.unit_format,
+    });
+
     setSelectedSheetMed({
       id: med.id,
+      medicine_id: med.medicine_id,
       name: med.name,
       company_name: med.company_name,
       product_type: med.product_type,
       unit_format: med.unit_format,
       product_size: med.product_size,
       generic_name: med.generic_name,
-      price: med.price,
+      price: pricing.unitPrice,
+      unit_price: pricing.unitPrice,
+      box_price: pricing.boxPrice,
+      piece_price: pricing.unitPrice,
+      purchase_price_box: pricing.purchasePriceBox,
+      purchase_price_unit: pricing.purchasePriceUnit,
+      masterUnitPrice: matchingMaster?.unit_price ?? null,
       stock_quantity: med.stock_quantity,
+      stock_distribution: med.stock_distribution,
+      location_id: med.location_id,
+      branch_id: med.branch_id,
       stock_alert: med.stock_alert,
-      pcs_per_strip: med.pcs_per_strip,
-      strip_per_pack: med.strip_per_pack,
+      pcs_per_strip: med.pcs_per_strip || (pps > 1 ? pps : undefined),
+      strip_per_pack: med.strip_per_pack || (spp > 1 ? spp : undefined),
       box_size: med.box_size,
       pack_size: med.pack_size,
       expiry_date: med.expiry_date,
@@ -319,6 +651,17 @@ const Inventory = () => {
       ? { pcs_per_strip: med.pcs_per_strip, strip_per_pack: med.strip_per_pack }
       : classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
 
+    const pps = Number(existing?.pcs_per_strip) || Number(catalogPcsPerStrip) || Number(med.pcs_per_strip) || 1;
+    const spp = Number(existing?.strip_per_pack) || Number(catalogStripPerPack) || Number(med.strip_per_pack) || 1;
+    const pBox = Math.max(1, pps * spp);
+
+    const pricing = normalizePricing({
+      rawPrice: existing?.price ?? med.unit_price,
+      pcsPerBox: pBox,
+      masterUnitPrice: med.unit_price,
+      productType: toFunctionalType(med.format),
+    });
+
     setSelectedSheetMed({
       id: existing?.id,
       masterId: med.id,
@@ -329,7 +672,13 @@ const Inventory = () => {
       product_size: med.strength,
       strength: med.strength,
       generic_name: med.generic_name,
-      price: existing?.price ?? med.unit_price,
+      price: pricing.unitPrice,
+      unit_price: pricing.unitPrice,
+      box_price: pricing.boxPrice,
+      piece_price: pricing.unitPrice,
+      purchase_price_box: pricing.purchasePriceBox,
+      purchase_price_unit: pricing.purchasePriceUnit,
+      masterUnitPrice: med.unit_price ?? null,
       stock_quantity: existing?.stock_quantity ?? 0,
       stock_alert: existing?.stock_alert ?? 0,
       pcs_per_strip: existing?.pcs_per_strip ?? catalogPcsPerStrip,
@@ -348,15 +697,47 @@ const Inventory = () => {
       return;
     }
 
+    const isAlreadyPersisted = Boolean((payload as any)._alreadyPersisted);
+
+    // Determine target branch: if specific branch is selected, assign to it; otherwise active location
+    const targetLocId =
+      payload.branch_id ||
+      payload.location_id ||
+      (selectedLocationId !== "all" ? selectedLocationId : activeLocation?.id || "");
+    const targetLoc = locations.find((l) => l.id === targetLocId || l.code === targetLocId);
+
+    const addedPieces =
+      typeof payload.totalAddedPieces === "number"
+        ? payload.totalAddedPieces
+        : payload.totalQtyPieces + (payload.freeQty || 0);
+
+    const resolvedUnitPrice =
+      payload.unitPrice > 0
+        ? payload.unitPrice
+        : payload.pcsPerBox > 1
+        ? Number((payload.salePrice / payload.pcsPerBox).toFixed(4))
+        : payload.salePrice;
+
+    const minAlert = payload.minQtyAlert ?? payload.minQty;
+
+    // 1. If stock inward was already persisted by InventoryUpdateModal with strict branch isolation:
+    // DO NOT execute secondary database mutations that risk modifying Main Branch!
+    // Simply synchronize local UI state to reflect the branch credit.
+    if (isAlreadyPersisted) {
+      await fetchData();
+      return;
+    }
+
     let targetId = payload.medicineId;
     let existingMed = targetId ? medicines.find((m) => m.id === targetId) : undefined;
 
-    if (!existingMed) {
+    if (!existingMed && targetLocId) {
       const { data: found } = await supabase
         .from("medicines")
         .select("*")
         .eq("pharmacy_id", profile.pharmacy_id)
-        .eq("name", payload.name)
+        .eq("location_id", targetLocId)
+        .ilike("name", payload.name)
         .maybeSingle();
       if (found) {
         existingMed = found as Medicine;
@@ -364,74 +745,71 @@ const Inventory = () => {
       }
     }
 
-    const addedPieces =
-      typeof payload.totalAddedPieces === "number"
-        ? payload.totalAddedPieces
-        : payload.totalQtyPieces + (payload.freeQty || 0);
-
     if (existingMed && targetId) {
       const currentStock = existingMed.stock_quantity || 0;
       const newStock = currentStock + addedPieces;
-      const updateData: any = {
+      const dbPayload: any = {
         stock_quantity: newStock,
       };
-      if (payload.salePrice > 0) updateData.price = payload.salePrice;
-      const minAlert = payload.minQtyAlert ?? payload.minQty;
-      if (typeof minAlert === "number" && minAlert >= 0) updateData.stock_alert = minAlert;
-      if (payload.expiryDate) updateData.expiry_date = payload.expiryDate;
-      if (payload.pcsPerBox > 1 && !existingMed.pcs_per_strip) {
-        updateData.pcs_per_strip = payload.pcsPerBox;
-        updateData.strip_per_pack = 1;
+      if (resolvedUnitPrice > 0) dbPayload.price = resolvedUnitPrice;
+      if (typeof minAlert === "number" && minAlert >= 0) dbPayload.stock_alert = minAlert;
+      if (payload.expiryDate) dbPayload.expiry_date = payload.expiryDate;
+      if (payload.pcsPerBox > 1) {
+        dbPayload.pcs_per_strip = payload.pcsPerBox;
+        dbPayload.strip_per_pack = 1;
+      }
+      if (targetLocId) {
+        dbPayload.location_id = targetLocId;
       }
 
-      const { error } = await supabase
-        .from("medicines")
-        .update(updateData)
-        .eq("id", targetId);
-
-      if (error) {
-        toast.error("Failed to update stock: " + error.message);
-        throw error;
+      try {
+        await supabase
+          .from("medicines")
+          .update(dbPayload)
+          .eq("id", targetId);
+      } catch (err) {
+        console.warn("[Inventory] Database update note:", err);
       }
 
-      toast.success(`${payload.name}: +${addedPieces} units added to stock`);
-      setMedicines((prev) =>
-        prev.map((m) => (m.id === targetId ? { ...m, ...updateData, stock_quantity: newStock } : m))
-      );
+      await fetchData();
     } else {
       const functionalType = toFunctionalType(payload.unitFormat);
       const productTypeBucket =
         functionalType === "Other" && payload.unitFormat ? payload.unitFormat : functionalType;
+      const finalLocId =
+        payload.branch_id ||
+        payload.location_id ||
+        (selectedLocationId !== "all" ? selectedLocationId : activeLocation?.id || "");
 
-      const { data: inserted, error } = await supabase
-        .from("medicines")
-        .insert({
-          pharmacy_id: profile.pharmacy_id,
-          name: payload.name,
-          company_name: payload.companyName || null,
-          product_type: productTypeBucket || "Tablet",
-          unit_format: payload.unitFormat || null,
-          product_size: payload.productSize || null,
-          price: payload.salePrice > 0 ? payload.salePrice : null,
-          stock_quantity: addedPieces,
-          stock_alert: payload.minQtyAlert ?? payload.minQty ?? 0,
-          pcs_per_strip: payload.pcsPerBox > 1 ? payload.pcsPerBox : 1,
-          strip_per_pack: 1,
-          generic_name: payload.genericName || null,
-          expiry_date: payload.expiryDate || null,
-        })
-        .select()
-        .single();
+      const insertPayload: any = {
+        pharmacy_id: profile.pharmacy_id,
+        name: payload.name.trim(),
+        company_name: payload.companyName || null,
+        product_type: productTypeBucket || "Tablet",
+        unit_format: payload.unitFormat || null,
+        product_size: payload.productSize || null,
+        price: resolvedUnitPrice > 0 ? resolvedUnitPrice : null,
+        stock_quantity: addedPieces,
+        stock_alert: payload.minQtyAlert ?? payload.minQty ?? 0,
+        pcs_per_strip: payload.pcsPerBox > 1 ? payload.pcsPerBox : 1,
+        strip_per_pack: 1,
+        generic_name: payload.genericName || null,
+        expiry_date: payload.expiryDate || null,
+        location_id: finalLocId || null,
+      };
 
-      if (error) {
-        toast.error("Failed to add product: " + error.message);
-        throw error;
+      try {
+        const { error: insertErr } = await supabase
+          .from("medicines")
+          .insert(insertPayload);
+        if (insertErr) throw insertErr;
+      } catch (insertErr: any) {
+        toast.error("Failed to add product: " + (insertErr.message || "Error"));
+        throw insertErr;
       }
 
       toast.success(`${payload.name} added to inventory with ${addedPieces} units!`);
-      if (inserted) {
-        setMedicines((prev) => [...prev, inserted as Medicine].sort((a, b) => a.name.localeCompare(b.name)));
-      }
+      await fetchData();
     }
   };
 
@@ -528,6 +906,7 @@ const Inventory = () => {
       functionalType === "Other" && med.format ? med.format : functionalType;
     const isMultiUnit = !isSingleUnit({ pcs_per_strip: pcsPerStrip, strip_per_pack: stripPerPack });
     const stockQty = isMultiUnit ? boxesToPieces(rawQty, stripPerPack, pcsPerStrip) : rawQty;
+    const finalLocId = (selectedLocationId !== "all" ? selectedLocationId : activeLocation?.id || "") || null;
 
     const { data: inserted, error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
@@ -545,6 +924,8 @@ const Inventory = () => {
       generic_name: med.generic_name,
       strength: med.strength,
       format: med.format,
+      location_id: finalLocId,
+      branch_id: finalLocId,
     }).select().single();
 
     if (error) {
@@ -607,7 +988,7 @@ const Inventory = () => {
     });
   };
 
-  const isOwner = profile?.role === "admin";
+  const isOwner = (profile?.role || "").toLowerCase().trim() === "owner";
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
@@ -635,74 +1016,114 @@ const Inventory = () => {
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-gray-50 pb-6">
-      {/* Top Header */}
+      {/* 1. Header & Title Update */}
+      <div className="px-5 pt-4 pb-2">
+        <h1 className="text-xl font-bold text-slate-800 tracking-tight">Inventory</h1>
+        <p className="text-xs text-slate-500 mt-0.5">Manage, track and transfer stock</p>
+      </div>
 
-      {/* Search Bar */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 py-0 my-0">
-        {searchOpen ? (
-          <div className="flex-1 flex items-center gap-2 animate-in slide-in-from-right-4 duration-200">
-            <div className="relative flex-1 min-w-0">
-              <Input
-                ref={searchRef}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search inventory & catalog..."
-                className="flex-1 h-10 rounded-xl border-muted bg-muted pr-9 focus-visible:ring-primary"
-              />
-              {searchQuery && (
-                <button onClick={handleClearSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            {selectedCompanies.size > 0 && (
+      {/* 2. Permanent Search Bar */}
+      <div className="px-5 pb-1">
+        <div className="relative flex items-center w-full rounded-2xl border border-slate-200 bg-white shadow-2xs focus-within:border-blue-500 focus-within:ring-3 focus-within:ring-blue-100/60 transition-all">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Input
+            ref={searchRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search medicine, generic, or brand..."
+            className="w-full h-11 pl-10 pr-12 rounded-2xl bg-transparent border-0 text-sm text-slate-900 placeholder:text-slate-400 shadow-none focus-visible:ring-0 focus-visible:border-0 transition-all"
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {searchQuery && (
               <button
-                onClick={clearFilters}
-                className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex-shrink-0"
+                type="button"
+                onClick={handleClearSearch}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Clear search"
               >
-                {selectedCompanies.size} filter{selectedCompanies.size > 1 ? "s" : ""}
-                <X size={12} />
+                <X size={15} />
               </button>
             )}
             <button
+              type="button"
               onClick={() => setFilterOpen(true)}
-              className="relative p-2 rounded-full bg-muted text-foreground flex-shrink-0"
+              className={cn(
+                "relative p-1.5 rounded-lg transition-colors cursor-pointer",
+                selectedCompanies.size > 0
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+              )}
+              title="Filter by Company"
             >
-              <SlidersHorizontal size={18} />
+              <SlidersHorizontal size={17} />
               {selectedCompanies.size > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-primary" />
+                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-blue-600 text-[9px] font-bold text-white flex items-center justify-center shadow-xs">
+                  {selectedCompanies.size}
+                </span>
               )}
             </button>
-            <button onClick={handleCloseSearch} className="p-2 rounded-full bg-muted text-foreground flex-shrink-0">
-              <X size={18} />
-            </button>
           </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-foreground">Add Inventory</h2>
-            </div>
-            <button onClick={() => setSearchOpen(true)} className="p-2 rounded-full bg-muted">
-              <Search size={18} className="text-foreground" />
-            </button>
-          </>
-        )}
+        </div>
       </div>
 
-      {/* Add New Product Button - visible only when not searching */}
-      {!searchOpen && (
-        <div className="px-5 mt-3">
-          <button
-            onClick={() => navigate("/add-product")}
-            className="w-full py-3 rounded-xl text-primary font-medium flex items-center justify-center active:scale-[0.98] transition-all my-[10px] gap-[10px] border border-primary border-solid"
-          >
-            <Plus size={18} /> Add New Product
-          </button>
+      {/* 3. Horizontal Location & Status Pills */}
+      <div className="px-5">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
+          {!isSalesman ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setSelectedLocationId("all")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-full text-xs transition-all whitespace-nowrap shrink-0",
+                  selectedLocationId === "all"
+                    ? "bg-blue-600 text-white font-medium shadow-xs shadow-blue-500/20"
+                    : "bg-blue-50/60 text-slate-600 hover:bg-blue-100/70 hover:text-blue-700 border border-blue-100/50"
+                )}
+              >
+                All Locations
+              </button>
+
+              {locations.map((loc) => {
+                const isActive = selectedLocationId === loc.id;
+                return (
+                  <button
+                    key={loc.id}
+                    type="button"
+                    onClick={() => setSelectedLocationId(loc.id)}
+                    className={cn(
+                      "px-3.5 py-1.5 rounded-full text-xs transition-all whitespace-nowrap shrink-0",
+                      isActive
+                        ? "bg-blue-600 text-white font-medium shadow-xs shadow-blue-500/20"
+                        : "bg-blue-50/60 text-slate-600 hover:bg-blue-100/70 hover:text-blue-700 border border-blue-100/50"
+                    )}
+                  >
+                    {loc.name}
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            <div className="px-3.5 py-1.5 rounded-full text-xs bg-blue-600 text-white font-medium shadow-xs shadow-blue-500/20 whitespace-nowrap shrink-0">
+              {activeLocation.name || "Assigned Branch"}
+            </div>
+          )}
+
+          {selectedCompanies.size > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-1.5 rounded-full text-xs bg-red-50 text-[#CC3333] hover:bg-red-100 font-medium whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors border border-red-200"
+            >
+              <span>{selectedCompanies.size} company filter{selectedCompanies.size > 1 ? "s" : ""}</span>
+              <X size={12} />
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Medicine List */}
-      <div className="px-5 space-y-3.5">
+      <div className="px-5 space-y-2 pt-2 pb-24">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full rounded-2xl" />
@@ -732,6 +1153,40 @@ const Inventory = () => {
                   const isExpanded = expandedId === med.id;
                   const calculatedStock = getCalculatedStock(med);
 
+                  const isViewingAll = !isSalesman && selectedLocationId === "all";
+                  const targetFilterLoc = isSalesman
+                    ? activeLocation
+                    : selectedLocationId !== "all"
+                    ? locations.find((l) => l.id === selectedLocationId)
+                    : null;
+
+                  const displayedStock = isViewingAll
+                    ? calculateTotalStock(med.stock_distribution, med.stock_quantity)
+                    : getStockForLocation(med, targetFilterLoc || activeLocation, locations);
+
+                  const locBreakdown = getLocationBreakdown(med, locations);
+
+                  const totalStock = displayedStock;
+                  const { boxes, strips, pcs } = totalPiecesToTriUnitObj(
+                    totalStock,
+                    med.strip_per_pack,
+                    med.pcs_per_strip
+                  );
+                  const hasPackaging =
+                    (Number(med.strip_per_pack) > 1) || (Number(med.pcs_per_strip) > 1);
+
+                  const stockSummary = hasPackaging
+                    ? `${boxes}.${strips}.${pcs}`
+                    : "0.0.0";
+                  const stockDisplay = `${stockSummary} / ${totalStock} Pcs`;
+
+                  const rawDosageForm = med.unit_format || med.product_type || "";
+                  const dosageForm = formatDosageForm(rawDosageForm);
+                  const genericAndForm = [med.generic_name, dosageForm].filter(Boolean).join(" · ") || "—";
+                  const formattedPrice = med.price != null
+                    ? Number(med.price).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                    : "0";
+
                   return (
                     <div
                       key={med.id}
@@ -742,87 +1197,139 @@ const Inventory = () => {
                       onMouseDown={(e) => startPress(med.id, e.clientX, e.clientY)}
                       onMouseUp={cancelPress}
                       onMouseLeave={cancelPress}
-                      className={`bg-white rounded-2xl border border-gray-100 shadow-sm shadow-gray-200/60 transition-all duration-150 overflow-hidden select-none ${
-                        searchOpen ? "cursor-pointer active:scale-[0.99]" : ""
-                      } ${pressingId === med.id ? "scale-95" : ""}`}
+                      className={cn(
+                        "bg-white rounded-xl p-3 border border-slate-150 hover:border-blue-200 shadow-2xs hover:shadow-xs transition-all active:scale-[0.995] cursor-pointer mb-2 flex items-start gap-2.5 select-none",
+                        pressingId === med.id && "scale-95",
+                        isExpanded && "ring-2 ring-blue-500"
+                      )}
                     >
-                      <div className="flex items-center gap-3.5 p-4">
-                        <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
-                          <Pill size={20} className="text-emerald-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-900 truncate flex items-center gap-1.5">
-                            <span className="truncate">{truncateName(med.name)}</span>
-                            {med.product_size && <span className="text-[10px] text-gray-400 font-normal flex-shrink-0">{truncateStrength(med.product_size)}</span>}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-1 min-w-0">
-                            <span className="text-[11px] text-gray-400 truncate min-w-0">{med.company_name || "—"}</span>
-                            {(med.product_type || med.unit_format) && (
-                              <span
-                                title={getDisplayFormat(med) || undefined}
-                                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${getProductTypeChipClasses(med.product_type || med.unit_format)}`}
-                              >
-                                {getDisplayCategory(med.product_type || med.unit_format)}
+                      {/* Left Icon: Soft rounded container matching dashboard stat cards */}
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <Pill className="w-5 h-5 stroke-[2] text-blue-600" />
+                      </div>
+
+                      {/* 3-Line Content Structure */}
+                      <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                        {/* LINE 1: Header & Branch Availability Dots */}
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex items-baseline gap-1.5 flex-wrap min-w-0 flex-1">
+                            <span
+                              className="font-semibold text-slate-900 text-[13px] leading-tight"
+                              title={med.name}
+                            >
+                              {med.name}
+                            </span>
+                            {med.product_size && (
+                              <span className="font-medium text-slate-600 text-xs shrink-0 whitespace-nowrap">
+                                {med.product_size}
                               </span>
                             )}
                           </div>
-                        </div>
-                         {isExpanded ? (() => {
-                            const rawInput = unitInputs[med.id] || "";
-                            const { addedPieces, isTriple } = parseStockInput(rawInput, med);
-                            const label = isTriple ? "B.S.P" : looksSingleUnit(med) ? "Qty" : "Box";
-                            return (
-                              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                                <span className="text-[10px] text-muted-foreground flex-shrink-0">{label}</span>
-                                <Input
-                                  autoFocus
-                                  type="text"
-                                  inputMode="decimal"
-                                  pattern="[0-9.]*"
-                                  placeholder="B.S.P e.g. 0.1.0"
-                                  title="Box.Strip.Piece (e.g. 0.1.0 = 1 strip). Single number = Boxes."
-                                  value={rawInput}
-                                  onChange={(e) => {
-                                    let cleaned = e.target.value
-                                      .replace(/[^0-9.]/g, "")
-                                      .replace(/\.{2,}/g, ".");
-                                    // Cap at two dots (B.S.P = three segments)
-                                    const parts = cleaned.split(".");
-                                    if (parts.length > 3) {
-                                      cleaned = parts.slice(0, 3).join(".") + parts.slice(3).join("");
-                                    }
-                                    setUnitInputs((prev) => ({ ...prev, [med.id]: cleaned }));
-                                  }}
-                                  className="w-24 h-9 text-center rounded-lg border border-border bg-background text-sm font-semibold"
+
+                          {/* Branch availability color dots */}
+                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                            {locBreakdown.map((item, idx) => {
+                              const branch = item.location;
+                              const locIdx = locations.findIndex((l) => l.id === branch.id);
+                              const dotColor =
+                                (branch as any).color ||
+                                BRANCH_COLORS[(locIdx >= 0 ? locIdx : idx) % BRANCH_COLORS.length] ||
+                                "#10b981";
+                              return (
+                                <span
+                                  key={branch.id}
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: dotColor }}
+                                  title={`${branch.name}: ${item.qty} pcs`}
                                 />
-                                <button
-                                  onClick={() => handleConfirmStock(med)}
-                                  disabled={addedPieces <= 0 || savingId === med.id}
-                                  className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
-                                >
-                                  <Check size={16} />
-                                </button>
-                              </div>
-                            );
-                          })() : (
-                          <div className="flex-shrink-0">
-                            <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* LINE 2: Generic & Dosage Form + Price */}
+                        <div className="flex justify-between items-center gap-2">
+                          <span
+                            className="text-xs text-slate-500 font-normal truncate max-w-[210px]"
+                            title={genericAndForm !== "—" ? genericAndForm : undefined}
+                          >
+                            {genericAndForm}
+                          </span>
+                          <span className="text-sm font-bold text-slate-900 tracking-tight tabular-nums shrink-0">
+                            ৳{formattedPrice}
+                          </span>
+                        </div>
+
+                        {/* LINE 3: Company & Stock Breakdown */}
+                        <div className="flex justify-between items-center gap-2">
+                          <span
+                            className="text-[11px] font-medium text-slate-400 truncate max-w-[190px]"
+                            title={med.company_name || undefined}
+                          >
+                            {med.company_name || "—"}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-xs font-semibold text-slate-700 tracking-tight tabular-nums shrink-0",
+                              displayedStock === 0 && "text-rose-600"
+                            )}
+                          >
+                            {stockDisplay}
+                          </span>
+                        </div>
+
+                        {/* Expandable Quick Stock Adjuster (when active via long-press) */}
+                        {isExpanded && (
+                          <div
+                            className="pt-2 mt-1 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {(() => {
+                              const rawInput = unitInputs[med.id] || "";
+                              const { addedPieces, isTriple } = parseStockInput(rawInput, med);
+                              const label = isTriple ? "B.S.P" : looksSingleUnit(med) ? "Qty" : "Box";
+                              return (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
+                                  <Input
+                                    autoFocus
+                                    type="text"
+                                    inputMode="decimal"
+                                    pattern="[0-9.]*"
+                                    placeholder="0.0.0"
+                                    value={rawInput}
+                                    onChange={(e) => {
+                                      let cleaned = e.target.value.replace(/[^0-9.]/g, "").replace(/\.{2,}/g, ".");
+                                      const parts = cleaned.split(".");
+                                      if (parts.length > 3) {
+                                        cleaned = parts.slice(0, 3).join(".") + parts.slice(3).join("");
+                                      }
+                                      setUnitInputs((prev) => ({ ...prev, [med.id]: cleaned }));
+                                    }}
+                                    className="w-24 h-7 text-center rounded-lg border border-border bg-background text-xs font-semibold px-1"
+                                  />
+                                  <button
+                                    onClick={() => handleConfirmStock(med)}
+                                    disabled={addedPieces <= 0 || savingId === med.id}
+                                    className="p-1 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-colors"
+                                  >
+                                    <Check size={14} />
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                            <div className="flex items-center gap-3 text-xs font-medium bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-100">
+                              <span className="text-slate-900 font-semibold">৳ {med.price ?? "—"}</span>
+                              <span className="text-slate-400">
+                                Pre: <TriUnitDisplay totalPcs={displayedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              </span>
+                              <span className="text-emerald-600 font-semibold">
+                                Current: <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
+                              </span>
+                            </div>
                           </div>
                         )}
                       </div>
-                      {isExpanded && (
-                        <div className="px-4 pb-4 pt-0 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="flex items-center gap-4 text-xs font-medium bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
-                            <span className="text-gray-900 font-semibold">৳ {med.price ?? "—"}</span>
-                            <span className="text-gray-400">
-                              pre-stock : <TriUnitDisplay totalPcs={med.stock_quantity || 0} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
-                            </span>
-                            <span className="text-emerald-600 font-semibold">
-                              Current : <TriUnitDisplay totalPcs={calculatedStock} stripPerPack={med.strip_per_pack} pcsPerStrip={med.pcs_per_strip} productType={med.product_type} />
-                            </span>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1068,6 +1575,8 @@ const Inventory = () => {
           setSelectedSheetMed(null);
         }}
         medicine={selectedSheetMed}
+        selectedLocation={selectedLocationId}
+        selectedLocationId={selectedLocationId}
         onSaveInventory={handleSaveFromSheet}
         onRemove={
           selectedSheetMed?.id
@@ -1081,6 +1590,18 @@ const Inventory = () => {
             : undefined
         }
       />
+
+      {/* Modern Floating Action Button (FAB) */}
+      <button
+        id="inventory-fab-add-product"
+        type="button"
+        onClick={() => navigate("/add-product")}
+        className="fixed bottom-24 right-5 z-40 bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-600/30 hover:from-blue-700 hover:to-blue-600 active:scale-95 transition-all px-4 py-3.5 rounded-full flex items-center gap-2 font-medium text-sm cursor-pointer select-none"
+        aria-label="Add Product"
+      >
+        <Plus className="w-5 h-5 stroke-[2.5]" />
+        <span>Add Product</span>
+      </button>
     </div>
   );
 };

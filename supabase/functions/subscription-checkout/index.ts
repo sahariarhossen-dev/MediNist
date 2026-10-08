@@ -57,8 +57,8 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.pharmacy_id) return json({ error: "No pharmacy linked to your account" }, 400);
-    if (profile.role !== "admin") {
-      return json({ error: "Only pharmacy admins can renew the subscription" }, 403);
+    if (profile.role !== "owner" && profile.role !== "admin") {
+      return json({ error: "Only pharmacy owners can renew the subscription" }, 403);
     }
 
     // 3. Payment verification hook.

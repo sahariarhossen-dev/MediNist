@@ -1,36 +1,98 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  getStoredSuspensionNotice,
+  clearStoredSuspensionNotice,
+} from "@/lib/accountSuspension";
+import { AccountSuspendedModal } from "@/components/auth/AccountSuspendedModal";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { user, isSuspended } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [suspendedModalData, setSuspendedModalData] = useState<{
+    isOpen: boolean;
+    reason: string | null;
+  }>({
+    isOpen: false,
+    reason: null,
+  });
+
+  // Check if user was redirected here due to an active suspension
+  useEffect(() => {
+    const notice = getStoredSuspensionNotice();
+    if (notice) {
+      setSuspendedModalData({
+        isOpen: true,
+        reason: notice.reason || null,
+      });
+    }
+  }, []);
+
+  // Natural navigation: Navigate once AuthContext registers the authenticated user and verifies non-suspended
+  useEffect(() => {
+    if (user && !isSuspended) {
+      clearStoredSuspensionNotice();
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, isSuspended, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
 
-    if (error) {
-      setError("Invalid login credentials");
+      if (authError) {
+        setError(authError.message || "Invalid login credentials");
+        return;
+      }
+
+      if (!authData?.user) {
+        setError("Unable to authenticate. Please check your credentials.");
+        return;
+      }
+
+      // Authentication succeeded in Supabase.
+      // AuthContext's onAuthStateChange handles session validation and suspension verification.
+      // The useEffect hook above will redirect to /dashboard once state propagates.
+      clearStoredSuspensionNotice();
+    } catch (err: any) {
+      console.error("[Login] Authentication exception:", err);
+      setError(err?.message || "An unexpected error occurred during login. Please try again.");
+    } finally {
       setLoading(false);
-    } else {
-      navigate("/dashboard");
     }
   };
 
   return (
     <div className="min-h-screen bg-[#F4F6FB] flex items-center justify-center px-4">
+      {/* Account Suspended Alert Modal */}
+      <AccountSuspendedModal
+        isOpen={suspendedModalData.isOpen}
+        reason={suspendedModalData.reason}
+        onClose={() => {
+          setSuspendedModalData({ isOpen: false, reason: null });
+          clearStoredSuspensionNotice();
+        }}
+      />
+
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-blue-600 tracking-tight">Medinist</h1>

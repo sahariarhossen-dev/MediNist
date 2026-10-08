@@ -21,6 +21,7 @@ import {
   getStandardizedType,
 } from "@/lib/productType";
 import { toAddProductState, type MedExMappedPayload } from "@/lib/medExMapper";
+import { normalizePricing } from "@/lib/pricingUtils";
 
 const ADD_NEW_SENTINEL = "__add_new__";
 
@@ -239,6 +240,18 @@ const AddProduct = () => {
 
     setSaving(true);
 
+    const rawMrp = mrp ? Number(mrp) : null;
+    const boxPcs = totalBoxSize && totalBoxSize > 1 ? totalBoxSize : 1;
+    let finalUnitPrice: number | null = rawMrp;
+    if (rawMrp !== null && boxPcs > 1) {
+      const p = normalizePricing({
+        rawPrice: rawMrp,
+        pcsPerBox: boxPcs,
+        productType: productType || undefined,
+      });
+      finalUnitPrice = p.unitPrice;
+    }
+
     const payload = {
       name: name.trim(),
       company_name: companyName.trim() || null,
@@ -253,7 +266,7 @@ const AddProduct = () => {
       pharmacy_id: profile.pharmacy_id,
       product_size: strength.trim() ? `${strength.trim()} ${strengthConfig?.unit || ""}`.trim() : null,
       stock_alert: stockAlert ? Number(stockAlert) : 0,
-      price: mrp ? Number(mrp) : null,
+      price: finalUnitPrice,
       is_splittable: isSplittable,
       packaging_type: packagingType,
       // Persist whatever pack data the user entered (>0). Visibility of the
@@ -457,7 +470,9 @@ const AddProduct = () => {
 
         {/* 5. MRP */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground">MRP (৳)</Label>
+          <Label className="text-sm font-medium text-foreground">
+            MRP (৳) {totalBoxSize && totalBoxSize > 1 ? "(Box or Unit Price)" : ""}
+          </Label>
           <Input
             type="number"
             placeholder="e.g. 12.50"
@@ -465,6 +480,19 @@ const AddProduct = () => {
             onChange={(e) => setMrp(e.target.value)}
             className="rounded-xl bg-muted border-0 h-12"
           />
+          {totalBoxSize && totalBoxSize > 1 && mrp && Number(mrp) > 0 && (() => {
+            const p = normalizePricing({
+              rawPrice: Number(mrp),
+              pcsPerBox: totalBoxSize,
+              productType: productType || undefined,
+            });
+            return (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-1.5 flex items-center justify-between">
+                <span>Unit Price: <strong className="text-foreground font-mono">৳{p.unitPrice.toFixed(2)}/pc</strong></span>
+                <span>Box Price: <strong className="text-foreground font-mono">৳{p.boxPrice.toFixed(2)}/box</strong></span>
+              </p>
+            );
+          })()}
         </div>
 
         {/* 6. Stock Alert Level */}

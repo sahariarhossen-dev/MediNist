@@ -35,7 +35,13 @@ const STATUS_META: Record<Status, { label: string; dot: string; cls: string }> =
 const clockTime = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—";
 
-const StaffPresenceStrip = ({ userFilter }: { userFilter: string }) => {
+const StaffPresenceStrip = ({
+  userFilter,
+  allowedUserIds,
+}: {
+  userFilter: string;
+  allowedUserIds?: string[];
+}) => {
   const [rows, setRows] = useState<PresenceRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -58,7 +64,9 @@ const StaffPresenceStrip = ({ userFilter }: { userFilter: string }) => {
     };
   }, []);
 
-  const visible = userFilter === "all" ? rows : rows.filter((r) => r.user_id === userFilter);
+  const visible = (userFilter === "all" ? rows : rows.filter((r) => r.user_id === userFilter)).filter(
+    (r) => !allowedUserIds || allowedUserIds.includes(r.user_id),
+  );
 
   if (loading) return null;
 

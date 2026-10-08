@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -63,6 +64,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 const SalesTrendChart = ({ pharmacyId, timeRange, scope = "personal" }: SalesTrendChartProps) => {
   const { profile } = useAuth();
+  const { activeLocation } = useLocationStore();
   const userId = profile?.id;
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,11 +94,12 @@ const SalesTrendChart = ({ pharmacyId, timeRange, scope = "personal" }: SalesTre
 
     let salesQuery = supabase
       .from("sales")
-      .select("id, total, created_at")
+      .select("id, total, created_at, location_id")
       .eq("pharmacy_id", pharmacyId)
       .eq("status", "completed")
       .gte("created_at", startDate.toISOString());
     if (scope === "personal") salesQuery = salesQuery.eq("user_id", userId);
+    if (activeLocation?.id) salesQuery = salesQuery.eq("location_id", activeLocation.id);
     const { data: sales } = await salesQuery;
 
     if (!sales) {
@@ -145,7 +148,7 @@ const SalesTrendChart = ({ pharmacyId, timeRange, scope = "personal" }: SalesTre
       }));
       setChartData(points);
     }
-  }, [pharmacyId, userId, timeRange, isToday, scope]);
+  }, [pharmacyId, userId, timeRange, isToday, scope, activeLocation?.id]);
 
   useEffect(() => {
     fetchChartData();

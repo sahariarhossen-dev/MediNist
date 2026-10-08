@@ -12,10 +12,12 @@ const DutyControlCenter = ({
   nameOf,
   staffOptions = [],
   canControl,
+  allowedUserIds,
 }: {
   nameOf: (id: string) => string;
   staffOptions?: FeedStaffOption[];
   canControl: boolean;
+  allowedUserIds?: string[];
 }) => {
   const [userFilter, setUserFilter] = useState<string>("all");
   const [summary, setSummary] = useState<DutySummary | null>(null);
@@ -72,7 +74,7 @@ const DutyControlCenter = ({
 
       <ApprovalQueue userFilter={userFilter} refreshKey={refreshKey} onResolved={bump} />
 
-      {!selected && <StaffPresenceStrip userFilter={userFilter} />}
+      {!selected && <StaffPresenceStrip userFilter={userFilter} allowedUserIds={allowedUserIds} />}
 
       <ActivityFeed
         nameOf={nameOf}
@@ -80,6 +82,7 @@ const DutyControlCenter = ({
         refreshKey={refreshKey}
         filter={feedFilter}
         onFilterChange={setFeedFilter}
+        allowedUserIds={allowedUserIds}
       />
     </div>
   );

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type NotificationCategory = "due" | "note" | "broadcast";
+export type NotificationCategory = "due" | "note" | "broadcast" | "price_update";
 
 export interface AppNotification {
   id: string;
@@ -62,7 +62,7 @@ export function useNotifications() {
     setLoading(true);
     const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
 
-    const [duesRes, notesRes, broadcastsRes] = await Promise.all([
+    const [duesRes, notesRes, broadcastsRes, notificationsRes, logsRes] = await Promise.all([
       supabase
         .from("customer_ledger")
         .select("id, amount, customer_id, sale_id, created_at")
@@ -87,6 +87,21 @@ export function useNotifications() {
         .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(15),
+      supabase
+        .from("notifications" as any)
+        .select("id, title, message, type, created_at, user_id, shop_id")
+        .or(`shop_id.eq.${pharmacyId},pharmacy_id.eq.${pharmacyId}`)
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(30),
+      supabase
+        .from("staff_activity_logs")
+        .select("id, description, created_at, action_type")
+        .eq("pharmacy_id", pharmacyId)
+        .eq("action_type", "price_update")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(25),
     ]);
 
     const items: AppNotification[] = [];
@@ -94,6 +109,8 @@ export function useNotifications() {
     const dues = duesRes.data ?? [];
     const notes = notesRes.data ?? [];
     const broadcasts = (broadcastsRes.data ?? []) as any[];
+    const dbNotifications = (notificationsRes.data ?? []) as any[];
+    const logs = (logsRes.data ?? []) as any[];
 
     const customerIds = Array.from(new Set(dues.map((d: any) => d.customer_id).filter(Boolean)));
     const creatorIds = Array.from(new Set(notes.map((n: any) => n.creator_id).filter(Boolean)));
@@ -147,10 +164,38 @@ export function useNotifications() {
       });
     });
 
+    dbNotifications.forEach((n: any) => {
+      if (n.user_id && userId && n.user_id !== userId) return;
+      items.push({
+        id: `notif:${n.id}`,
+        category: "price_update",
+        title: n.title || "Medicine Price Updated",
+        message: n.message,
+        createdAt: n.created_at,
+        link: "/inventory",
+      });
+    });
+
+    logs.forEach((l: any) => {
+      const alreadyIncluded = items.some(
+        (it) => it.message === l.description || it.id === `notif:${l.id}`
+      );
+      if (!alreadyIncluded && l.description) {
+        items.push({
+          id: `log_price:${l.id}`,
+          category: "price_update",
+          title: "Medicine Price Updated",
+          message: l.description,
+          createdAt: l.created_at,
+          link: "/inventory",
+        });
+      }
+    });
+
     items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setNotifications(items.slice(0, MAX_ITEMS));
     setLoading(false);
-  }, [pharmacyId]);
+  }, [pharmacyId, userId]);
 
   useEffect(() => {
     fetchAll();
@@ -185,11 +230,70 @@ export function useNotifications() {
         { event: "UPDATE", schema: "public", table: "pharmacy_broadcasts", filter: `pharmacy_id=eq.${pharmacyId}` },
         () => fetchAll(),
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        () => fetchAll(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "staff_activity_logs", filter: `pharmacy_id=eq.${pharmacyId}` },
+        () => fetchAll(),
+      )
+      .on(
+        "broadcast",
+        { event: "price_update" },
+        (eventPayload: any) => {
+          const item = eventPayload?.payload;
+          if (!item) return;
+          if (item.senderId && userId && item.senderId === userId) return;
+          setNotifications((prev) => {
+            if (prev.some((n) => n.id === item.id || n.message === item.message)) return prev;
+            return [
+              {
+                id: item.id || `price:${Date.now()}`,
+                category: "price_update",
+                title: item.title || "Medicine Price Updated",
+                message: item.message,
+                createdAt: item.createdAt || new Date().toISOString(),
+                link: item.link || "/inventory",
+              },
+              ...prev,
+            ].slice(0, MAX_ITEMS);
+          });
+          setBumpToken((t) => t + 1);
+        },
+      )
       .subscribe();
+
+    const handleLocalPriceUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail) return;
+      if (detail.senderId && userId && detail.senderId === userId) return;
+      setNotifications((prev) => {
+        if (prev.some((n) => n.message === detail.message)) return prev;
+        return [
+          {
+            id: `price:${Date.now()}`,
+            category: "price_update",
+            title: detail.title || "Medicine Price Updated",
+            message: detail.message,
+            createdAt: detail.createdAt || new Date().toISOString(),
+            link: "/inventory",
+          },
+          ...prev,
+        ].slice(0, MAX_ITEMS);
+      });
+      setBumpToken((t) => t + 1);
+    };
+
+    window.addEventListener("medinist:price-update", handleLocalPriceUpdate);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("medinist:price-update", handleLocalPriceUpdate);
     };
-  }, [pharmacyId, fetchAll]);
+  }, [pharmacyId, userId, fetchAll]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !readIds.has(n.id)).length,

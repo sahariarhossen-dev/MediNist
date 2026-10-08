@@ -16,10 +16,36 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   },
   global: {
-    fetch: (...args: Parameters<typeof fetch>) => {
+    fetch: async (...args: Parameters<typeof fetch>) => {
       const g = typeof window !== 'undefined' ? window : globalThis;
       const fn = g.fetch || fetch;
-      return fn.apply(g, args);
+      try {
+        return await fn.apply(g, args);
+      } catch (err: any) {
+        const msg = String(err?.message || err || "");
+        if (
+          msg.includes("Failed to fetch") ||
+          msg.includes("NetworkError") ||
+          msg.includes("Load failed") ||
+          err?.name === "TypeError"
+        ) {
+          console.warn("[supabase] Intercepted network failure in fetch:", msg);
+          return new Response(
+            JSON.stringify({
+              code: "PGRST000",
+              message: "Network request failed (offline or remote endpoint unreachable)",
+              details: msg,
+              hint: "Check network connectivity",
+            }),
+            {
+              status: 503,
+              statusText: "Service Unavailable",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+        throw err;
+      }
     },
   },
 });

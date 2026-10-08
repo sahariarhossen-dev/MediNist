@@ -15,7 +15,9 @@ const initials = (n: string | null | undefined) =>
 
 const humanRole = (r?: string | null) => {
   if (!r) return "Member";
-  switch (r) {
+  const normalized = r.toLowerCase().trim();
+  switch (normalized) {
+    case "owner":
     case "admin":
       return "Owner";
     case "manager":
@@ -48,7 +50,7 @@ const GroupInfoSheet = ({
   const [selected, setSelected] = useState<ProfileMember | null>(null);
 
   const me = members.find((m) => m.user_id === user?.id);
-  const canEdit = !!me?.is_admin || profile?.role === "admin";
+  const canEdit = !!me?.is_admin || (profile?.role || "").toLowerCase().trim() === "owner";
 
   const saveName = async () => {
     if (!room || !name.trim() || name.trim() === room.name) {

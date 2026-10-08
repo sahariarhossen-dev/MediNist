@@ -19,6 +19,7 @@ interface SaleData {
   status: string;
   sale_type: string;
   pharmacy_id: string;
+  location_id?: string | null;
   user_id: string;
 }
 
@@ -32,14 +33,18 @@ interface SaleItemData {
   discount_percent: number;
 }
 
-interface PharmacyData {
+interface BranchData {
   name: string;
   address: string | null;
-  division: string | null;
-  district: string | null;
-  upazila: string | null;
+  division?: string | null;
+  district?: string | null;
+  upazila?: string | null;
+  phone: string | null;
   email: string | null;
   proprietor_name: string | null;
+  drug_license?: string | null;
+  trade_license?: string | null;
+  invoice_footer?: string | null;
 }
 
 const Invoice = () => {
@@ -48,7 +53,7 @@ const Invoice = () => {
   const { profile } = useAuth();
   const [sale, setSale] = useState<SaleData | null>(null);
   const [items, setItems] = useState<SaleItemData[]>([]);
-  const [pharmacy, setPharmacy] = useState<PharmacyData | null>(null);
+  const [branch, setBranch] = useState<BranchData | null>(null);
   const [sellerName, setSellerName] = useState("");
   const [sellerPhone, setSellerPhone] = useState("");
   const [loading, setLoading] = useState(true);
@@ -67,18 +72,110 @@ const Invoice = () => {
         .single();
 
       if (!saleData) { setLoading(false); return; }
-      setSale(saleData as SaleData);
+      const typedSale = saleData as SaleData;
+      setSale(typedSale);
 
-      const [itemsRes, pharmacyRes, sellerRes] = await Promise.all([
+      const [itemsRes, sellerRes] = await Promise.all([
         supabase.from("sale_items").select("id, medicine_name, company_name, quantity, unit_price, total_price, discount_percent").eq("sale_id", saleId),
-        supabase.from("pharmacies").select("name, address, division, district, upazila, email, proprietor_name").eq("id", saleData.pharmacy_id).single(),
-        supabase.from("profiles").select("full_name, phone").eq("id", saleData.user_id).single(),
+        supabase.from("profiles").select("full_name, phone").eq("id", typedSale.user_id).single(),
       ]);
 
       setItems((itemsRes.data as SaleItemData[]) || []);
-      setPharmacy(pharmacyRes.data as PharmacyData | null);
       setSellerName(sellerRes.data?.full_name || "Staff");
       setSellerPhone(sellerRes.data?.phone || "");
+
+      // Strictly resolve the active physical branch from public.shop_locations
+      let branchInfo: BranchData | null = null;
+      if (typedSale.location_id) {
+        const { data: locData } = await supabase
+          .from("shop_locations" as any)
+          .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
+          .eq("id", typedSale.location_id)
+          .maybeSingle();
+
+        if (locData) {
+          branchInfo = {
+            name: (locData as any).name || "Branch",
+            address: (locData as any).address || null,
+            phone: (locData as any).phone || null,
+            email: (locData as any).email || null,
+            proprietor_name: (locData as any).proprietor_name || null,
+            drug_license: (locData as any).drug_license || null,
+            trade_license: (locData as any).trade_license || null,
+            invoice_footer: (locData as any).invoice_footer || null,
+          };
+        }
+      }
+
+      // Fallback for legacy sales without location_id: fetch primary branch from shop_locations
+      if (!branchInfo && typedSale.pharmacy_id) {
+        const { data: mainLoc } = await supabase
+          .from("shop_locations" as any)
+          .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
+          .eq("pharmacy_id", typedSale.pharmacy_id)
+          .eq("is_main", true)
+          .maybeSingle();
+
+        if (mainLoc) {
+          branchInfo = {
+            name: (mainLoc as any).name || "Branch",
+            address: (mainLoc as any).address || null,
+            phone: (mainLoc as any).phone || null,
+            email: (mainLoc as any).email || null,
+            proprietor_name: (mainLoc as any).proprietor_name || null,
+            drug_license: (mainLoc as any).drug_license || null,
+            trade_license: (mainLoc as any).trade_license || null,
+            invoice_footer: (mainLoc as any).invoice_footer || null,
+          };
+        } else {
+          // If no main branch flag, get earliest location
+          const { data: anyLoc } = await supabase
+            .from("shop_locations" as any)
+            .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
+            .eq("pharmacy_id", typedSale.pharmacy_id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (anyLoc) {
+            branchInfo = {
+              name: (anyLoc as any).name || "Branch",
+              address: (anyLoc as any).address || null,
+              phone: (anyLoc as any).phone || null,
+              email: (anyLoc as any).email || null,
+              proprietor_name: (anyLoc as any).proprietor_name || null,
+              drug_license: (anyLoc as any).drug_license || null,
+              trade_license: (anyLoc as any).trade_license || null,
+              invoice_footer: (anyLoc as any).invoice_footer || null,
+            };
+          }
+        }
+      }
+
+      // Ultimate fallback if no shop_locations record exists at all
+      if (!branchInfo && typedSale.pharmacy_id) {
+        const { data: pharm } = await supabase
+          .from("pharmacies")
+          .select("name, address, division, district, upazila, email, proprietor_name, invoice_footer")
+          .eq("id", typedSale.pharmacy_id)
+          .maybeSingle();
+
+        if (pharm) {
+          branchInfo = {
+            name: pharm.name,
+            address: pharm.address,
+            division: pharm.division,
+            district: pharm.district,
+            upazila: pharm.upazila,
+            phone: null,
+            email: pharm.email,
+            proprietor_name: pharm.proprietor_name,
+            invoice_footer: (pharm as any).invoice_footer || null,
+          };
+        }
+      }
+
+      setBranch(branchInfo);
       setLoading(false);
     };
     load();
@@ -201,7 +298,7 @@ const Invoice = () => {
     setSharing(true);
     const invoiceUrl = window.location.href;
     const shareTitle = `Invoice ${invoiceId}`;
-    const pharmacyName = pharmacy?.name || "MediNist";
+    const pharmacyName = branch?.name || "MediNist";
     const shareText = `Invoice #${invoiceId} from ${pharmacyName} · ৳${formatMoney(sale.total)}`;
 
     // 1. Try native Web Share API (mobile devices & supported browsers)
@@ -296,7 +393,7 @@ const Invoice = () => {
   const dateStr = format(dateObj, "dd-MM-yy");
   const subtotalLessDiscount = Number(sale.subtotal) - Number(sale.discount_amount);
 
-  const areaDistrict = [pharmacy?.upazila, pharmacy?.district].filter(Boolean).join(" - ");
+  const areaDistrict = [branch?.upazila, branch?.district].filter(Boolean).join(" - ");
 
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white">
@@ -363,12 +460,12 @@ const Invoice = () => {
         <div data-pdf-section="header" className="flex items-center mb-1">
           {/* Left — Shop Profile (6 rows) */}
           <div className="flex-1 flex flex-col leading-7">
-            <h1 className="text-lg font-extrabold text-gray-900 tracking-tight whitespace-nowrap truncate">{pharmacy?.name || "Pharmacy"}</h1>
-            <p className="text-gray-600 text-xs">Pro- {pharmacy?.proprietor_name || "N/A"}</p>
-            <p className="text-gray-600 text-xs">Mob-{sellerPhone || profile?.phone || "N/A"}</p>
-            <p className="text-gray-600 text-xs">{pharmacy?.address || "N/A"}</p>
+            <h1 className="text-lg font-extrabold text-gray-900 tracking-tight whitespace-nowrap truncate">{branch?.name || "Pharmacy"}</h1>
+            <p className="text-gray-600 text-xs">Pro- {branch?.proprietor_name || "N/A"}</p>
+            <p className="text-gray-600 text-xs">Mob-{branch?.phone || sellerPhone || profile?.phone || "N/A"}</p>
+            <p className="text-gray-600 text-xs">{branch?.address || "N/A"}</p>
             
-            <p className="text-gray-600 text-xs">Email- {pharmacy?.email || "N/A"}</p>
+            <p className="text-gray-600 text-xs">Email- {branch?.email || "N/A"}</p>
           </div>
 
           {/* Middle Vertical Divider */}
@@ -445,7 +542,9 @@ const Invoice = () => {
         </div>
 
         {/* Closing message */}
-        <p data-pdf-section="footer" className="text-xs text-gray-400 mt-6 italic">Thank you for your purchase. Please keep this invoice for your records.</p>
+        <p data-pdf-section="footer" className="text-xs text-gray-400 mt-6 italic">
+          {branch?.invoice_footer || "Thank you for your purchase. Please keep this invoice for your records."}
+        </p>
 
       </div>
     </div>

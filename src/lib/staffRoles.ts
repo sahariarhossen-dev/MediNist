@@ -5,14 +5,103 @@ export type InviteRole = "owner" | "manager" | "salesman";
 
 export const INVITE_ROLES: InviteRole[] = ["owner", "manager", "salesman"];
 
+// Strict Hierarchical RBAC: owner (3) > manager (2) > salesman / staff (1)
+export const ROLE_HIERARCHY_LEVEL: Record<InviteRole, number> = {
+  owner: 3,
+  manager: 2,
+  salesman: 1,
+};
+
+/**
+ * Checks whether caller role is strictly higher in hierarchy than target role.
+ */
+export const isStrictlySuperior = (callerRole?: string | null, targetRole?: string | null): boolean => {
+  const caller = profileRoleToInviteRole(callerRole);
+  const target = profileRoleToInviteRole(targetRole);
+  return ROLE_HIERARCHY_LEVEL[caller] > ROLE_HIERARCHY_LEVEL[target];
+};
+
+/**
+ * Checks whether a caller can manage/supervise the target member.
+ * - Owner: can supervise managers and salesmen (everyone except self).
+ * - Manager: can ONLY supervise salesmen (strictly subordinate).
+ *   Cannot manage or alter other managers or the owner.
+ * - Salesman: cannot supervise any members.
+ */
+export const canSuperviseTarget = (callerRole?: string | null, targetRole?: string | null): boolean => {
+  const caller = profileRoleToInviteRole(callerRole);
+  const target = profileRoleToInviteRole(targetRole);
+  if (caller === "owner") return true;
+  if (caller === "manager") return target === "salesman";
+  return false;
+};
+
+/**
+ * Checks whether a caller is allowed to suspend or reactivate the target.
+ * - Owner can suspend managers & salesmen.
+ * - Manager can ONLY suspend salesmen.
+ */
+export const canSuspendTarget = (callerRole?: string | null, targetRole?: string | null): boolean => {
+  return canSuperviseTarget(callerRole, targetRole);
+};
+
+/**
+ * Checks whether a caller is permitted to change roles.
+ * - Strict restriction: ONLY owners can modify staff roles.
+ */
+export const canChangeRoles = (callerRole?: string | null): boolean => {
+  return profileRoleToInviteRole(callerRole) === "owner";
+};
+
+/**
+ * Checks whether a caller is permitted to permanently remove staff from the shop.
+ * - Strict restriction: ONLY owners can permanently delete members.
+ */
+export const canRemoveStaff = (callerRole?: string | null): boolean => {
+  return profileRoleToInviteRole(callerRole) === "owner";
+};
+
+/**
+ * Checks which roles the caller is allowed to invite:
+ * - Owner: can invite owner, manager, salesman
+ * - Manager: can ONLY invite salesman
+ */
+export const getAllowedInviteRoles = (callerRole?: string | null): InviteRole[] => {
+  const caller = profileRoleToInviteRole(callerRole);
+  if (caller === "owner") return ["salesman", "manager", "owner"];
+  if (caller === "manager") return ["salesman"];
+  return [];
+};
+
+/**
+ * Checks whether a caller can view detailed performance of a target:
+ * - Owner can view all members.
+ * - Manager can view salesmen and their own profile. Cannot view owner or peer managers.
+ * - Salesman can only view their own profile.
+ */
+export const canViewDetailedPerformance = (
+  callerRole?: string | null,
+  targetRole?: string | null,
+  isSelf = false
+): boolean => {
+  if (isSelf) return true;
+  const caller = profileRoleToInviteRole(callerRole);
+  const target = profileRoleToInviteRole(targetRole);
+  if (caller === "owner") return true;
+  if (caller === "manager") return target === "salesman";
+  return false;
+};
+
 export const profileRoleToInviteRole = (role?: string | null): InviteRole => {
-  if (role === "admin") return "owner";
-  if (role === "manager") return "manager";
+  const normalized = (role || "").toLowerCase().trim();
+  if (normalized === "owner" || normalized === "admin") return "owner";
+  if (normalized === "manager") return "manager";
   return "salesman";
 };
 
 export const inviteRoleLabel = (role?: string | null): string => {
-  switch (role) {
+  const normalized = (role || "").toLowerCase().trim();
+  switch (normalized) {
     case "owner":
     case "admin":
       return "Owner";

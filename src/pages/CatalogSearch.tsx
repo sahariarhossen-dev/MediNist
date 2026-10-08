@@ -9,6 +9,11 @@ import { toFunctionalType } from "@/lib/productType";
 import { classifyCatalogPack } from "@/lib/stockUtils";
 import { useDebounce } from "@/hooks/useDebounce";
 import {
+  normalizePricing,
+  resolveItemSellingPrice,
+  resolvePcsPerBox,
+} from "@/lib/pricingUtils";
+import {
   InventoryUpdateModal,
   MedicineSelectionItem,
   InventoryItemPayload,
@@ -80,6 +85,17 @@ const CatalogSearch = () => {
       ? { pcs_per_strip: med.pcs_per_strip, strip_per_pack: med.strip_per_pack }
       : classifyCatalogPack({ pack_size: med.pack_size, box_size: med.box_size });
 
+    const pps = Number(med.pcs_per_strip) || Number(catalogPcsPerStrip) || 1;
+    const spp = Number(med.strip_per_pack) || Number(catalogStripPerPack) || 1;
+    const pBox = Math.max(1, pps * spp);
+
+    const pricing = normalizePricing({
+      rawPrice: med.unit_price,
+      pcsPerBox: pBox,
+      masterUnitPrice: med.unit_price,
+      productType: toFunctionalType(med.format),
+    });
+
     setSelectedMedForSheet({
       masterId: med.id,
       name: med.brand_name,
@@ -89,7 +105,13 @@ const CatalogSearch = () => {
       product_size: med.strength,
       strength: med.strength,
       generic_name: med.generic_name,
-      price: med.unit_price,
+      price: pricing.unitPrice,
+      unit_price: pricing.unitPrice,
+      box_price: pricing.boxPrice,
+      piece_price: pricing.unitPrice,
+      purchase_price_box: pricing.purchasePriceBox,
+      purchase_price_unit: pricing.purchasePriceUnit,
+      masterUnitPrice: med.unit_price ?? null,
       stock_quantity: 0,
       stock_alert: 0,
       pcs_per_strip: catalogPcsPerStrip,
@@ -116,6 +138,13 @@ const CatalogSearch = () => {
         ? payload.totalAddedPieces
         : payload.totalQtyPieces + (payload.freeQty || 0);
 
+    const resolvedUnitPrice =
+      payload.unitPrice > 0
+        ? payload.unitPrice
+        : payload.pcsPerBox > 1
+        ? Number((payload.salePrice / payload.pcsPerBox).toFixed(4))
+        : payload.salePrice;
+
     const { error } = await supabase.from("medicines").insert({
       pharmacy_id: profile.pharmacy_id,
       name: payload.name,
@@ -123,7 +152,7 @@ const CatalogSearch = () => {
       product_type: productTypeBucket || "Tablet",
       unit_format: payload.unitFormat || null,
       product_size: payload.productSize || null,
-      price: payload.salePrice > 0 ? payload.salePrice : null,
+      price: resolvedUnitPrice > 0 ? resolvedUnitPrice : null,
       stock_quantity: addedPieces,
       stock_alert: payload.minQtyAlert ?? payload.minQty ?? 0,
       pcs_per_strip: payload.pcsPerBox > 1 ? payload.pcsPerBox : 1,

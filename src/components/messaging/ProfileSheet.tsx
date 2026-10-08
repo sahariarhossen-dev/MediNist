@@ -18,7 +18,9 @@ const initials = (n: string | null | undefined) =>
 
 const humanRole = (r?: string | null) => {
   if (!r) return "Member";
-  switch (r) {
+  const normalized = r.toLowerCase().trim();
+  switch (normalized) {
+    case "owner":
     case "admin":
       return "Owner";
     case "manager":

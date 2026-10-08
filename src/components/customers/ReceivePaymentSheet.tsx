@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { toast } from "sonner";
 
 interface Props {
@@ -22,6 +23,7 @@ interface Props {
 const ReceivePaymentSheet = ({
   open, onOpenChange, customerId, customerName, pharmacyId, userId, totalDue, onSaved,
 }: Props) => {
+  const { activeLocation } = useLocationStore();
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -41,11 +43,14 @@ const ReceivePaymentSheet = ({
     }
     setSaving(true);
     try {
+      const locId = activeLocation?.id || null;
+
       // 1. Insert ledger payment
       const { error: ledgerErr } = await supabase.from("customer_ledger").insert({
         customer_id: customerId,
         pharmacy_id: pharmacyId,
         user_id: userId,
+        location_id: locId,
         entry_type: "payment",
         amount: amt,
         description: note.trim() || `Payment from ${customerName}`,
@@ -56,6 +61,7 @@ const ReceivePaymentSheet = ({
       const { error: cashErr } = await supabase.from("cash_transactions").insert({
         pharmacy_id: pharmacyId,
         user_id: userId,
+        location_id: locId,
         direction: "in",
         category: "due_collection",
         party_name: customerName,

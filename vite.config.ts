@@ -340,6 +340,12 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    sourcemap: false,
+    chunkSizeWarningLimit: 1500,
+  },
   plugins: [
     react(),
     medinistAiDevPlugin(),

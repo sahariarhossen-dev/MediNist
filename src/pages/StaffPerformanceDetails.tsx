@@ -23,6 +23,7 @@ import {
   startOfMonthIso,
   startOfWeekIso,
 } from "@/components/staff/PerformanceWidgets";
+import { profileRoleToInviteRole } from "@/lib/staffRoles";
 import StaffAdvancesSheet from "@/components/staff/StaffAdvancesSheet";
 import ProductTargetsList from "@/components/staff/ProductTargetsList";
 
@@ -52,9 +53,11 @@ const StaffPerformanceDetails = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const { profile: me } = useAuth();
-  const isAdmin = me?.role === "admin";
+  const myRole = profileRoleToInviteRole(me?.role);
+  const isOwner = myRole === "owner";
+  const isManager = myRole === "manager";
   const isSelf = me?.id === userId;
-  const canEdit = isAdmin;
+  const canEdit = isOwner; // Only owners can edit salary/advances/targets
 
   const [staff, setStaff] = useState<StaffProfile | null>(null);
   const [settings, setSettings] = useState<StaffSettings>({
@@ -80,7 +83,7 @@ const StaffPerformanceDetails = () => {
 
   useEffect(() => {
     if (!userId || !me?.pharmacy_id) return;
-    if (!isAdmin && !isSelf) {
+    if (!isOwner && !isManager && !isSelf) {
       toast({ title: "Access denied", variant: "destructive" });
       navigate("/profile", { replace: true });
       return;
@@ -102,6 +105,20 @@ const StaffPerformanceDetails = () => {
         return;
       }
       if (cancelled) return;
+
+      const targetRole = profileRoleToInviteRole(prof.role);
+      // Hierarchical RBAC: A manager can ONLY supervise/view salesmen.
+      // A manager MUST NOT be able to view detailed performance for other managers or the owner.
+      if (isManager && !isSelf && targetRole !== "salesman") {
+        toast({
+          title: "Access Restricted",
+          description: "Managers are not permitted to view performance details for owners or peer managers.",
+          variant: "destructive",
+        });
+        navigate("/staff-management", { replace: true });
+        return;
+      }
+
       setStaff(prof as StaffProfile);
 
       // 2. Settings
@@ -204,7 +221,7 @@ const StaffPerformanceDetails = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [userId, me?.pharmacy_id, isAdmin, isSelf, navigate]);
+  }, [userId, me?.pharmacy_id, isOwner, isManager, isSelf, navigate]);
 
   const commission = useMemo(
     () => (monthSales * (settings.commission_percent || 0)) / 100,

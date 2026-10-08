@@ -46,7 +46,7 @@ const NewChatSheet = ({
             <SheetTitle>New chat</SheetTitle>
           </SheetHeader>
 
-          {profile?.role === "admin" && (
+          {(profile?.role || "").toLowerCase().trim() === "owner" && (
             <button
               onClick={() => setGroupOpen(true)}
               className="flex items-center gap-3 px-4 py-3 border-b hover:bg-gray-50 text-left"

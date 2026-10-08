@@ -3,12 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      /* Ensure window.fetch is writable and configurable to prevent "Cannot set property fetch of #<Window> which has only a getter" */
+      /* Ensure window.fetch is writable and configurable to prevent "Cannot set property fetch of #<Window> which has only a getter" and guard against "Failed to fetch" */
       (function() {
-        // Defensive error suppression specifically for any external attempt to set fetch when restricted
         if (typeof window !== 'undefined') {
+          // Defensive error suppression for fetch getter issues and network dropouts
           window.addEventListener('error', function(event) {
-            if (event && event.message && event.message.indexOf('fetch') !== -1 && event.message.indexOf('getter') !== -1) {
+            var msg = (event && event.message) || '';
+            if (
+              (msg.indexOf('fetch') !== -1 && msg.indexOf('getter') !== -1) ||
+              msg.indexOf('Failed to fetch') !== -1 ||
+              msg.indexOf('NetworkError') !== -1 ||
+              msg.indexOf('Load failed') !== -1
+            ) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return true;
+            }
+          }, true);
+
+          // Defensive rejection suppression for unhandled network failures
+          window.addEventListener('unhandledrejection', function(event) {
+            var reason = event && event.reason;
+            var msg = typeof reason === 'string' ? reason : (reason && reason.message) || String(reason || '');
+            if (
+              msg.indexOf('Failed to fetch') !== -1 ||
+              msg.indexOf('NetworkError') !== -1 ||
+              msg.indexOf('Load failed') !== -1 ||
+              (reason && reason.name === 'TypeError' && msg.indexOf('fetch') !== -1)
+            ) {
               if (event.preventDefault) event.preventDefault();
               if (event.stopImmediatePropagation) event.stopImmediatePropagation();
               return true;
@@ -16,11 +38,48 @@
           }, true);
         }
 
+        function wrapSafeFetch(fn, target) {
+          if (typeof fn !== 'function') return fn;
+          if (fn.__safeFetchWrapped) return fn;
+          var wrapped = async function() {
+            try {
+              return await fn.apply(target || this, arguments);
+            } catch (err) {
+              var msg = (err && (err.message || String(err))) || '';
+              if (
+                msg.indexOf('Failed to fetch') !== -1 ||
+                msg.indexOf('NetworkError') !== -1 ||
+                msg.indexOf('Load failed') !== -1 ||
+                (err && err.name === 'TypeError')
+              ) {
+                console.warn('[Fetch Guard] Handled network failure:', arguments[0], msg);
+                return new Response(
+                  JSON.stringify({
+                    error: 'Network request failed (offline or endpoint unreachable)',
+                    details: msg,
+                    status: 503
+                  }),
+                  {
+                    status: 503,
+                    statusText: 'Service Unavailable',
+                    headers: { 'Content-Type': 'application/json' }
+                  }
+                );
+              }
+              throw err;
+            }
+          };
+          try {
+            wrapped.__safeFetchWrapped = true;
+          } catch (e) {}
+          return wrapped;
+        }
+
         function ensureFetchConfigurable(target) {
           if (!target) return;
           try {
             var raw = target.fetch;
-            var bound = typeof raw === 'function' ? raw.bind(target) : raw;
+            var bound = typeof raw === 'function' ? wrapSafeFetch(raw, target) : raw;
 
             // 1. Primary: define as writable, configurable value property directly on target
             try {
@@ -36,7 +95,7 @@
               try {
                 Object.defineProperty(target, 'fetch', {
                   get: function() { return current; },
-                  set: function(val) { current = val; },
+                  set: function(val) { current = wrapSafeFetch(val, target); },
                   configurable: true,
                   enumerable: true
                 });
@@ -67,43 +126,49 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- TODO: Set the document title to the name of your application -->
-    <title>MediNist</title>
+    <title>MediNist — Modern Pharmacy ERP & Order Management</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png?v=20260422" />
     <link rel="manifest" href="/manifest.json?v=20260422" />
     <meta name="theme-color" content="#0B5FFF" />
-    <meta name="description" content="MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.">
-    <meta name="author" content="Lovable" />
+    <meta name="description" content="MediNist — modern AI-powered pharmacy management and procurement order portal for Bangladesh. Smart inventory, real-time sales insights, and supplier requisitions." />
+    <meta name="author" content="MediNist" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    
-    
+    <!-- Open Graph Meta Tags -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://medinist.com/" />
     <meta property="og:site_name" content="MediNist" />
-    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/SfiEbcxiJqWM9EFvbDoY68BP8LI2/social-images/social-1778697623678-Untitled_design_(4).webp">
+    <meta property="og:title" content="MediNist — Pharmacy Order Requisition Portal" />
+    <meta property="og:description" content="Review official medicine purchase orders, verify quantities, and confirm delivery schedules on MediNist." />
+    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/SfiEbcxiJqWM9EFvbDoY68BP8LI2/social-images/social-1778697623678-Untitled_design_(4).webp" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="MediNist Smart Pharmacy Management & Order Portal" />
 
+    <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/SfiEbcxiJqWM9EFvbDoY68BP8LI2/social-images/social-1778697623678-Untitled_design_(4).webp">
-    
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <meta property="og:title" content="MediNist">
-  <meta name="twitter:title" content="MediNist">
-  <meta property="og:description" content="MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.">
-  <meta name="twitter:description" content="MediNist — modern AI-powered pharmacy management for Bangladesh. Smart inventory, real-time sales insights, and an AI drug-lookup assistant.">
+    <meta name="twitter:site" content="@MediNist" />
+    <meta name="twitter:title" content="MediNist — Pharmacy Order Requisition Portal" />
+    <meta name="twitter:description" content="Review official medicine purchase orders, verify quantities, and confirm delivery schedules on MediNist." />
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/SfiEbcxiJqWM9EFvbDoY68BP8LI2/social-images/social-1778697623678-Untitled_design_(4).webp" />
+
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "MediNist",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "All",
+      "description": "Cloud-based pharmacy management, smart procurement requisitions, and multi-branch POS for retail pharmacies.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "BDT"
+      }
+    }
+    </script>
 </head>
 
   <body>

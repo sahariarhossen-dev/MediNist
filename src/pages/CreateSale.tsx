@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Sparkles, Pencil, Check } from "lucide-react";
+import { Sparkles, Pencil, Check, Store, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, Pill, X, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationStore } from "@/contexts/LocationContext";
 import { toast } from "sonner";
 import {
   totalPiecesToTriUnit,
@@ -16,12 +17,20 @@ import { getDisplayFormat, getProductTypeChipClasses, getDisplayCategory } from 
 import CustomerPickerPopover, { type PickedCustomer } from "@/components/customers/CustomerPickerPopover";
 import QuickAddCustomerSheet from "@/components/customers/QuickAddCustomerSheet";
 import { reportReadOnlyBlock } from "@/lib/readOnlyAudit";
+import {
+  resolveItemSellingPrice,
+  normalizePricing,
+  resolvePcsPerBox,
+} from "@/lib/pricingUtils";
 
 interface Medicine {
   id: string;
   name: string;
   company_name: string | null;
   price: number | null;
+  unit_price?: number | null;
+  piece_price?: number | null;
+  box_price?: number | null;
   stock_quantity: number | null;
   pcs_per_strip: number | null;
   strip_per_pack: number | null;
@@ -32,6 +41,7 @@ interface Medicine {
   box_size?: string | null;
   pack_size?: string | null;
   format?: string | null;
+  location_id?: string | null;
 }
 
 interface CartItem {
@@ -44,6 +54,10 @@ const CreateSale = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { profile, pharmacyName } = useAuth();
+  const { activeLocation, locations, setActiveLocation } = useLocationStore();
+  const isGodown = activeLocation?.type === "godown" || (activeLocation?.type as string) === "warehouse";
+  const retailLocations = locations.filter((l) => l.type === "branch" || (l.type as string) === "shop");
+
   const [saleType, setSaleType] = useState<"retail" | "wholesale">("retail");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Medicine[]>([]);
@@ -66,10 +80,31 @@ const CreateSale = () => {
   const [prescriptions, setPrescriptions] = useState<Array<{ id: string; medicine_id: string | null; medicine_name: string; dosage_frequency: string }>>([]);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
-  // Fetch global default discount from pharmacy settings
+  // Fetch default discount for the active branch outlet
   useEffect(() => {
+    if (activeLocation?.default_discount !== undefined && activeLocation.default_discount !== null) {
+      const val = Number(activeLocation.default_discount);
+      setDiscountPercent(val);
+      setDiscountInput(String(val));
+      setDefaultDiscount(val);
+      return;
+    }
     if (!profile?.pharmacy_id) return;
     const fetchDefault = async () => {
+      if (activeLocation?.id) {
+        const { data: loc } = await supabase
+          .from("shop_locations" as any)
+          .select("default_discount")
+          .eq("id", activeLocation.id)
+          .maybeSingle();
+        if (loc && (loc as any).default_discount !== null && (loc as any).default_discount !== undefined) {
+          const val = Number((loc as any).default_discount);
+          setDiscountPercent(val);
+          setDiscountInput(String(val));
+          setDefaultDiscount(val);
+          return;
+        }
+      }
       const { data } = await supabase
         .from("pharmacies")
         .select("default_discount")
@@ -83,7 +118,7 @@ const CreateSale = () => {
       }
     };
     fetchDefault();
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, activeLocation?.id, activeLocation?.default_discount]);
 
   // Load draft sale if URL has ?draft=SALE_ID
   useEffect(() => {
@@ -216,21 +251,26 @@ const CreateSale = () => {
     if (!profile?.pharmacy_id) return;
     let med: Medicine | null = null;
     if (presc.medicine_id) {
-      const { data } = await supabase
+      let q = supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format")
-        .eq("id", presc.medicine_id)
-        .maybeSingle();
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format, location_id")
+        .eq("id", presc.medicine_id);
+      if (activeLocation?.id) {
+        q = q.eq("location_id", activeLocation.id);
+      }
+      const { data } = await q.maybeSingle();
       med = (data as Medicine | null) ?? null;
     }
     if (!med) {
-      const { data } = await supabase
+      let q = supabase
         .from("medicines")
-        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format, location_id")
         .eq("pharmacy_id", profile.pharmacy_id)
-        .ilike("name", presc.medicine_name)
-        .limit(1)
-        .maybeSingle();
+        .ilike("name", presc.medicine_name);
+      if (activeLocation?.id) {
+        q = q.eq("location_id", activeLocation.id);
+      }
+      const { data } = await q.limit(1).maybeSingle();
       med = (data as Medicine | null) ?? null;
     }
     if (!med) {
@@ -238,18 +278,27 @@ const CreateSale = () => {
       return;
     }
     const initialQty = 1;
+    const unitPrice = resolveItemSellingPrice(med);
+    const pBox = resolvePcsPerBox(med);
+    const normalizedMed: Medicine = {
+      ...med,
+      price: unitPrice,
+      unit_price: unitPrice,
+      piece_price: unitPrice,
+      box_price: med.box_price || (pBox > 1 ? roundMoney(unitPrice * pBox) : unitPrice),
+    };
 
     setCartItems((prev) => {
-      const existing = prev.find((c) => c.medicine.id === med!.id);
+      const existing = prev.find((c) => c.medicine.id === normalizedMed.id);
       if (existing) {
         return prev.map((c) =>
-          c.medicine.id === med!.id ? { ...c, quantity: c.quantity + initialQty } : c
+          c.medicine.id === normalizedMed.id ? { ...c, quantity: c.quantity + initialQty } : c
         );
       }
-      return [{ medicine: med!, quantity: initialQty, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+      return [{ medicine: normalizedMed, quantity: initialQty, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
-    setExpandedId(med.id);
-  }, [profile?.pharmacy_id, saleType, defaultDiscount]);
+    setExpandedId(normalizedMed.id);
+  }, [profile?.pharmacy_id, activeLocation?.id, saleType, defaultDiscount]);
 
   useEffect(() => {
     if (!searchQuery.trim() || !profile?.pharmacy_id) {
@@ -260,31 +309,101 @@ const CreateSale = () => {
     const timeout = setTimeout(async () => {
       setSearching(true);
       const q = searchQuery.trim();
-      const { data, error } = await supabase.rpc("search_medicines", {
-        _pharmacy_id: profile.pharmacy_id!,
-        _query: q,
-      });
+
+      // Location-aware medicine search query
+      let query = supabase
+        .from("medicines")
+        .select("id, name, company_name, price, stock_quantity, pcs_per_strip, strip_per_pack, product_type, unit_format, product_size, packaging_type, box_size, pack_size, format, location_id")
+        .eq("pharmacy_id", profile.pharmacy_id!)
+        .ilike("name", `%${q}%`);
+
+      if (activeLocation?.id) {
+        query = query.eq("location_id", activeLocation.id);
+      }
+
+      const { data, error } = await query.order("name").limit(10);
       if (error) {
         setSearchResults([]);
       } else {
-        setSearchResults(((data ?? []) as Medicine[]).slice(0, 10));
+        const rawMeds = ((data ?? []) as Medicine[]).slice(0, 10);
+        const names = rawMeds.map((m) => m.name);
+        let masterMap = new Map<string, { unit_price: number | null; pcs_per_strip?: number | null; strip_per_pack?: number | null }>();
+
+        if (names.length > 0) {
+          const { data: masters } = await supabase
+            .from("master_medicines")
+            .select("brand_name, unit_price, pcs_per_strip, strip_per_pack")
+            .in("brand_name", names);
+
+          if (masters) {
+            for (const m of masters) {
+              masterMap.set(m.brand_name.trim().toLowerCase(), m);
+            }
+          }
+        }
+
+        const normalizedList: Medicine[] = rawMeds.map((med) => {
+          const master = masterMap.get(med.name.trim().toLowerCase());
+          const pps = Number(med.pcs_per_strip) || Number(master?.pcs_per_strip) || 1;
+          const spp = Number(med.strip_per_pack) || Number(master?.strip_per_pack) || 1;
+          const pBox = Math.max(1, pps * spp);
+
+          const pricing = normalizePricing({
+            rawPrice: med.price,
+            pcsPerBox: pBox,
+            masterUnitPrice: master?.unit_price,
+            productType: med.product_type || med.unit_format,
+          });
+
+          // If database stored a box price instead of unit price, heal it in the background
+          if (
+            med.id &&
+            pricing.isBoxPriceDetected &&
+            pricing.unitPrice > 0 &&
+            Math.abs((med.price || 0) - pricing.unitPrice) > 0.01
+          ) {
+            supabase.from("medicines").update({ price: pricing.unitPrice }).eq("id", med.id).then();
+          }
+
+          return {
+            ...med,
+            price: pricing.unitPrice,
+            unit_price: pricing.unitPrice,
+            piece_price: pricing.unitPrice,
+            box_price: pricing.boxPrice,
+            pcs_per_strip: med.pcs_per_strip || (pps > 1 ? pps : undefined),
+            strip_per_pack: med.strip_per_pack || (spp > 1 ? spp : undefined),
+          };
+        });
+
+        setSearchResults(normalizedList);
       }
       setSearching(false);
     }, 150);
     return () => clearTimeout(timeout);
-  }, [searchQuery, profile?.pharmacy_id]);
+  }, [searchQuery, profile?.pharmacy_id, activeLocation?.id]);
 
   const addToCart = useCallback((medicine: Medicine) => {
+    const unitPrice = resolveItemSellingPrice(medicine);
+    const pBox = resolvePcsPerBox(medicine);
+    const normalizedMed: Medicine = {
+      ...medicine,
+      price: unitPrice,
+      unit_price: unitPrice,
+      piece_price: unitPrice,
+      box_price: medicine.box_price || (pBox > 1 ? roundMoney(unitPrice * pBox) : unitPrice),
+    };
+
     setCartItems((prev) => {
-      const existing = prev.find((c) => c.medicine.id === medicine.id);
+      const existing = prev.find((c) => c.medicine.id === normalizedMed.id);
       if (existing) {
         return prev.map((c) =>
-          c.medicine.id === medicine.id ? { ...c, quantity: c.quantity + 1 } : c
+          c.medicine.id === normalizedMed.id ? { ...c, quantity: c.quantity + 1 } : c
         );
       }
-      return [{ medicine, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
+      return [{ medicine: normalizedMed, quantity: 1, discountPercent: saleType === "wholesale" ? defaultDiscount : 0 }, ...prev];
     });
-    setExpandedId(medicine.id);
+    setExpandedId(normalizedMed.id);
     setSearchQuery("");
     setSearchResults([]);
   }, [saleType, defaultDiscount]);
@@ -348,19 +467,25 @@ const CreateSale = () => {
     return getCartItemPieces(item.quantity, potInfo);
   }, []);
 
+  // Strict unit price resolver to avoid box price calculation errors
+  const getEffectiveUnitPrice = useCallback((med: Medicine) => {
+    return resolveItemSellingPrice(med);
+  }, []);
+
   // Calculate line total for an item (after item-wise discount in wholesale)
   const getLineTotal = useCallback((item: CartItem) => {
     const pieces = getItemPieces(item);
-    const gross = pieces * (item.medicine.price || 0);
+    const unitPrice = getEffectiveUnitPrice(item.medicine);
+    const gross = pieces * unitPrice;
     if (saleType === "wholesale") {
       return roundMoney(gross * (1 - item.discountPercent / 100));
     }
     return roundMoney(gross);
-  }, [saleType, getItemPieces]);
+  }, [saleType, getItemPieces, getEffectiveUnitPrice]);
 
   const subtotal = useMemo(
-    () => roundMoney(cartItems.reduce((sum, c) => sum + getItemPieces(c) * (c.medicine.price || 0), 0)),
-    [cartItems, getItemPieces]
+    () => roundMoney(cartItems.reduce((sum, c) => sum + getItemPieces(c) * getEffectiveUnitPrice(c.medicine), 0)),
+    [cartItems, getItemPieces, getEffectiveUnitPrice]
   );
 
   // For wholesale: net total = sum of per-item net amounts (no global discount)
@@ -386,6 +511,14 @@ const CreateSale = () => {
       return;
     }
 
+    // Prevent godown direct retail dispensing
+    if (isGodown && status !== "draft") {
+      toast.error(
+        `Active location is a Godown/Warehouse (${activeLocation?.name || "Godown"}). Storage warehouses cannot conduct direct retail dispensing. Please switch to an active retail branch.`
+      );
+      return;
+    }
+
     // Validate that pot items are not sold in loose partial quantities
     for (const item of cartItems) {
       if (!item.quantity || item.quantity < 1) {
@@ -402,13 +535,22 @@ const CreateSale = () => {
         medicine_name: c.medicine.name,
         company_name: c.medicine.company_name,
         quantity: getItemPieces(c),
-        unit_price: roundMoney(c.medicine.price || 0),
+        unit_price: roundMoney(getEffectiveUnitPrice(c.medicine)),
         total_price: roundMoney(getLineTotal(c)),
         discount_percent: saleType === "wholesale" ? c.discountPercent : 0,
       }));
 
+      const resolvedLocationId =
+        (activeLocation?.id && activeLocation.id.trim() !== "")
+          ? activeLocation.id
+          : (profile?.assigned_location_id && profile.assigned_location_id.trim() !== "")
+          ? profile.assigned_location_id
+          : (typeof window !== "undefined" ? localStorage.getItem("medinist_active_location_id") : null) ||
+            (locations.length > 0 ? locations[0].id : null);
+
       const salePayload = {
         draft_id: draftId,
+        location_id: resolvedLocationId,
         sale_type: saleType,
         subtotal: roundMoney(subtotal),
         discount_percent: saleType === "wholesale" ? 0 : discountPercent,
@@ -426,10 +568,19 @@ const CreateSale = () => {
         },
       };
 
+      console.log("[CreateSale] Dispatching complete_sale with payload:", {
+        resolvedLocationId,
+        activeLocationName: activeLocation?.name,
+        activeLocationId: activeLocation?.id,
+        profileAssignedLocationId: profile?.assigned_location_id,
+        salePayload,
+      });
+
       if (status === "draft") {
         // Drafts skip stock/ledger logic — use direct insert path.
         let saleId: string;
-        const draftFields = {
+        const draftFields: Record<string, any> = {
+          location_id: resolvedLocationId,
           sale_type: saleType,
           subtotal: roundMoney(subtotal),
           discount_percent: saleType === "wholesale" ? 0 : discountPercent,
@@ -438,13 +589,18 @@ const CreateSale = () => {
           status: "draft" as const,
         };
         if (draftId) {
-          const { error: updateError } = await supabase
+          let { error: updateError } = await supabase
             .from("sales").update(draftFields).eq("id", draftId);
+          if (updateError && /location_id/i.test(updateError.message || "")) {
+            delete draftFields.location_id;
+            const res = await supabase.from("sales").update(draftFields).eq("id", draftId);
+            updateError = res.error;
+          }
           if (updateError) throw updateError;
           saleId = draftId;
           await supabase.from("sale_items").delete().eq("sale_id", draftId);
         } else {
-          const { data: sale, error: saleError } = await supabase
+          let { data: sale, error: saleError } = await supabase
             .from("sales")
             .insert({
               pharmacy_id: profile.pharmacy_id,
@@ -453,6 +609,20 @@ const CreateSale = () => {
             })
             .select("id")
             .single();
+          if (saleError && /location_id/i.test(saleError.message || "")) {
+            delete draftFields.location_id;
+            const res = await supabase
+              .from("sales")
+              .insert({
+                pharmacy_id: profile.pharmacy_id,
+                user_id: profile.id,
+                ...draftFields,
+              })
+              .select("id")
+              .single();
+            sale = res.data;
+            saleError = res.error;
+          }
           if (saleError) throw saleError;
           saleId = sale.id;
         }
@@ -461,31 +631,153 @@ const CreateSale = () => {
           .insert(items.map((it) => ({ ...it, sale_id: saleId })));
         if (itemsError) throw itemsError;
       } else {
-        const { data: newSaleId, error: rpcError } = await supabase.rpc(
-          "complete_sale" as never,
-          { _payload: salePayload } as never,
-        );
-        if (rpcError) {
-          const msg = rpcError.message || "Failed to complete sale";
-          const m = msg.match(/INSUFFICIENT_STOCK:([0-9a-f-]+)/i);
-          if (m) {
-            const out = cartItems.find((c) => c.medicine.id === m[1]);
-            throw new Error(
-              `Not enough stock for "${out?.medicine.name ?? "an item"}". Refresh and try again.`,
-            );
+        let newSaleId: string | null = null;
+        let completedViaRpc = false;
+
+        try {
+          const { data: rpcRes, error: rpcError } = await supabase.rpc(
+            "complete_sale" as never,
+            { _payload: salePayload } as never,
+          );
+
+          if (rpcError) {
+            const msg = rpcError.message || "Failed to complete sale";
+            const m = msg.match(/INSUFFICIENT_STOCK:([0-9a-f-]+)/i);
+            if (m) {
+              const out = cartItems.find((c) => c.medicine.id === m[1]);
+              throw new Error(
+                `Not enough stock for "${out?.medicine.name ?? "an item"}". Refresh and try again.`,
+              );
+            }
+            if (/ACCESS_READ_ONLY/i.test(msg)) {
+              reportReadOnlyBlock(msg, "sales");
+              throw new Error("App blocked by shop owner");
+            }
+            if (/ACCESS_SUSPENDED/i.test(msg)) throw new Error("Your access has been suspended");
+
+            // If the database schema on Postgres is missing the location_id column in sales table:
+            if (/location_id/i.test(msg) || /relation "sales"/i.test(msg) || /does not exist/i.test(msg)) {
+              console.warn("[CreateSale] complete_sale RPC failed with schema mismatch. Executing direct client transaction fallback:", msg);
+            } else {
+              throw new Error(msg);
+            }
+          } else {
+            newSaleId = rpcRes as unknown as string;
+            completedViaRpc = true;
           }
-          if (/ACCESS_READ_ONLY/i.test(msg)) {
-            reportReadOnlyBlock(msg, "sales");
-            throw new Error("App blocked by shop owner");
+        } catch (rpcDispatchErr: any) {
+          if (!/location_id/i.test(rpcDispatchErr?.message || "")) {
+            throw rpcDispatchErr;
           }
-          if (/ACCESS_SUSPENDED/i.test(msg)) throw new Error("Your access has been suspended");
-          throw new Error(msg);
         }
-        if (newSaleId) {
+
+        // Direct fallback path if complete_sale failed due to location_id column missing on DB
+        if (!completedViaRpc) {
+          console.info("[CreateSale] Processing direct fallback checkout transaction...");
+          
+          // 1. Insert into sales
+          const saleObj: Record<string, any> = {
+            pharmacy_id: profile.pharmacy_id,
+            user_id: profile.id,
+            sale_type: saleType,
+            subtotal: roundMoney(subtotal),
+            discount_percent: saleType === "wholesale" ? 0 : discountPercent,
+            discount_amount: roundMoney(totalDiscountAmount),
+            total: roundMoney(netTotal),
+            status: "completed",
+          };
+          if (resolvedLocationId) {
+            saleObj.location_id = resolvedLocationId;
+          }
+
+          let { data: directSale, error: directSaleErr } = await supabase
+            .from("sales")
+            .insert(saleObj)
+            .select("id")
+            .single();
+
+          if (directSaleErr && /location_id/i.test(directSaleErr.message || "")) {
+            delete saleObj.location_id;
+            const retryRes = await supabase.from("sales").insert(saleObj).select("id").single();
+            directSale = retryRes.data;
+            directSaleErr = retryRes.error;
+          }
+
+          if (directSaleErr) throw directSaleErr;
+          newSaleId = directSale.id;
+
+          // 2. Insert items
+          const { error: itemsErr } = await supabase
+            .from("sale_items")
+            .insert(items.map((it) => ({ ...it, sale_id: newSaleId })));
+          if (itemsErr) throw itemsErr;
+
+          // 3. Stock deductions
+          for (const it of items) {
+            const { data: medData } = await supabase
+              .from("medicines")
+              .select("stock_quantity")
+              .eq("id", it.medicine_id)
+              .maybeSingle();
+
+            if (medData) {
+              const currentStock = Number(medData.stock_quantity || 0);
+              const nextStock = Math.max(0, currentStock - it.quantity);
+              await supabase
+                .from("medicines")
+                .update({ stock_quantity: nextStock, updated_at: new Date().toISOString() })
+                .eq("id", it.medicine_id);
+            }
+          }
+
+          // 4. Ledger & Cash transactions
+          if ((paymentMethod === "due" || paymentMethod === "split") && selectedCustomer?.id) {
+            const paid = paymentMethod === "split" ? roundMoney(Math.max(0, Math.min(netTotal, parseFloat(paidNow) || 0))) : 0;
+            const due = Math.max(0, netTotal - paid);
+
+            if (due > 0) {
+              const dueObj: Record<string, any> = {
+                customer_id: selectedCustomer.id,
+                pharmacy_id: profile.pharmacy_id,
+                user_id: profile.id,
+                entry_type: "due",
+                amount: due,
+                description: `Sale #${newSaleId?.slice(0, 8)}`,
+                sale_id: newSaleId,
+              };
+              if (resolvedLocationId) dueObj.location_id = resolvedLocationId;
+              let { error: lErr } = await supabase.from("customer_ledger").insert(dueObj);
+              if (lErr && /location_id/i.test(lErr.message || "")) {
+                delete dueObj.location_id;
+                await supabase.from("customer_ledger").insert(dueObj);
+              }
+            }
+
+            if (paymentMethod === "split" && paid > 0) {
+              const cashObj: Record<string, any> = {
+                pharmacy_id: profile.pharmacy_id,
+                user_id: profile.id,
+                direction: "in",
+                category: "sale_cash",
+                party_name: selectedCustomer.name,
+                amount: paid,
+                sale_id: newSaleId,
+              };
+              if (resolvedLocationId) cashObj.location_id = resolvedLocationId;
+              let { error: cErr } = await supabase.from("cash_transactions").insert(cashObj);
+              if (cErr && /location_id/i.test(cErr.message || "")) {
+                delete cashObj.location_id;
+                await supabase.from("cash_transactions").insert(cashObj);
+              }
+            }
+          }
+        }
+
+        if (newSaleId && completedViaRpc) {
           const { data: saved } = await supabase
             .from("sales")
             .select("status")
-            .eq("id", newSaleId as unknown as string)
+            .eq("id", newSaleId)
             .maybeSingle();
           if (saved?.status === "pending_approval") {
             toast.warning("Discount above shop limit — waiting for owner approval");
@@ -529,49 +821,90 @@ const CreateSale = () => {
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex flex-col">
       {/* Header */}
-      <div className="px-4 pt-5 pb-3 flex items-center justify-between bg-white border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2.5 text-secondary">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="15" cy="4" r="2" />
-                <path d="M9 21l3-9 4 1" />
-                <path d="M12 12l-4-3-3 9" />
-                <path d="M6 6l6 3" />
-              </svg>
+      <div className="px-4 pt-4 pb-3 flex flex-col gap-2.5 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 text-secondary">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="15" cy="4" r="2" />
+                  <path d="M9 21l3-9 4 1" />
+                  <path d="M12 12l-4-3-3 9" />
+                  <path d="M6 6l6 3" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-gray-900 leading-tight">{profile?.full_name || "Staff"}</p>
+                <p className="text-[11px] leading-tight text-muted">By {activeLocation?.name || pharmacyName || "Pharmacy"}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-base font-bold text-gray-900 leading-tight">{profile?.full_name || "Staff"}</p>
-              <p className="text-[11px] leading-tight text-muted">By {pharmacyName || "Pharmacy"}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Active Branch Badge */}
+            {activeLocation && activeLocation.name && (
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                  isGodown
+                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                }`}
+                title={`Active Selling Branch: ${activeLocation.name}`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span className="truncate max-w-[120px]">{activeLocation.name}</span>
+              </div>
+            )}
+
+            <div className="relative">
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold transition shadow-sm ${
+                  isWholesale
+                    ? "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    : "border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                }`}
+              >
+                {isWholesale ? "Wholesale" : "Retail"}
+              </button>
+              {showDropdown && (
+                <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                  {(["retail", "wholesale"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => handleSaleTypeChange(t)}
+                      className={`w-full px-4 py-2.5 text-left text-xs font-medium transition ${saleType === t ? "bg-emerald-600 text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                    >
+                      {t === "retail" ? "Retail" : "Wholesale"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="relative">
-          <button
-            onClick={() => setShowDropdown(!showDropdown)}
-            className={`px-4 py-1.5 rounded-full border text-sm font-semibold transition shadow-sm ${
-              isWholesale
-                ? "border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                : "border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
-            }`}
-          >
-            {isWholesale ? "Wholesale" : "Retail"}
-          </button>
-          {showDropdown && (
-            <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-              {(["retail", "wholesale"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => handleSaleTypeChange(t)}
-                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition ${saleType === t ? "bg-emerald-600 text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                >
-                  {t === "retail" ? "Retail" : "Wholesale"}
-                </button>
-              ))}
+        {/* Godown Warning Banner */}
+        {isGodown && (
+          <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold text-amber-900">Storage Godown / Warehouse Selected</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                Direct retail sales cannot be dispatched from a warehouse. Please switch to an active retail branch.
+              </p>
             </div>
-          )}
-        </div>
+            {retailLocations.length > 0 && (
+              <button
+                onClick={() => setActiveLocation(retailLocations[0].id)}
+                className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 text-white text-[11px] font-bold rounded-lg hover:bg-amber-700 transition flex-shrink-0"
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                Switch to {retailLocations[0].name.split(" ")[0]}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -653,11 +986,15 @@ const CreateSale = () => {
                     <p className="text-gray-900 text-sm font-bold font-mono">
                       ৳{formatMoney(potInfo.isPot ? (med.price ?? 0) * potInfo.potSize : (med.price ?? 0))}
                     </p>
-                    {potInfo.isPot && (
+                    {potInfo.isPot ? (
                       <p className="text-[10px] text-gray-400 font-mono">
                         ৳{formatMoney(med.price ?? 0)}/pc
                       </p>
-                    )}
+                    ) : med.box_price && med.box_price > (med.price ?? 0) ? (
+                      <p className="text-[10px] text-gray-400 font-mono">
+                        ৳{formatMoney(med.box_price)}/box
+                      </p>
+                    ) : null}
                   </div>
                 </button>
               );
@@ -734,7 +1071,7 @@ const CreateSale = () => {
         ) : (
           <div className="space-y-2">
             {cartItems.map((item, idx) => {
-              const unitPrice = item.medicine.price || 0;
+              const unitPrice = getEffectiveUnitPrice(item.medicine);
               const potInfo = getPotItemInfo(item.medicine);
               const pieces = getItemPieces(item);
               const grossTotal = pieces * unitPrice;
@@ -943,7 +1280,7 @@ const CreateSale = () => {
                 {cartItems.map((c, i) => (
                   <span key={c.medicine.id}>
                     {i > 0 && " + "}
-                    {formatMoney(getItemPieces(c) * (c.medicine.price || 0))}
+                    {formatMoney(getItemPieces(c) * getEffectiveUnitPrice(c.medicine))}
                   </span>
                 ))}
                 {" = "}{formatMoney(subtotal)} ৳
