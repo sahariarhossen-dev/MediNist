@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveWorkspace } from "@/hooks/useActiveWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 import { warehouseStorage } from "@/services/warehouseStorage";
 import {
@@ -141,7 +142,7 @@ const PRESET_SUPPLIERS = [
 export default function Suppliers() {
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const pharmacyId = profile?.pharmacy_id;
+  const { pharmacyId, branchId, branchName } = useActiveWorkspace();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,11 +238,35 @@ export default function Suppliers() {
     if (!pharmacyId) return;
     try {
       setLoading(true);
-      const data = await warehouseStorage.getSuppliers(pharmacyId);
+      const data = await warehouseStorage.getSuppliers(pharmacyId, branchId);
       const supplierList = (data || []) as Supplier[];
       setSuppliers(supplierList);
 
       const supIds = supplierList.map((s) => s.id);
+
+      // Construct branch-scoped medicines and requisitions queries (strictly isolated to active branch)
+      let medsQuery = supabase
+        .from("medicines")
+        .select("id, company_name, manufacturer_id, preferred_supplier_id, stock_quantity, stock_alert, location_id")
+        .eq("pharmacy_id", pharmacyId);
+      if (branchId) {
+        medsQuery = medsQuery.eq("location_id", branchId);
+      }
+
+      let reqsQuery = (supabase.from("requisitions" as any) as any)
+        .select("id, supplier_id, status, location_id")
+        .eq("pharmacy_id", pharmacyId)
+        .in("status", ["draft", "shared", "sr_confirmed"]);
+      if (branchId) {
+        reqsQuery = reqsQuery.eq("location_id", branchId);
+      }
+
+      let ledgerQuery = (supabase.from("supplier_ledger_entries" as any) as any)
+        .select("debit, transaction_type, location_id")
+        .eq("pharmacy_id", pharmacyId);
+      if (branchId) {
+        ledgerQuery = ledgerQuery.eq("location_id", branchId);
+      }
 
       // Fetch junction mappings, ledgers, medicines, and requisitions in parallel
       const [smRes, ledgerRes, medsRes, reqsRes] = await Promise.all([
@@ -252,17 +277,9 @@ export default function Suppliers() {
               .eq("pharmacy_id", pharmacyId)
               .in("supplier_id", supIds)
           : Promise.resolve({ data: [] as any[], error: null }),
-        (supabase.from("supplier_ledger_entries" as any) as any)
-          .select("debit, transaction_type")
-          .eq("pharmacy_id", pharmacyId),
-        supabase
-          .from("medicines")
-          .select("id, company_name, manufacturer_id, preferred_supplier_id, stock_quantity, stock_alert")
-          .eq("pharmacy_id", pharmacyId),
-        (supabase.from("requisitions" as any) as any)
-          .select("id, supplier_id, status")
-          .eq("pharmacy_id", pharmacyId)
-          .in("status", ["draft", "shared", "sr_confirmed"]),
+        ledgerQuery,
+        medsQuery,
+        reqsQuery,
       ]);
 
       // 1. Process supplier-manufacturer mapping
@@ -285,7 +302,9 @@ export default function Suppliers() {
           return sum + (entry.transaction_type === "payment" || deb > 0 ? deb : 0);
         }, 0);
       } else {
-        const ledgerKey = `warehouse_supplier_ledger_${pharmacyId}`;
+        const ledgerKey = branchId
+          ? `warehouse_supplier_ledger_${pharmacyId}_${branchId}`
+          : `warehouse_supplier_ledger_${pharmacyId}`;
         const localLedger = JSON.parse(localStorage.getItem(ledgerKey) || "[]");
         totalPaidSum = localLedger.reduce((sum: number, entry: any) => {
           const deb = Number(entry.debit) || 0;
@@ -339,12 +358,26 @@ export default function Suppliers() {
     } finally {
       setLoading(false);
     }
-  }, [pharmacyId]);
+  }, [pharmacyId, branchId]);
 
   useEffect(() => {
     fetchSuppliers();
     fetchManufacturers();
   }, [fetchSuppliers, fetchManufacturers]);
+
+  // Listen to global workspace change events (dispatched by LocationContext / ActiveBranchCard)
+  useEffect(() => {
+    const handleWorkspaceChanged = () => {
+      setActiveLedgerSupplier(null);
+      setLedgerOpen(false);
+      setDialogOpen(false);
+      fetchSuppliers();
+    };
+    window.addEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    return () => {
+      window.removeEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    };
+  }, [fetchSuppliers]);
 
   // Quick-Add / Register New Manufacturer
   const handleQuickAddManufacturer = async (nameToAdd?: string) => {
@@ -514,7 +547,7 @@ export default function Suppliers() {
     setBillReference("");
     setLedgerTab("payment");
     try {
-      const entries = await warehouseStorage.getSupplierLedger(pharmacyId, sup.id);
+      const entries = await warehouseStorage.getSupplierLedger(pharmacyId, sup.id, branchId);
       setLedgerEntries(entries);
     } catch (err) {
       console.warn("[Suppliers] Ledger fetch error:", err);
@@ -534,15 +567,20 @@ export default function Suppliers() {
 
     try {
       setIsRecordingBill(true);
-      await warehouseStorage.recordSupplierLedgerEntry(pharmacyId, activeLedgerSupplier.id, {
-        transaction_type: "bill",
-        amount: amt,
-        description: billReference.trim() ? `Manual Bill / Invoice: ${billReference.trim()}` : "Manual Purchase Bill",
-      });
+      await warehouseStorage.recordSupplierLedgerEntry(
+        pharmacyId,
+        activeLedgerSupplier.id,
+        {
+          transaction_type: "bill",
+          amount: amt,
+          description: billReference.trim() ? `Manual Bill / Invoice: ${billReference.trim()}` : "Manual Purchase Bill",
+        },
+        branchId
+      );
       toast.success(`Bill of ৳ ${amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })} recorded`);
       setBillAmount("");
       setBillReference("");
-      const updatedEntries = await warehouseStorage.getSupplierLedger(pharmacyId, activeLedgerSupplier.id);
+      const updatedEntries = await warehouseStorage.getSupplierLedger(pharmacyId, activeLedgerSupplier.id, branchId);
       setLedgerEntries(updatedEntries);
       fetchSuppliers();
       setActiveLedgerSupplier((prev) =>
@@ -566,16 +604,21 @@ export default function Suppliers() {
 
     try {
       setIsRecordingPayment(true);
-      await warehouseStorage.recordSupplierLedgerEntry(pharmacyId, activeLedgerSupplier.id, {
-        transaction_type: "payment",
-        amount: amt,
-        description: paymentNote.trim() || "Supplier disbursement payment",
-      });
+      await warehouseStorage.recordSupplierLedgerEntry(
+        pharmacyId,
+        activeLedgerSupplier.id,
+        {
+          transaction_type: "payment",
+          amount: amt,
+          description: paymentNote.trim() || "Supplier disbursement payment",
+        },
+        branchId
+      );
       toast.success(`Payment of ৳ ${amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })} recorded`);
       setPaymentAmount("");
       setPaymentNote("");
       // Refresh ledger & supplier state
-      const updatedEntries = await warehouseStorage.getSupplierLedger(pharmacyId, activeLedgerSupplier.id);
+      const updatedEntries = await warehouseStorage.getSupplierLedger(pharmacyId, activeLedgerSupplier.id, branchId);
       setLedgerEntries(updatedEntries);
       fetchSuppliers();
       // Update active supplier local balance in modal
@@ -635,17 +678,27 @@ export default function Suppliers() {
       let savedSupplierId: string | undefined = editingSupplier?.id;
 
       if (editingSupplier) {
-        const saved = await warehouseStorage.saveSupplier(pharmacyId, {
-          id: editingSupplier.id,
-          ...payload,
-        });
+        const saved = await warehouseStorage.saveSupplier(
+          pharmacyId,
+          {
+            id: editingSupplier.id,
+            location_id: (editingSupplier as any).location_id || branchId,
+            ...payload,
+          },
+          branchId
+        );
         savedSupplierId = saved?.id || editingSupplier.id;
         toast.success("Supplier details & schedule updated");
       } else {
-        const saved = await warehouseStorage.saveSupplier(pharmacyId, {
-          ...payload,
-          balance: formData.opening_balance,
-        });
+        const saved = await warehouseStorage.saveSupplier(
+          pharmacyId,
+          {
+            ...payload,
+            location_id: branchId,
+            balance: formData.opening_balance,
+          },
+          branchId
+        );
         savedSupplierId = saved?.id;
         toast.success("New supplier registered with order routine");
       }
@@ -709,7 +762,7 @@ export default function Suppliers() {
 
     try {
       setIsDeleting(true);
-      await warehouseStorage.deleteSupplier(pharmacyId, supplier.id);
+      await warehouseStorage.deleteSupplier(pharmacyId, supplier.id, branchId);
       toast.success(`${supplier.name} deleted successfully`);
       setSuppliers((prev) => prev.filter((s) => s.id !== supplier.id));
       setDeleteConfirmOpen(false);
@@ -730,21 +783,26 @@ export default function Suppliers() {
     try {
       setIsSubmitting(true);
       for (const p of PRESET_SUPPLIERS) {
-        await warehouseStorage.saveSupplier(pharmacyId, {
-          name: p.name,
-          contact_person: p.contact_person,
-          phone: p.phone,
-          email: p.email,
-          address: p.address,
-          payment_terms: p.payment_terms as any,
-          balance: 0,
-          order_days: p.order_days,
-          lead_time_days: p.lead_time_days,
-          minimum_order_amount: p.minimum_order_amount,
-          sr_name: p.sr_name,
-          sr_phone: p.sr_phone,
-          sr_whatsapp: p.sr_whatsapp,
-        });
+        await warehouseStorage.saveSupplier(
+          pharmacyId,
+          {
+            name: p.name,
+            contact_person: p.contact_person,
+            phone: p.phone,
+            email: p.email,
+            address: p.address,
+            payment_terms: p.payment_terms as any,
+            balance: 0,
+            order_days: p.order_days,
+            lead_time_days: p.lead_time_days,
+            minimum_order_amount: p.minimum_order_amount,
+            sr_name: p.sr_name,
+            sr_phone: p.sr_phone,
+            sr_whatsapp: p.sr_whatsapp,
+            location_id: branchId,
+          },
+          branchId
+        );
       }
 
       toast.success("Sample pharmaceutical manufacturers loaded");
@@ -798,9 +856,15 @@ export default function Suppliers() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         {/* Top Block: Title & Subtitle */}
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-            Suppliers & Vendors
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              Suppliers & Vendors
+            </h1>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+              <Building2 className="h-3 w-3 text-slate-500" />
+              {branchName || "Active Branch"}
+            </div>
+          </div>
           <p className="text-xs text-slate-500 mt-1">
             Central pharmaceutical manufacturer registry & vendor accounts
           </p>

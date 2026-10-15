@@ -40,6 +40,14 @@ interface OrderPortalData {
   valid: boolean;
   error?: string;
   requisition_number: string;
+  location_id?: string | null;
+  branch_code?: string | null;
+  branch_name?: string | null;
+  branch_address?: string | null;
+  branch_phone?: string | null;
+  issuing_pharmacy_name?: string | null;
+  issuing_pharmacy_address?: string | null;
+  issuing_pharmacy_phone?: string | null;
   pharmacy_name: string;
   pharmacy_phone?: string | null;
   pharmacy_address?: string | null;
@@ -53,6 +61,14 @@ interface OrderPortalData {
   sr_estimated_delivery?: string | null;
   sr_notes?: string | null;
   items: OrderPortalItem[];
+  location?: {
+    id: string;
+    name: string;
+    address?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    code?: string | null;
+  } | null;
 }
 
 export default function SROrderPortal() {
@@ -76,6 +92,13 @@ export default function SROrderPortal() {
 
     try {
       setLoading(true);
+
+      // Extract URL search parameters passed from the active branch dispatcher
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlBranchName = urlParams.get("branch") || urlParams.get("b");
+      const urlBranchAddress = urlParams.get("addr") || urlParams.get("a");
+      const urlBranchPhone = urlParams.get("phone") || urlParams.get("p");
+
       const { data, error } = await supabase.rpc("get_public_sr_order_portal", {
         _token: token,
       });
@@ -89,21 +112,63 @@ export default function SROrderPortal() {
         return;
       }
 
-      setOrder(data as OrderPortalData);
+      // Priority resolution: Branch identity strictly supersedes parent organization ("City Shop")
+      const resolvedBranchName =
+        urlBranchName ||
+        data.location?.name ||
+        data.branch_name ||
+        data.issuing_pharmacy_name ||
+        data.pharmacy_name ||
+        "Pharmacy Order";
+
+      const resolvedBranchAddress =
+        urlBranchAddress ||
+        data.location?.address ||
+        data.branch_address ||
+        data.issuing_pharmacy_address ||
+        data.pharmacy_address ||
+        null;
+
+      const resolvedBranchPhone =
+        urlBranchPhone ||
+        data.location?.phone ||
+        data.branch_phone ||
+        data.issuing_pharmacy_phone ||
+        data.pharmacy_phone ||
+        null;
+
+      const resolvedBranchCode =
+        data.branch_code ||
+        data.location?.code ||
+        null;
+
+      const resolvedOrder: OrderPortalData = {
+        ...(data as OrderPortalData),
+        issuing_pharmacy_name: resolvedBranchName,
+        issuing_pharmacy_address: resolvedBranchAddress,
+        issuing_pharmacy_phone: resolvedBranchPhone,
+        pharmacy_name: resolvedBranchName,
+        pharmacy_address: resolvedBranchAddress,
+        pharmacy_phone: resolvedBranchPhone,
+        branch_code: resolvedBranchCode,
+      };
+
+      setOrder(resolvedOrder);
       if (data.sr_acknowledged_at) {
         setAcknowledgedSuccess(true);
       }
 
       // Dynamic branded page title and description for SR portal
-      if (data.pharmacy_name && data.requisition_number) {
-        document.title = `Order Requisition #${data.requisition_number} — ${data.pharmacy_name} | MediNist`;
+      if (resolvedOrder.requisition_number) {
+        const orderTitle = `Official Purchase Order #${resolvedOrder.requisition_number} — ${resolvedBranchName}`;
+        const orderDesc = `Verified Procurement Order for ${resolvedOrder.supplier_name || "Supplier"} • ${resolvedOrder.items?.length || 0} items listed. Confirm delivery via MediNist.`;
+        document.title = `${orderTitle} | MediNist`;
         const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) {
-          metaDesc.setAttribute(
-            "content",
-            `Official purchase requisition #${data.requisition_number} from ${data.pharmacy_name}. Review items and confirm delivery on MediNist.`
-          );
-        }
+        if (metaDesc) metaDesc.setAttribute("content", orderDesc);
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) ogTitle.setAttribute("content", orderTitle);
+        const ogDesc = document.querySelector('meta[property="og:description"]');
+        if (ogDesc) ogDesc.setAttribute("content", orderDesc);
       }
     } catch (err: any) {
       console.error("[SROrderPortal] Fetch error:", err);
@@ -158,10 +223,16 @@ export default function SROrderPortal() {
   };
 
   const handleShareLink = () => {
+    const displayBranch =
+      order?.location?.name ||
+      order?.issuing_pharmacy_name ||
+      order?.branch_name ||
+      order?.pharmacy_name ||
+      "Pharmacy";
     if (navigator.share) {
       navigator.share({
-        title: `Order #${order?.requisition_number} - ${order?.pharmacy_name}`,
-        text: `Medicine purchase order from ${order?.pharmacy_name}`,
+        title: `Order #${order?.requisition_number} - ${displayBranch}`,
+        text: `Medicine purchase order from ${displayBranch}`,
         url: window.location.href,
       });
     } else {
@@ -246,26 +317,33 @@ export default function SROrderPortal() {
           <div className="p-5 sm:p-6 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="min-w-0">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full inline-block mb-2">
-                  OFFICIAL PURCHASE REQUISITION
-                </span>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full inline-block">
+                    OFFICIAL PURCHASE REQUISITION
+                  </span>
+                  {(order.branch_code || order.location?.code) && (
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 bg-white/10 px-2 py-0.5 rounded-full inline-block">
+                      BRANCH: {order.branch_code || order.location?.code}
+                    </span>
+                  )}
+                </div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
-                  {order.pharmacy_name}
+                  {order.location?.name || order.issuing_pharmacy_name || order.branch_name || order.pharmacy_name || "Pharmacy Order"}
                 </h1>
-                {order.pharmacy_address && (
+                {(order.location?.address || order.issuing_pharmacy_address || order.branch_address || order.pharmacy_address) && (
                   <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5">
                     <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                    <span>{order.pharmacy_address}</span>
+                    <span>{order.location?.address || order.issuing_pharmacy_address || order.branch_address || order.pharmacy_address}</span>
                   </p>
                 )}
-                {order.pharmacy_phone && (
+                {(order.location?.phone || order.issuing_pharmacy_phone || order.branch_phone || order.pharmacy_phone) && (
                   <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5">
                     <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                     <a
-                      href={`tel:${order.pharmacy_phone}`}
+                      href={`tel:${order.location?.phone || order.issuing_pharmacy_phone || order.branch_phone || order.pharmacy_phone}`}
                       className="hover:text-emerald-400 font-semibold underline underline-offset-2"
                     >
-                      {order.pharmacy_phone}
+                      {order.location?.phone || order.issuing_pharmacy_phone || order.branch_phone || order.pharmacy_phone}
                     </a>
                   </p>
                 )}

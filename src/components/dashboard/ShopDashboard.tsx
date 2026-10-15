@@ -359,7 +359,7 @@ export const ShopDashboard = () => {
           <div>
             <h1 className="text-fluid-lg font-bold text-gray-900">Business Insights</h1>
             <p className="text-fluid-xs mt-0.5 text-secondary-foreground">
-              {activeLocation.name || "Main Branch"} Overview
+              {activeLocation.name || "Pharmacy"} Overview
             </p>
           </div>
           {showDateFilter && (

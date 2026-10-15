@@ -84,31 +84,32 @@ const Invoice = () => {
       setSellerName(sellerRes.data?.full_name || "Staff");
       setSellerPhone(sellerRes.data?.phone || "");
 
-      // Strictly resolve the active physical branch from public.shop_locations
-      let branchInfo: BranchData | null = null;
+      // Hierarchically resolve shop profile: active location + parent pharmacy fallback
+      let resolvedLoc: any = null;
+      let parentPharm: any = null;
+
+      // 1. Fetch parent registered pharmacy profile
+      if (typedSale.pharmacy_id) {
+        const { data: pharmData } = await supabase
+          .from("pharmacies")
+          .select("name, address, division, district, upazila, phone, email, proprietor_name, invoice_footer")
+          .eq("id", typedSale.pharmacy_id)
+          .maybeSingle();
+        parentPharm = pharmData;
+      }
+
+      // 2. Fetch specific shop location if bound to sale
       if (typedSale.location_id) {
         const { data: locData } = await supabase
           .from("shop_locations" as any)
           .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
           .eq("id", typedSale.location_id)
           .maybeSingle();
-
-        if (locData) {
-          branchInfo = {
-            name: (locData as any).name || "Branch",
-            address: (locData as any).address || null,
-            phone: (locData as any).phone || null,
-            email: (locData as any).email || null,
-            proprietor_name: (locData as any).proprietor_name || null,
-            drug_license: (locData as any).drug_license || null,
-            trade_license: (locData as any).trade_license || null,
-            invoice_footer: (locData as any).invoice_footer || null,
-          };
-        }
+        resolvedLoc = locData;
       }
 
-      // Fallback for legacy sales without location_id: fetch primary branch from shop_locations
-      if (!branchInfo && typedSale.pharmacy_id) {
+      // 3. Fallback to primary location if no location_id was linked to sale
+      if (!resolvedLoc && typedSale.pharmacy_id) {
         const { data: mainLoc } = await supabase
           .from("shop_locations" as any)
           .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
@@ -117,18 +118,8 @@ const Invoice = () => {
           .maybeSingle();
 
         if (mainLoc) {
-          branchInfo = {
-            name: (mainLoc as any).name || "Branch",
-            address: (mainLoc as any).address || null,
-            phone: (mainLoc as any).phone || null,
-            email: (mainLoc as any).email || null,
-            proprietor_name: (mainLoc as any).proprietor_name || null,
-            drug_license: (mainLoc as any).drug_license || null,
-            trade_license: (mainLoc as any).trade_license || null,
-            invoice_footer: (mainLoc as any).invoice_footer || null,
-          };
+          resolvedLoc = mainLoc;
         } else {
-          // If no main branch flag, get earliest location
           const { data: anyLoc } = await supabase
             .from("shop_locations" as any)
             .select("name, address, phone, email, proprietor_name, drug_license, trade_license, invoice_footer")
@@ -136,44 +127,28 @@ const Invoice = () => {
             .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle();
-
-          if (anyLoc) {
-            branchInfo = {
-              name: (anyLoc as any).name || "Branch",
-              address: (anyLoc as any).address || null,
-              phone: (anyLoc as any).phone || null,
-              email: (anyLoc as any).email || null,
-              proprietor_name: (anyLoc as any).proprietor_name || null,
-              drug_license: (anyLoc as any).drug_license || null,
-              trade_license: (anyLoc as any).trade_license || null,
-              invoice_footer: (anyLoc as any).invoice_footer || null,
-            };
-          }
+          resolvedLoc = anyLoc;
         }
       }
 
-      // Ultimate fallback if no shop_locations record exists at all
-      if (!branchInfo && typedSale.pharmacy_id) {
-        const { data: pharm } = await supabase
-          .from("pharmacies")
-          .select("name, address, division, district, upazila, email, proprietor_name, invoice_footer")
-          .eq("id", typedSale.pharmacy_id)
-          .maybeSingle();
+      // 4. Resolve clean brand name (strictly rejecting "Main Branch" or legacy placeholder strings)
+      const rawLocName = resolvedLoc?.name?.trim();
+      const isPlaceholderLocName = !rawLocName || rawLocName === "Main Branch" || rawLocName.endsWith(" - Main Branch") || rawLocName === "Branch";
+      const resolvedName = (!isPlaceholderLocName ? rawLocName : parentPharm?.name?.trim()) || "Pharmacy";
 
-        if (pharm) {
-          branchInfo = {
-            name: pharm.name,
-            address: pharm.address,
-            division: pharm.division,
-            district: pharm.district,
-            upazila: pharm.upazila,
-            phone: null,
-            email: pharm.email,
-            proprietor_name: pharm.proprietor_name,
-            invoice_footer: (pharm as any).invoice_footer || null,
-          };
-        }
-      }
+      const branchInfo: BranchData = {
+        name: resolvedName,
+        address: resolvedLoc?.address?.trim() || parentPharm?.address?.trim() || null,
+        division: parentPharm?.division || null,
+        district: parentPharm?.district || null,
+        upazila: parentPharm?.upazila || null,
+        phone: resolvedLoc?.phone?.trim() || parentPharm?.phone?.trim() || (sellerRes.data?.phone as string | undefined) || null,
+        email: resolvedLoc?.email?.trim() || parentPharm?.email?.trim() || null,
+        proprietor_name: resolvedLoc?.proprietor_name?.trim() || parentPharm?.proprietor_name?.trim() || null,
+        drug_license: resolvedLoc?.drug_license?.trim() || null,
+        trade_license: resolvedLoc?.trade_license?.trim() || null,
+        invoice_footer: resolvedLoc?.invoice_footer || parentPharm?.invoice_footer || null,
+      };
 
       setBranch(branchInfo);
       setLoading(false);

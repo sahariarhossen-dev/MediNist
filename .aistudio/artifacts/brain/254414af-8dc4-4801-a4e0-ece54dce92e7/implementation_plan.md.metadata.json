@@ -1,0 +1,6 @@
+{
+  "summary": "Revised implementation plan incorporating 3 strict business requirements: total elimination of all 'Main Branch' and '(MAIN)' badges across UI, setting trigger code to NULL, clean brand-only display in ActiveBranchCard and Locations, and dynamic shop name, proprietor, mobile, and address binding in the Invoice template.",
+  "updatedAt": "2026-10-15T11:43:07.306589416Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

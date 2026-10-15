@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocationStore } from "@/contexts/LocationContext";
+import { useActiveWorkspace } from "@/hooks/useActiveWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 import { DAYS_OF_WEEK } from "@/types/warehouseErp";
 import {
@@ -31,6 +32,7 @@ import {
   FileText,
   Clock,
   ExternalLink,
+  Eye,
   Share2,
   Copy,
   Send,
@@ -146,33 +148,72 @@ const normalizeCompanyName = (name?: string | null): string => {
 };
 
 /**
+ * Resilient helper to safely normalize raw order_days inputs
+ * (integers, stringified numbers, JSON arrays, or comma-delimited strings) into valid day indices [0-6].
+ */
+export const normalizeOrderDays = (raw: any): number[] => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((d) => Number(d)).filter((n) => !isNaN(n) && n >= 0 && n <= 6);
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeOrderDays(parsed);
+    } catch {}
+    return raw
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => !isNaN(n) && n >= 0 && n <= 6);
+  }
+  return [];
+};
+
+/**
  * Format a high-trust, professional WhatsApp markdown dispatch payload.
  * Prevents naked URLs and ensures full clarity and safety for Medical Representatives (SRs).
+ * Strictly formats branch identity and address to prevent parent organization ("City Shop") leaks.
  */
 export const generateWhatsAppShareMessage = (params: {
-  storeName: string;
+  branchName?: string;
+  branchAddress?: string | null;
+  supplierName?: string | null;
   reqNumber: string;
   itemCount: number;
   totalAmount?: number | null;
   srName?: string | null;
   orderUrl: string;
+  storeName?: string;
 }): string => {
-  const { storeName, reqNumber, itemCount, totalAmount, srName, orderUrl } = params;
-  const repGreeting = srName && srName.trim() ? ` ${srName.trim()}` : "";
+  const {
+    branchName,
+    branchAddress,
+    supplierName,
+    reqNumber,
+    itemCount,
+    totalAmount,
+    srName,
+    orderUrl,
+    storeName,
+  } = params;
+
+  const effectiveBranch = branchName || storeName || "Our Pharmacy";
+  const repGreeting = srName && srName.trim() ? `Assalamu Alaikum ${srName.trim()},\n\n` : "";
   const formattedCost =
     totalAmount != null && Number(totalAmount) > 0
       ? `৳ ${Number(totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
       : null;
 
   return [
-    `Assalamu Alaikum${repGreeting},`,
-    `Here is the official purchase order requisition from *${storeName}*:`,
+    `${repGreeting}*MEDINIST DIGITAL PROCUREMENT REQUISITION*`,
+    `🏥 *Branch:* ${effectiveBranch}`,
+    ...(branchAddress && branchAddress.trim() ? [`📍 *Location:* ${branchAddress.trim()}`] : []),
+    ...(supplierName && supplierName.trim() ? [`🏢 *Company:* ${supplierName.trim()}`] : []),
+    `📋 *Order No:* #${reqNumber}`,
+    `💊 *Items:* ${itemCount} ${itemCount === 1 ? "medicine" : "medicines"}`,
+    ...(formattedCost ? [`💰 *Estimated Total:* ${formattedCost}`] : []),
     ``,
-    `📋 *Requisition No:* #${reqNumber}`,
-    `📦 *Total Items:* ${itemCount} ${itemCount === 1 ? "item" : "items"}`,
-    ...(formattedCost ? [`💰 *Estimated Value:* ${formattedCost}`] : []),
-    ``,
-    `🔗 *Review Full Requisition & Confirm Delivery:*`,
+    `🔗 *View Verified Order Sheet:*`,
     `${orderUrl}`,
     ``,
     `_Please review the medicine quantities and submit your delivery confirmation directly through the secure order link above. Thank you!_`,
@@ -182,9 +223,9 @@ export const generateWhatsAppShareMessage = (params: {
 export default function SmartRequisitions() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, pharmacyName } = useAuth();
+  const { profile } = useAuth();
   const { activeLocation } = useLocationStore();
-  const pharmacyId = profile?.pharmacy_id;
+  const { pharmacyId, branchId, branchName, branchAddress, branchPhone } = useActiveWorkspace();
 
   // Active Day filter: 0 = Sun, 1 = Mon, ..., 6 = Sat, -1 = All Days
   const [activeDay, setActiveDay] = useState<number>(() => new Date().getDay());
@@ -198,6 +239,7 @@ export default function SmartRequisitions() {
   const [savedRequisitions, setSavedRequisitions] = useState<any[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [sharingReqId, setSharingReqId] = useState<string | null>(null);
+  const [reviewReq, setReviewReq] = useState<any | null>(null);
 
   // Success summary modal after saving a draft
   const [savedModalOpen, setSavedModalOpen] = useState(false);
@@ -244,30 +286,72 @@ export default function SmartRequisitions() {
     try {
       setLoading(true);
 
-      // 1. Fetch suppliers, all medicine columns, junction mappings, active manufacturers, and active procurement items in parallel
-      const [suppRes, medsRes, smRes, mfgRes, viewRes] = await Promise.all([
-        supabase
-          .from("suppliers" as any)
-          .select("*")
-          .eq("pharmacy_id", pharmacyId)
-          .eq("is_active", true)
-          .is("deleted_at", null),
-        supabase
-          .from("medicines")
-          .select("*")
-          .eq("pharmacy_id", pharmacyId),
-        supabase
-          .from("supplier_manufacturers")
-          .select("supplier_id, manufacturer_id")
-          .eq("pharmacy_id", pharmacyId),
-        supabase
-          .from("manufacturers")
-          .select("id, name, code, is_active")
-          .eq("is_active", true),
-        supabase
-          .from("view_active_procurement_items" as any)
-          .select("*")
-          .eq("pharmacy_id", pharmacyId),
+      // 1. Fetch suppliers strictly belonging to active branch
+      let supQuery = (supabase.from("suppliers" as any) as any)
+        .select("*")
+        .eq("pharmacy_id", pharmacyId)
+        .eq("is_active", true)
+        .is("deleted_at", null);
+
+      if (branchId) {
+        supQuery = supQuery.eq("location_id", branchId);
+      }
+
+      // 2. Fetch shelf medicines strictly belonging to active branch
+      let medsQuery = supabase
+        .from("medicines")
+        .select(
+          "id, name, company_name, generic_name, manufacturer_id, preferred_supplier_id, stock_quantity, stock_alert, reorder_level, price, pcs_per_strip, strip_per_pack, location_id"
+        )
+        .eq("pharmacy_id", pharmacyId);
+
+      if (branchId) {
+        medsQuery = medsQuery.eq("location_id", branchId);
+      }
+
+      // 3. Fetch active/in-flight requisitions strictly belonging to active branch
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      let reqsQuery = (supabase.from("requisitions" as any) as any)
+        .select(`
+          id,
+          requisition_number,
+          status,
+          supplier_id,
+          location_id,
+          created_at,
+          requisition_items (
+            id,
+            medicine_id,
+            final_order_qty_pcs,
+            pack_mode,
+            boxes_to_order,
+            strips_to_order,
+            estimated_trade_price
+          )
+        `)
+        .eq("pharmacy_id", pharmacyId)
+        .in("status", ["draft", "shared", "sr_confirmed"])
+        .gte("created_at", sevenDaysAgo);
+
+      if (branchId) {
+        reqsQuery = reqsQuery.eq("location_id", branchId);
+      }
+
+      // 4. Fetch junction mappings and active manufacturers
+      const smQuery = (supabase.from("supplier_manufacturers" as any) as any)
+        .select("supplier_id, manufacturer_id")
+        .eq("pharmacy_id", pharmacyId);
+
+      const mfgQuery = (supabase.from("manufacturers" as any) as any)
+        .select("id, name, code, is_active")
+        .eq("is_active", true);
+
+      const [suppRes, medsRes, smRes, mfgRes, reqsRes] = await Promise.all([
+        supQuery,
+        medsQuery,
+        smQuery,
+        mfgQuery,
+        reqsQuery,
       ]);
 
       if (medsRes.error) {
@@ -279,55 +363,37 @@ export default function SmartRequisitions() {
       if (smRes.error) {
         console.error("[SmartRequisitions] Error fetching supplier_manufacturers:", smRes.error);
       }
+      if (reqsRes.error) {
+        console.error("[SmartRequisitions] Error fetching requisitions:", reqsRes.error);
+      }
 
       const suppliers = suppRes.data || [];
       const medicines = medsRes.data || [];
 
-      // Safe multi-tenant in-flight items retrieval (with graceful table join fallback if SQL view is unavailable)
-      let activeProcurementData: any[] = viewRes.data || [];
-      if (viewRes.error || !viewRes.data) {
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: fallbackReqs } = await supabase
-          .from("requisitions" as any)
-          .select(`
-            id,
-            supplier_id,
-            requisition_number,
-            status,
-            created_at,
-            requisition_items (
-              medicine_id,
-              final_order_qty_pcs,
-              pack_mode,
-              boxes_to_order
-            )
-          `)
-          .eq("pharmacy_id", pharmacyId)
-          .in("status", ["draft", "shared", "confirmed", "sr_confirmed"])
-          .gte("created_at", sevenDaysAgo);
+      // Safe multi-tenant in-flight items retrieval strictly scoped to branch
+      const activeProcurementData: any[] = [];
+      const rawReqs = reqsRes.data || [];
+      rawReqs.forEach((r: any) => {
+        // Guard against foreign rows:
+        if (branchId && r.location_id && r.location_id !== branchId) return;
 
-        if (Array.isArray(fallbackReqs)) {
-          activeProcurementData = [];
-          fallbackReqs.forEach((r: any) => {
-            (r.requisition_items || []).forEach((ri: any) => {
-              if (ri.medicine_id) {
-                activeProcurementData.push({
-                  medicine_id: ri.medicine_id,
-                  supplier_id: r.supplier_id,
-                  pharmacy_id: pharmacyId,
-                  requisition_id: r.id,
-                  requisition_number: r.requisition_number,
-                  requisition_status: r.status,
-                  requisition_created_at: r.created_at,
-                  in_flight_pcs: ri.final_order_qty_pcs || 0,
-                  pack_mode: ri.pack_mode,
-                  boxes_to_order: ri.boxes_to_order || 0,
-                });
-              }
+        (r.requisition_items || []).forEach((ri: any) => {
+          if (ri.medicine_id) {
+            activeProcurementData.push({
+              medicine_id: ri.medicine_id,
+              supplier_id: r.supplier_id,
+              pharmacy_id: pharmacyId,
+              requisition_id: r.id,
+              requisition_number: r.requisition_number,
+              requisition_status: r.status,
+              requisition_created_at: r.created_at,
+              in_flight_pcs: ri.final_order_qty_pcs || (ri as any).requested_quantity || 0,
+              pack_mode: ri.pack_mode,
+              boxes_to_order: ri.boxes_to_order || 0,
             });
-          });
-        }
-      }
+          }
+        });
+      });
 
       // Build In-Flight lookup map by medicine_id
       const inFlightByMedicineId = new Map<string, InFlightOrderReference>();
@@ -384,11 +450,14 @@ export default function SmartRequisitions() {
         }
       });
 
-      // 2. Determine Shortage Medicines with Safe Default Thresholds (Rules A, B, C)
+      // 2. Strict Shortage Calculation: evaluate only shelf medicines belonging to active branch
       const shortageMeds = (medicines || []).filter((med: any) => {
+        // Guard against foreign rows:
+        if (branchId && med.location_id && med.location_id !== branchId) return false;
+
         const stock = Number(med.stock_quantity ?? 0);
         const rawAlert = med.stock_alert !== null && med.stock_alert !== undefined ? Number(med.stock_alert) : null;
-        
+
         // Rule A: Hard Out-of-Stock (Critical) - any product with stock <= 0
         if (stock <= 0) return true;
 
@@ -402,7 +471,7 @@ export default function SmartRequisitions() {
       });
 
       const groups: PlannerSupplierGroup[] = suppliers.map((sup: any) => {
-        const orderDays = Array.isArray(sup.order_days) ? sup.order_days : [];
+        const orderDays = normalizeOrderDays(sup.order_days ?? sup.scheduled_order_days);
         const isToday = activeDay === -1 ? orderDays.includes(todayDayIndex) : orderDays.includes(activeDay);
 
         const linkedMfgIds = supplierMfgMap[sup.id]?.ids || [];
@@ -567,17 +636,18 @@ export default function SmartRequisitions() {
     } finally {
       setLoading(false);
     }
-  }, [pharmacyId, activeDay, todayDayIndex]);
+  }, [pharmacyId, branchId, activeDay, todayDayIndex]);
 
-  // Fetch Saved Requisitions
+  // Fetch Saved Requisitions (strictly scoped to active branch workspace)
   const fetchSavedRequisitions = useCallback(async () => {
     if (!pharmacyId) return;
     try {
       setLoadingSaved(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from("requisitions" as any)
         .select(`
           id,
+          location_id,
           requisition_number,
           supplier_id,
           status,
@@ -588,8 +658,13 @@ export default function SmartRequisitions() {
           requisition_items (id, medicine_name, final_order_qty_pcs, pack_mode, boxes_to_order, strips_to_order),
           requisition_magic_links (id, token, expires_at, is_revoked, sr_acknowledged_at, sr_notes)
         `)
-        .eq("pharmacy_id", pharmacyId)
-        .order("created_at", { ascending: false });
+        .eq("pharmacy_id", pharmacyId);
+
+      if (branchId) {
+        query = query.eq("location_id", branchId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (!error && Array.isArray(data)) {
         setSavedRequisitions(data);
@@ -599,11 +674,30 @@ export default function SmartRequisitions() {
     } finally {
       setLoadingSaved(false);
     }
-  }, [pharmacyId]);
+  }, [pharmacyId, branchId]);
 
   useEffect(() => {
     fetchSuggestions();
   }, [fetchSuggestions]);
+
+  // Listen to global workspace change events (dispatched by ActiveBranchCard / LocationContext)
+  useEffect(() => {
+    const handleWorkspaceChanged = () => {
+      // Reset state for new branch to prevent stale leaking
+      setSavedSupplierIds({});
+      setActiveSupplierId(null);
+      setMedSearchResults([]);
+      fetchSuggestions();
+      if (viewMode === "history") {
+        fetchSavedRequisitions();
+      }
+    };
+
+    window.addEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    return () => {
+      window.removeEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    };
+  }, [fetchSuggestions, fetchSavedRequisitions, viewMode]);
 
   // Handle vendor_id deep link from Suppliers page (?vendor_id=...)
   useEffect(() => {
@@ -621,12 +715,17 @@ export default function SmartRequisitions() {
       // If supplier isn't in today's routine suggestions, fetch vendor info and inject an empty group so operator can draft immediately
       const loadSpecificSupplier = async () => {
         try {
-          const { data: sup } = await supabase
+          let specQuery = supabase
             .from("suppliers" as any)
             .select("*")
             .eq("id", targetVendorId)
-            .eq("pharmacy_id", pharmacyId)
-            .maybeSingle();
+            .eq("pharmacy_id", pharmacyId);
+
+          if (branchId) {
+            specQuery = specQuery.eq("location_id", branchId);
+          }
+
+          const { data: sup } = await specQuery.maybeSingle();
 
           if (sup) {
             setSuppliersData((prev) => {
@@ -668,7 +767,7 @@ export default function SmartRequisitions() {
 
       loadSpecificSupplier();
     }
-  }, [location.search, suppliersData, loading, pharmacyId]);
+  }, [location.search, suppliersData, loading, pharmacyId, branchId]);
 
   useEffect(() => {
     if (viewMode === "history") {
@@ -774,12 +873,17 @@ export default function SmartRequisitions() {
     const timer = setTimeout(async () => {
       setIsSearchingMeds(true);
       try {
-        const { data } = await supabase
+        let mQuery = supabase
           .from("medicines")
-          .select("id, name, generic_name, company_name, stock_quantity, stock_alert, price, strip_per_pack, pcs_per_strip")
+          .select("id, name, generic_name, company_name, stock_quantity, stock_alert, price, strip_per_pack, pcs_per_strip, location_id")
           .eq("pharmacy_id", pharmacyId)
-          .or(`name.ilike.%${medSearchQuery.trim()}%,generic_name.ilike.%${medSearchQuery.trim()}%`)
-          .limit(8);
+          .or(`name.ilike.%${medSearchQuery.trim()}%,generic_name.ilike.%${medSearchQuery.trim()}%`);
+
+        if (branchId) {
+          mQuery = mQuery.eq("location_id", branchId);
+        }
+
+        const { data } = await mQuery.limit(8);
         setMedSearchResults(data || []);
       } catch (e) {
         console.warn("Med search error:", e);
@@ -788,7 +892,7 @@ export default function SmartRequisitions() {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [medSearchQuery, pharmacyId]);
+  }, [medSearchQuery, pharmacyId, branchId]);
 
   const handleAddMedicineToSupplier = (supplierId: string, med: any) => {
     setSuppliersData((prev) =>
@@ -847,6 +951,11 @@ export default function SmartRequisitions() {
     mode: "auto" | "append" | "supplementary" = "auto"
   ) => {
     if (!pharmacyId) return;
+
+    if (!branchId) {
+      toast.error("Active branch is not resolved. Please select a valid branch before creating an order draft.");
+      return;
+    }
 
     const selectedItems = supplier.items.filter((it) => it.is_selected);
     if (selectedItems.length === 0) {
@@ -931,19 +1040,21 @@ export default function SmartRequisitions() {
         const requisitionNumber = `REQ-${dateStr}-${randomSuffix}`;
         targetReqNumber = requisitionNumber;
 
-        // Insert master record into public.requisitions
+        // Insert master record into public.requisitions strictly stamping active branch
+        const requisitionPayload = {
+          pharmacy_id: pharmacyId,
+          location_id: branchId, // Strictly stamp active branch ID
+          supplier_id: supplier.supplier_id,
+          requisition_number: requisitionNumber,
+          status: "draft",
+          scheduled_order_day: activeDay === -1 ? todayDayIndex : activeDay,
+          total_estimated_amount: deltaAmount,
+          notes: supplier.notes.trim() || null,
+          created_by: profile?.id || null,
+        };
+
         const { data: reqRecord, error: reqError } = await (supabase.from("requisitions" as any) as any)
-          .insert({
-            pharmacy_id: pharmacyId,
-            location_id: activeLocation?.id || null,
-            supplier_id: supplier.supplier_id,
-            requisition_number: requisitionNumber,
-            status: "draft",
-            scheduled_order_day: activeDay === -1 ? todayDayIndex : activeDay,
-            total_estimated_amount: deltaAmount,
-            notes: supplier.notes.trim() || null,
-            created_by: profile?.id || null,
-          })
+          .insert(requisitionPayload)
           .select()
           .single();
 
@@ -1110,15 +1221,22 @@ export default function SmartRequisitions() {
         fetchSuggestions().catch((err) => console.error("Error refreshing after share:", err));
       }
 
-      // 3. Construct Public Magic Portal URL
-      const portalUrl = `${window.location.origin}/order/${token}`;
+      // 3. Construct Public Magic Portal URL with explicit branch parameter context
+      const urlQuery = new URLSearchParams();
+      if (branchName) urlQuery.set("branch", branchName);
+      if (branchAddress) urlQuery.set("addr", branchAddress);
+      if (branchPhone) urlQuery.set("phone", branchPhone);
+      const queryStr = urlQuery.toString();
+      const portalUrl = `${window.location.origin}/order/${token}${queryStr ? `?${queryStr}` : ""}`;
 
-      // 4. Construct Professional Branded WhatsApp Dispatch Message
-      const pName = pharmacyName || profile?.pharmacies?.name || "Nasir Medical Hall";
+      // 4. Construct Professional Branded WhatsApp Dispatch Message (strictly scoped to active branch)
+      const sCompanyName = target.supplierName || target.suppliers?.name || "";
       const cleanPhone = sWhatsApp.replace(/[^0-9]/g, "");
 
       const msg = generateWhatsAppShareMessage({
-        storeName: pName,
+        branchName: branchName || "Our Pharmacy",
+        branchAddress: branchAddress || "",
+        supplierName: sCompanyName,
         reqNumber: reqNumber || "REQ-ORDER",
         itemCount: itemCount > 0 ? itemCount : 1,
         totalAmount: estTotal,
@@ -1171,34 +1289,63 @@ export default function SmartRequisitions() {
   // Shortage Planner filter mode: "all" | "delta" | "staged"
   const [shortageFilterMode, setShortageFilterMode] = useState<"all" | "delta" | "staged">("all");
 
-  // Filtered view by search query & shortage state filter
+  // Filtered view by routine day, search query & shortage state filter
   const filteredSuppliers = useMemo(() => {
     let result = suppliersData;
 
-    if (shortageFilterMode === "delta") {
-      result = result.filter((s) => s.delta_short_count > 0);
-    } else if (shortageFilterMode === "staged") {
-      result = result.filter((s) => s.staged_count > 0 || s.ordered_count > 0);
+    // Gate 1: Routine Day Filter (strictly filter to scheduled vendors if a specific day is selected)
+    if (activeDay !== -1) {
+      result = result.filter((s) => {
+        const normalizedDays = normalizeOrderDays(s.order_days ?? (s as any).scheduled_order_days);
+        return normalizedDays.includes(activeDay);
+      });
     }
 
+    // Gate 2: Shortage State & Inbox Zero Logic
+    if (shortageFilterMode === "delta") {
+      result = result.filter((s) => (s.delta_short_count ?? 0) > 0);
+    } else if (shortageFilterMode === "staged") {
+      result = result.filter(
+        (s) => (s.staged_count ?? 0) > 0 || (s.ordered_count ?? 0) > 0 || Boolean(s.latest_draft_id)
+      );
+    } else {
+      // Default "all" view in daily routine mode:
+      // INBOX ZERO: If viewing a specific routine day (activeDay !== -1),
+      // hide vendors whose shortages have already been 100% drafted/staged.
+      if (activeDay !== -1) {
+        result = result.filter((s) => (s.delta_short_count ?? 0) > 0);
+      }
+    }
+
+    // Gate 3: Text Search Query Filter
     const q = searchQuery.toLowerCase().trim();
     if (!q) return result;
 
-    return result.filter(
-      (s) =>
-        s.supplier_name.toLowerCase().includes(q) ||
-        (s.sr_name && s.sr_name.toLowerCase().includes(q)) ||
-        (s.linked_manufacturer_names &&
-          s.linked_manufacturer_names.some((mName) => mName.toLowerCase().includes(q))) ||
-        s.items.some(
-          (it) =>
-            it.medicine_name.toLowerCase().includes(q) ||
-            (it.generic_name && it.generic_name.toLowerCase().includes(q))
-        )
-    );
-  }, [suppliersData, searchQuery, shortageFilterMode]);
+    return result.filter((s) => {
+      const matchesName = s.supplier_name?.toLowerCase().includes(q);
+      const matchesSr = s.sr_name?.toLowerCase().includes(q);
+      const matchesBrand = s.linked_manufacturer_names?.some((b: string) =>
+        b.toLowerCase().includes(q)
+      );
+      const matchesItem = s.items?.some(
+        (it) =>
+          it.medicine_name?.toLowerCase().includes(q) ||
+          (it.generic_name && it.generic_name.toLowerCase().includes(q))
+      );
+      return Boolean(matchesName || matchesSr || matchesBrand || matchesItem);
+    });
+  }, [suppliersData, activeDay, shortageFilterMode, searchQuery]);
 
-  // Overall metrics across all suppliers (Delta Shortages vs In-Flight Pipeline)
+  // Scoped suppliers for the selected routine day (synchronizes header metrics & tab counts)
+  const scopedSuppliersForDay = useMemo(() => {
+    if (activeDay === -1) return suppliersData;
+    return suppliersData.filter((s) => {
+      const normalizedDays = normalizeOrderDays(s.order_days ?? (s as any).scheduled_order_days);
+      return normalizedDays.includes(activeDay);
+    });
+  }, [suppliersData, activeDay]);
+
+  // Synchronized metrics calculated strictly from scopedSuppliersForDay
   const {
     totalShortMedicines,
     totalDeltaShortMedicines,
@@ -1223,10 +1370,12 @@ export default function SmartRequisitions() {
     let suppWithStaged = 0;
     const distinctDrafts = new Set<string>();
 
-    for (const sup of suppliersData) {
+    for (const sup of scopedSuppliersForDay) {
       if (sup.is_scheduled_today) todayCount++;
-      if (sup.delta_short_count > 0) suppWithDelta++;
-      if (sup.staged_count > 0 || sup.ordered_count > 0) suppWithStaged++;
+      if ((sup.delta_short_count ?? 0) > 0) suppWithDelta++;
+      if ((sup.staged_count ?? 0) > 0 || (sup.ordered_count ?? 0) > 0 || Boolean(sup.latest_draft_id)) {
+        suppWithStaged++;
+      }
       if (sup.latest_draft_id) distinctDrafts.add(sup.latest_draft_id);
 
       for (const it of sup.items) {
@@ -1260,7 +1409,7 @@ export default function SmartRequisitions() {
       activeDraftsCount: distinctDrafts.size,
       todaySuppliersCount: todayCount,
     };
-  }, [suppliersData]);
+  }, [scopedSuppliersForDay]);
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-5xl mx-auto px-4 py-5 pb-28">
@@ -1465,7 +1614,7 @@ export default function SmartRequisitions() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                All Vendors ({suppliersData.length})
+                All Vendors ({scopedSuppliersForDay.length})
               </button>
               <button
                 type="button"
@@ -1514,33 +1663,92 @@ export default function SmartRequisitions() {
               </p>
             </div>
           ) : filteredSuppliers.length === 0 ? (
-            <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 shadow-xs">
-              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">Optimal Stock Level!</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-                {activeDay !== -1
-                  ? "No shortage medicines detected for suppliers scheduled on this day."
-                  : "All monitored medicines are currently above their reorder threshold."}
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setActiveDay(-1)}
-                  className="rounded-xl text-xs h-8 border-slate-200"
-                >
-                  View All Days
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => navigate("/procurement/suppliers")}
-                  className="rounded-xl bg-blue-600 text-white text-xs h-8"
-                >
-                  Manage Supplier Routine
-                </Button>
-              </div>
+            <div className="bg-white rounded-3xl p-8 sm:p-10 text-center border border-slate-200 shadow-xs max-w-lg mx-auto my-4">
+              {scopedSuppliersForDay.some((s) => (s.staged_count ?? 0) > 0 || Boolean(s.latest_draft_id)) && activeDay !== -1 ? (
+                <>
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3.5 shadow-2xs">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    All Scheduled Orders Staged! 🎉
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1.5 mb-5 leading-relaxed">
+                    All routine supplier requisitions for <strong>{activeDayTriggerLabel}</strong> have been drafted or shared. No pending shortages remain in your action inbox.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                    <Button
+                      size="sm"
+                      onClick={() => setViewMode("history")}
+                      className="w-full sm:w-auto rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs h-9 px-4 font-semibold gap-1.5 shadow-xs"
+                    >
+                      <ClipboardList className="h-3.5 w-3.5" />
+                      <span>View Saved Requisitions</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveDay(-1)}
+                      className="w-full sm:w-auto rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 text-xs h-9 px-3.5 font-medium"
+                    >
+                      View All Weekday Vendors
+                    </Button>
+                  </div>
+                </>
+              ) : scopedSuppliersForDay.length === 0 && activeDay !== -1 ? (
+                <>
+                  <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <Calendar className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">No Suppliers Scheduled</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                    No pharmaceutical suppliers or representatives are scheduled for this day's routine.
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveDay(-1)}
+                      className="rounded-xl text-xs h-8 border-slate-200 hover:bg-slate-50 font-semibold"
+                    >
+                      View All Scheduled Vendors
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate("/procurement/suppliers")}
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 font-semibold"
+                    >
+                      Manage Supplier Routine
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">Optimal Stock Level!</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                    All monitored medicines are currently above their reorder threshold.
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveDay(-1)}
+                      className="rounded-xl text-xs h-8 border-slate-200 hover:bg-slate-50 font-semibold"
+                    >
+                      View All Days
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate("/procurement/suppliers")}
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 font-semibold"
+                    >
+                      Manage Supplier Routine
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -2039,14 +2247,32 @@ export default function SmartRequisitions() {
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
 
-                      {/* Action 4: Open Public Slip */}
+                      {/* Action 4: Review Order Items (In-App Sheet Modal) */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setReviewReq(req)}
+                        className="rounded-xl border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs h-8 px-2.5 gap-1.5"
+                        title="Review Requisition Line Items & Delivery Status"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-slate-600" />
+                        <span className="hidden sm:inline">Review</span>
+                      </Button>
+
+                      {/* Action 5: Open Public Slip */}
                       {activeToken && (
                         <a
-                          href={`/order/${activeToken}`}
+                          href={`/order/${activeToken}${
+                            branchName
+                              ? `?branch=${encodeURIComponent(branchName)}&addr=${encodeURIComponent(
+                                  branchAddress || ""
+                                )}&phone=${encodeURIComponent(branchPhone || "")}`
+                              : ""
+                          }`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center h-8 w-8 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          title="Open Public Slip"
+                          title="Open Public SR Portal Slip"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
@@ -2609,6 +2835,10 @@ export default function SmartRequisitions() {
           {lastSavedSummary && (
             <div className="bg-slate-50 rounded-2xl p-4 my-2 text-xs space-y-2 border border-slate-100">
               <div className="flex justify-between">
+                <span className="text-slate-500">Issuing Branch:</span>
+                <span className="font-semibold text-slate-900">{branchName || "Active Branch"}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-slate-500">Order Number:</span>
                 <span className="font-mono font-bold text-purple-700">{lastSavedSummary.reqNumber}</span>
               </div>
@@ -2685,6 +2915,111 @@ export default function SmartRequisitions() {
               Continue Planning
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* SAVED REQUISITION DETAIL REVIEW MODAL / SHEET */}
+      <Dialog open={Boolean(reviewReq)} onOpenChange={(open) => !open && setReviewReq(null)}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl min-w-0 rounded-2xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+          {reviewReq && (
+            <div className="space-y-4">
+              <DialogHeader className="pb-3 border-b border-slate-100 text-left">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                        {reviewReq.requisition_number}
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        {reviewReq.suppliers?.name || "Vendor"}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Created on {new Date(reviewReq.created_at).toLocaleDateString()}
+                      {reviewReq.suppliers?.sr_name && ` • SR: ${reviewReq.suppliers.sr_name}`}
+                    </p>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <span className="text-sm font-bold text-slate-900 block">
+                      ৳ {Number(reviewReq.total_estimated_amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block uppercase font-medium">
+                      Estimated Order Cost
+                    </span>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {/* SR Delivery Notes if acknowledged */}
+              {reviewReq.requisition_magic_links?.[0]?.sr_notes && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+                  <span className="font-bold block">Representative Note:</span>
+                  <p className="mt-0.5">{reviewReq.requisition_magic_links[0].sr_notes}</p>
+                </div>
+              )}
+
+              {/* Order Line Items List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500 px-1 font-semibold">
+                  <span>Ordered Medicines ({reviewReq.requisition_items?.length || 0})</span>
+                  <span>Quantity</span>
+                </div>
+
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white max-h-60 overflow-y-auto">
+                  {(reviewReq.requisition_items || []).map((it: any) => (
+                    <div key={it.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-bold text-slate-800 block truncate">{it.medicine_name}</span>
+                        <span className="text-[10px] text-slate-400 capitalize">Pack: {it.pack_mode || "piece"}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                          {it.final_order_qty_pcs || 1} pcs
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <DialogFooter className="pt-2 flex flex-col sm:flex-row gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    handleGenerateAndShareLink(reviewReq, true);
+                  }}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 font-semibold gap-1.5"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Share WhatsApp</span>
+                </Button>
+
+                {reviewReq.status !== "converted_to_po" && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setReviewReq(null);
+                      handleConvertToPO(reviewReq);
+                    }}
+                    className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold gap-1.5"
+                  >
+                    <Truck className="h-4 w-4" />
+                    <span>Receive Goods (PO)</span>
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  onClick={() => setReviewReq(null)}
+                  className="rounded-xl border-slate-200 text-slate-700 text-xs h-9"
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

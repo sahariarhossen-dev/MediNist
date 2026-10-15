@@ -28,7 +28,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 const More = () => {
   const navigate = useNavigate();
   const { profile, pharmacyName } = useAuth();
-  const { activeLocation, isWarehouse: ctxIsWarehouse } = useLocationStore();
+  const { activeLocation, isWarehouse: ctxIsWarehouse, locations } = useLocationStore();
+  const isMultiLocation = locations.length > 1;
   const [pharmacyLogo, setPharmacyLogo] = useState<string | null>(null);
 
   const isWarehouse =
@@ -64,7 +65,7 @@ const More = () => {
   const menuItems = isWarehouse
     ? [
         { label: "Add Inventory", icon: Package, path: "/inventory", color: "text-blue-600" },
-        { label: "Stock Movements", icon: ArrowRightLeft, path: "/stock-movements", color: "text-indigo-600" },
+        ...(isMultiLocation ? [{ label: "Stock Movements", icon: ArrowRightLeft, path: "/stock-movements", color: "text-indigo-600" }] : []),
         { label: "Smart Requisitions (SR)", icon: Sparkles, path: "/procurement/smart-requisitions", color: "text-purple-600" },
         { label: "Suppliers & Vendors", icon: Briefcase, path: "/procurement/suppliers", color: "text-blue-600" },
         { label: "Purchase Orders (PO)", icon: ClipboardList, path: "/procurement/purchase-orders", color: "text-amber-600" },
@@ -78,7 +79,7 @@ const More = () => {
       ]
     : [
         { label: "Add Inventory", icon: Package, path: "/inventory", color: "text-blue-600" },
-        { label: "Stock Movements", icon: ArrowRightLeft, path: "/stock-movements", color: "text-indigo-600" },
+        ...(isMultiLocation ? [{ label: "Stock Movements", icon: ArrowRightLeft, path: "/stock-movements", color: "text-indigo-600" }] : []),
         { label: "Smart Requisitions (SR)", icon: Sparkles, path: "/procurement/smart-requisitions", color: "text-purple-600" },
         { label: "Suppliers & Vendors", icon: Briefcase, path: "/procurement/suppliers", color: "text-blue-600" },
         { label: "Purchase Orders (PO)", icon: ClipboardList, path: "/procurement/purchase-orders", color: "text-amber-600" },

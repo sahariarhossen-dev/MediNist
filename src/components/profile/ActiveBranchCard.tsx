@@ -51,9 +51,8 @@ export const ActiveBranchCard: React.FC = () => {
     return <Store size={16} className={iconClass} />;
   };
 
-  // Format active branch display with code (e.g., "Main Branch (MAIN)")
-  const branchDisplayName = activeLocation.name || "Main Branch";
-  const branchCodeText = activeLocation.code ? ` (${activeLocation.code})` : "";
+  // Clean branch display name without appended codes or legacy defaults
+  const branchDisplayName = activeLocation.name || "Pharmacy";
 
   return (
     <div
@@ -95,7 +94,6 @@ export const ActiveBranchCard: React.FC = () => {
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-sm font-bold text-slate-900 truncate">
                   {branchDisplayName}
-                  {branchCodeText}
                 </span>
                 <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
                   {activeLocation.type}
@@ -137,7 +135,6 @@ export const ActiveBranchCard: React.FC = () => {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-sm font-bold text-slate-900 truncate">
                       {branchDisplayName}
-                      {branchCodeText}
                     </span>
                     <span
                       className={cn(
@@ -342,7 +339,6 @@ export const ActiveBranchCard: React.FC = () => {
                 Active:{" "}
                 <strong className="text-slate-800 font-semibold">
                   {branchDisplayName}
-                  {branchCodeText}
                 </strong>
               </span>
               <span className="font-mono text-[10px] text-slate-600 shrink-0">

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocationStore } from "@/contexts/LocationContext";
+import { useActiveWorkspace } from "@/hooks/useActiveWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 import { warehouseStorage, PurchaseOrderRecord, PurchaseOrderItemRecord } from "@/services/warehouseStorage";
 import {
@@ -28,6 +29,11 @@ import {
   Sparkles,
   Upload,
   FileUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { toast } from "sonner";
 import {
   PurchaseOrder,
@@ -60,6 +67,32 @@ interface MedicineCatalogItem {
   name: string;
   price?: number;
   stock_quantity?: number;
+}
+
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+// Helper to normalize any expiry format (YYYY-MM, MM/YYYY, etc.) to valid SQL date YYYY-MM-01 or null
+function formatExpiryForDb(exp?: string | null): string | null {
+  if (!exp || !String(exp).trim()) return null;
+  const trimmed = String(exp).trim();
+  if (/^\d{4}-\d{2}$/.test(trimmed)) {
+    return `${trimmed}-01`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d{1,2}\/\d{4}$/.test(trimmed)) {
+    const [m, y] = trimmed.split("/");
+    return `${y}-${m.padStart(2, "0")}-01`;
+  }
+  if (/^\d{4}\/\d{1,2}$/.test(trimmed)) {
+    const [y, m] = trimmed.split("/");
+    return `${y}-${m.padStart(2, "0")}-01`;
+  }
+  return trimmed;
 }
 
 // Rich Line Item for Pharmaceutical Inward Invoices
@@ -93,7 +126,7 @@ export default function PurchaseOrders() {
   const location = useLocation();
   const { profile } = useAuth();
   const { activeLocation, locations } = useLocationStore();
-  const pharmacyId = profile?.pharmacy_id;
+  const { pharmacyId, branchId, branchName, isMainBranch } = useActiveWorkspace();
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -120,6 +153,12 @@ export default function PurchaseOrders() {
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, { batch?: boolean; expiry?: boolean }>>({});
+
+  // Custom Expiry Month-Year Picker Dialog State
+  const [expiryPickerOpen, setExpiryPickerOpen] = useState(false);
+  const [expiryPickerItemId, setExpiryPickerItemId] = useState<string | null>(null);
+  const [expiryPickerYear, setExpiryPickerYear] = useState<number>(new Date().getFullYear());
+  const [expiryPickerMonth, setExpiryPickerMonth] = useState<number>(new Date().getMonth());
 
   // AI Invoice Scanner State
   const [isScanMode, setIsScanMode] = useState(false);
@@ -159,6 +198,11 @@ export default function PurchaseOrders() {
     },
   ]);
 
+  // Active focal item ID for accordion behavior
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(() => "item_1");
+  // Input ref dictionary for auto-focusing
+  const medicineInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
   // GRN Modal State
   const [grnItems, setGrnItems] = useState<GRNItemRow[]>([]);
 
@@ -176,8 +220,8 @@ export default function PurchaseOrders() {
     try {
       setLoading(true);
 
-      // 1. Fetch Suppliers
-      const sups = await warehouseStorage.getSuppliers(pharmacyId);
+      // 1. Fetch Suppliers strictly scoped to active branch
+      const sups = await warehouseStorage.getSuppliers(pharmacyId, branchId);
       if (sups) setSuppliers(sups as Supplier[]);
 
       // 2. Fetch Catalog for Autocomplete
@@ -199,18 +243,29 @@ export default function PurchaseOrders() {
         );
       }
 
-      // 3. Fetch Purchase Orders
-      const pos = await warehouseStorage.getPurchaseOrders(pharmacyId);
+      // 3. Fetch Purchase Orders (scoped to active branch workspace)
+      const pos = await warehouseStorage.getPurchaseOrders(pharmacyId, branchId);
       setPurchaseOrders((pos as any) || []);
     } catch (err: any) {
       console.warn("[PurchaseOrders] fetchData error:", err?.message || err);
     } finally {
       setLoading(false);
     }
-  }, [pharmacyId]);
+  }, [pharmacyId, branchId]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Listen to global workspace change events (dispatched by LocationContext / ActiveBranchCard)
+  useEffect(() => {
+    const handleWorkspaceChanged = () => {
+      fetchData();
+    };
+    window.addEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    return () => {
+      window.removeEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    };
   }, [fetchData]);
 
   // Requisition Hydration helper: maps a requisition record and items into Draft PO state
@@ -332,7 +387,7 @@ export default function PurchaseOrders() {
     setImportReqDialogOpen(true);
     setLoadingPendingReqs(true);
     try {
-      const { data, error } = await supabase
+      let reqQuery = supabase
         .from("requisitions" as any)
         .select(`
           id,
@@ -353,8 +408,13 @@ export default function PurchaseOrders() {
           )
         `)
         .eq("pharmacy_id", pharmacyId)
-        .in("status", ["draft", "shared", "sr_confirmed"])
-        .order("created_at", { ascending: false });
+        .in("status", ["draft", "shared", "sr_confirmed"]);
+
+      if (branchId) {
+        reqQuery = reqQuery.or(`location_id.eq.${branchId},location_id.is.null`);
+      }
+
+      const { data, error } = await reqQuery.order("created_at", { ascending: false });
 
       if (!error && Array.isArray(data)) {
         setPendingRequisitions(data);
@@ -432,10 +492,11 @@ export default function PurchaseOrders() {
     setRequisitionOriginNumber(null);
     setDraftSupplierId(suppliers[0]?.id || "");
     const defaultWh =
+      branchId ||
+      activeLocation?.id ||
       warehouseLocations.find(
         (l) => l.type === "warehouse" || (l.type as string) === "godown"
       )?.id ||
-      activeLocation?.id ||
       locations[0]?.id ||
       "";
     setDraftWarehouseId(defaultWh);
@@ -449,9 +510,10 @@ export default function PurchaseOrders() {
     setIsScanMode(false);
     setIsScanning(false);
     setScanFileName("");
+    const initialItemId = `item_${Date.now()}_1`;
     setDraftItems([
       {
-        id: `item_${Date.now()}_1`,
+        id: initialItemId,
         medicine_name: "Napa Extra 500mg Tablet",
         batch_number: "NE-2026-A1",
         expiry_date: "2027-12",
@@ -461,6 +523,7 @@ export default function PurchaseOrders() {
         discount_percent: 5,
       },
     ]);
+    setExpandedItemId(initialItemId);
     setCreateDialogOpen(true);
   };
 
@@ -745,19 +808,28 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
   };
 
   const handleAddDraftItem = () => {
-    setDraftItems((prev) => [
-      ...prev,
-      {
-        id: `item_${Date.now()}_${prev.length + 1}`,
-        medicine_name: "",
-        batch_number: "",
-        expiry_date: "",
-        trade_price: 10,
-        ordered_qty: 50,
-        bonus_qty: 0,
-        discount_percent: 0,
-      },
-    ]);
+    const newItemId = `item_${Date.now()}_${draftItems.length + 1}`;
+    const newItem: DraftPOItem = {
+      id: newItemId,
+      medicine_name: "",
+      batch_number: "",
+      expiry_date: "",
+      trade_price: 10,
+      ordered_qty: 50,
+      bonus_qty: 0,
+      discount_percent: 0,
+    };
+
+    // 1. Prepend to top so workstation stays directly visible under button
+    setDraftItems((prev) => [newItem, ...prev]);
+
+    // 2. Expand only this newly created item
+    setExpandedItemId(newItemId);
+
+    // 3. Auto-focus on the new item's medicine input
+    setTimeout(() => {
+      medicineInputRefs.current[newItemId]?.focus();
+    }, 60);
   };
 
   const handleRemoveDraftItem = (id: string) => {
@@ -765,7 +837,14 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
       toast.error("An invoice must contain at least one line item");
       return;
     }
-    setDraftItems((prev) => prev.filter((it) => it.id !== id));
+    setDraftItems((prev) => {
+      const next = prev.filter((it) => it.id !== id);
+      if (expandedItemId === id) {
+        setExpandedItemId(next[0]?.id || null);
+      }
+      return next;
+    });
+    delete medicineInputRefs.current[id];
     setFormErrors((prev) => {
       const next = { ...prev };
       delete next[id];
@@ -794,6 +873,60 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
         return { ...prev, [id]: current };
       });
     }
+  };
+
+  // Expiry Month Picker Handlers
+  const handleOpenExpiryPicker = (itemId: string, currentVal?: string) => {
+    setExpiryPickerItemId(itemId);
+    if (currentVal && currentVal.trim()) {
+      const val = currentVal.trim();
+      if (val.includes("-")) {
+        const parts = val.split("-");
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && y >= 2020 && y <= 2099) setExpiryPickerYear(y);
+        else setExpiryPickerYear(new Date().getFullYear());
+        if (!isNaN(m) && m >= 0 && m < 12) setExpiryPickerMonth(m);
+        else setExpiryPickerMonth(new Date().getMonth());
+      } else if (val.includes("/")) {
+        const parts = val.split("/");
+        let m = parseInt(parts[0], 10) - 1;
+        let y = parseInt(parts[1], 10);
+        if (parts[0].length === 4) {
+          y = parseInt(parts[0], 10);
+          m = parseInt(parts[1], 10) - 1;
+        }
+        if (!isNaN(y) && y >= 2020 && y <= 2099) setExpiryPickerYear(y);
+        else setExpiryPickerYear(new Date().getFullYear());
+        if (!isNaN(m) && m >= 0 && m < 12) setExpiryPickerMonth(m);
+        else setExpiryPickerMonth(new Date().getMonth());
+      } else {
+        setExpiryPickerYear(new Date().getFullYear());
+        setExpiryPickerMonth(new Date().getMonth());
+      }
+    } else {
+      setExpiryPickerYear(new Date().getFullYear());
+      setExpiryPickerMonth(new Date().getMonth());
+    }
+    setExpiryPickerOpen(true);
+  };
+
+  const handleConfirmExpiryPicker = () => {
+    if (expiryPickerItemId) {
+      const formattedMonth = String(expiryPickerMonth + 1).padStart(2, "0");
+      const formatted = `${expiryPickerYear}-${formattedMonth}`;
+      handleItemChange(expiryPickerItemId, "expiry_date", formatted);
+    }
+    setExpiryPickerOpen(false);
+    setExpiryPickerItemId(null);
+  };
+
+  const handleClearExpiryPicker = () => {
+    if (expiryPickerItemId) {
+      handleItemChange(expiryPickerItemId, "expiry_date", "");
+    }
+    setExpiryPickerOpen(false);
+    setExpiryPickerItemId(null);
   };
 
   const handleSelectCatalogMedicine = (id: string, name: string) => {
@@ -829,38 +962,15 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
       (it) => !it.medicine_name.trim() || Number(it.ordered_qty) <= 0
     );
     if (invalidItem) {
+      setExpandedItemId(invalidItem.id);
+      setTimeout(() => {
+        medicineInputRefs.current[invalidItem.id]?.focus();
+      }, 60);
       toast.error("All medicine line items must have a valid name and quantity");
       return;
     }
 
-    // Step 2: Conditional Validation for Batch # and Expiry Date
-    if (targetStatus === "received") {
-      const newErrors: Record<string, { batch?: boolean; expiry?: boolean }> = {};
-      let hasMissing = false;
-
-      for (const it of draftItems) {
-        const missingBatch = !it.batch_number || !it.batch_number.trim();
-        const missingExpiry = !it.expiry_date || !it.expiry_date.trim();
-
-        if (missingBatch || missingExpiry) {
-          hasMissing = true;
-          newErrors[it.id] = {
-            batch: missingBatch,
-            expiry: missingExpiry,
-          };
-        }
-      }
-
-      if (hasMissing) {
-        setFormErrors(newErrors);
-        toast.error("Batch # and Expiry Date are required to receive stock", {
-          description: "Please fill in the highlighted Batch # and Expiry Date fields for all items.",
-        });
-        return;
-      }
-    }
-
-    // Clear validation errors when saving as draft or valid
+    // Step 2: Batch # and Expiry Date are now OPTIONAL (can be left blank and saved)
     setFormErrors({});
 
     try {
@@ -879,7 +989,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
           unit_cost: Number(it.trade_price) || 0,
           total_cost: Math.round(lineNet * 100) / 100,
           batch_number: it.batch_number ? it.batch_number.trim() : null,
-          expiry_date: it.expiry_date ? it.expiry_date.trim() : null,
+          expiry_date: formatExpiryForDb(it.expiry_date),
         };
       });
 
@@ -888,7 +998,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
       const poPayload: Partial<PurchaseOrderRecord> = {
         pharmacy_id: pharmacyId,
         supplier_id: draftSupplierId,
-        warehouse_id: draftWarehouseId || null,
+        warehouse_id: draftWarehouseId || branchId || activeLocation?.id || null,
         po_number: draftInvoiceNumber.trim() || `INV-${Date.now().toString().slice(-6)}`,
         status: targetStatus,
         total_amount: finalNetPayable,
@@ -911,7 +1021,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
 
       // 2. Direct GRN Execution (Inventory Ingestion & Supplier Ledger Bill Entry)
       if (targetStatus === "received") {
-        const targetWarehouse = draftWarehouseId;
+        const targetWarehouse = draftWarehouseId || branchId || activeLocation?.id || null;
 
         // Ingest physical stock into medicines table
         for (const item of draftItems) {
@@ -936,15 +1046,22 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
 
           if (existingMed) {
             const newQty = (Number(existingMed.stock_quantity) || 0) + totalUnits;
+            const updateMedPayload: any = {
+              stock_quantity: newQty,
+              updated_at: new Date().toISOString(),
+            };
+            if (item.batch_number && item.batch_number.trim()) {
+              updateMedPayload.batch_number = item.batch_number.trim();
+            }
+            if (item.expiry_date && item.expiry_date.trim()) {
+              updateMedPayload.expiry_date = formatExpiryForDb(item.expiry_date);
+            }
+            if (item.trade_price) {
+              updateMedPayload.purchase_price_unit = Number(item.trade_price);
+            }
             await supabase
               .from("medicines")
-              .update({
-                stock_quantity: newQty,
-                batch_number: item.batch_number.trim(),
-                expiry_date: item.expiry_date.trim() || undefined,
-                purchase_price_unit: Number(item.trade_price) || undefined,
-                updated_at: new Date().toISOString(),
-              })
+              .update(updateMedPayload)
               .eq("id", existingMed.id);
           } else {
             await supabase.from("medicines").insert({
@@ -954,8 +1071,8 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
               stock_quantity: totalUnits,
               purchase_price_unit: Number(item.trade_price) || 0,
               price: item.trade_price ? Math.round(Number(item.trade_price) * 1.15 * 100) / 100 : 20,
-              batch_number: item.batch_number.trim(),
-              expiry_date: item.expiry_date.trim() || null,
+              batch_number: item.batch_number ? item.batch_number.trim() : null,
+              expiry_date: formatExpiryForDb(item.expiry_date),
               is_active: true,
             });
           }
@@ -1090,7 +1207,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
             .from("medicines")
             .update({
               stock_quantity: newQty,
-              expiry_date: item.expiry_date || undefined,
+              expiry_date: formatExpiryForDb(item.expiry_date) || undefined,
             })
             .eq("id", existingMed.id);
         } else {
@@ -1100,7 +1217,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
             name: item.medicine_name,
             stock_quantity: qtyReceived,
             price: item.trade_price ? Math.round(item.trade_price * 1.15 * 100) / 100 : 20,
-            expiry_date: item.expiry_date || null,
+            expiry_date: formatExpiryForDb(item.expiry_date),
           });
         }
       }
@@ -1261,9 +1378,15 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
       {/* Header & Top Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-            Purchase Orders (Inwards)
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              Purchase Orders (Inwards)
+            </h1>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+              <Building2 className="h-3 w-3 text-slate-500" />
+              {branchName || activeLocation?.name || "Active Branch"}
+            </div>
+          </div>
           <p className="text-xs text-slate-500 mt-1">
             Vendor procurement pipeline, trade-price verification, and GRN inventory receiving
           </p>
@@ -1779,7 +1902,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
                     Medicine Line Items & Pricing
                   </Label>
                   <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                    Batch # & Expiry are required to Receive Stock.
+                    Batch # & Expiry are optional (can be filled or updated anytime).
                   </p>
                 </div>
                 <Button
@@ -1798,63 +1921,140 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
                 {draftItems.map((item, idx) => {
                   const lineGross = (Number(item.trade_price) || 0) * (Number(item.ordered_qty) || 0);
                   const lineNet = lineGross * (1 - (Number(item.discount_percent) || 0) / 100);
+                  const itemIndex = draftItems.length - idx;
 
+                  // A. Collapsed Row (~48px height) for inactive items
+                  if (expandedItemId !== item.id) {
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => setExpandedItemId(item.id)}
+                        className="group flex items-center justify-between p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl cursor-pointer transition shadow-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">
+                            #{itemIndex}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-800 truncate max-w-[150px] sm:max-w-[220px]">
+                            {item.medicine_name.trim() || <span className="italic text-slate-400">Unnamed Item</span>}
+                          </span>
+                          {item.batch_number && (
+                            <span className="hidden sm:inline-block text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono truncate max-w-[90px]">
+                              {item.batch_number}
+                            </span>
+                          )}
+                          {item.expiry_date && (
+                            <span className="hidden md:inline-block text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                              Exp: {item.expiry_date}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs text-slate-600">
+                            <strong className="text-slate-800">{item.ordered_qty}</strong> pcs
+                            {Number(item.bonus_qty) > 0 && (
+                              <span className="text-amber-600 text-[10px] ml-1 font-semibold">+{item.bonus_qty} free</span>
+                            )}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 min-w-[70px] text-right font-mono">
+                            ৳ {lineNet.toFixed(2)}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedItemId(item.id);
+                              }}
+                              className="text-slate-400 hover:text-blue-600 p-1 rounded-md transition"
+                              title="Edit item details"
+                            >
+                              <span className="text-[11px] font-semibold text-blue-600 hidden sm:inline">Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveDraftItem(item.id);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition"
+                              title="Remove item"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // B. Active Workstation Card (~260px) for active focal item
                   return (
                     <div
                       key={item.id}
-                      className="p-3 sm:p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3 w-full min-w-0 box-border"
+                      className="border-2 border-blue-500 bg-white shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3.5 ring-4 ring-blue-50/50 w-full min-w-0 box-border transition-all animate-in fade-in-50 duration-150"
                     >
-                      {/* Medicine Name with Suggestion & Desktop Actions */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/60 w-full min-w-0">
-                        <div className="flex-1 w-full min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
-                            <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider truncate">
-                              Medicine #{idx + 1} *
-                            </Label>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveDraftItem(item.id)}
-                              className="h-6 px-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md text-[11px] sm:hidden gap-1 font-medium shrink-0"
-                              title="Remove item / Not delivered"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              <span>Remove</span>
-                            </Button>
-                          </div>
-                          <Input
-                            list="medicine-catalog-list"
-                            placeholder="e.g. Napa Extra 500mg"
-                            value={item.medicine_name}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              handleSelectCatalogMedicine(item.id, val);
-                            }}
-                            className="h-9 bg-white rounded-lg text-xs w-full"
-                          />
+                      {/* Active Header: Indicator, Done / Collapse & Delete */}
+                      <div className="flex items-center justify-between gap-2 pb-2 border-b border-blue-100 w-full min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="relative flex h-2.5 w-2.5 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
+                          </span>
+                          <span className="text-xs font-bold text-blue-700 tracking-wide uppercase">
+                            Active Workstation #{itemIndex}
+                          </span>
                         </div>
 
-                        <div className="hidden sm:flex items-center gap-3 shrink-0 pt-3">
-                          <div className="text-right">
-                            <span className="text-[10px] text-slate-400 block font-semibold uppercase">
-                              Line Total
-                            </span>
-                            <span className="text-sm font-bold text-slate-900">
-                              ৳ {lineNet.toFixed(2)}
-                            </span>
-                          </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedItemId(null)}
+                            className="h-7 px-2.5 rounded-lg text-xs font-semibold text-blue-700 hover:text-blue-800 hover:bg-blue-100/70 gap-1"
+                            title="Done editing / Collapse"
+                          >
+                            <Check className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Done</span>
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
                             onClick={() => handleRemoveDraftItem(item.id)}
-                            className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg shrink-0"
-                            title="Remove item / Not delivered"
+                            className="h-7 w-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg shrink-0"
+                            title="Remove item"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
+                      </div>
+
+                      {/* Medicine Name with Suggestion Input */}
+                      <div className="w-full min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
+                          <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider truncate">
+                            Medicine Name *
+                          </Label>
+                          <span className="text-[10px] text-slate-400 font-medium truncate">
+                            Select catalog or type generic
+                          </span>
+                        </div>
+                        <Input
+                          ref={(el) => {
+                            medicineInputRefs.current[item.id] = el;
+                          }}
+                          list="medicine-catalog-list"
+                          placeholder="e.g. Napa Extra 500mg"
+                          value={item.medicine_name}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            handleSelectCatalogMedicine(item.id, val);
+                          }}
+                          className="h-9 bg-white rounded-lg text-xs w-full border-blue-200 focus-visible:ring-blue-500"
+                        />
                       </div>
 
                       {/* Row 1: Batch Number & Expiry (2 Columns) */}
@@ -1862,45 +2062,46 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
                         <div className="w-full min-w-0">
                           <Label className="text-[10px] text-slate-500 uppercase font-semibold flex items-center justify-between mb-1">
                             <span className="truncate">Batch #</span>
-                            <span className="text-[9px] text-slate-400 font-normal lowercase hidden xs:inline">(req.)</span>
+                            <span className="text-[9px] text-slate-400 font-normal lowercase hidden xs:inline">(optional)</span>
                           </Label>
                           <Input
                             placeholder="e.g. BTH-01"
-                            value={item.batch_number}
+                            value={item.batch_number || ""}
                             onChange={(e) => handleItemChange(item.id, "batch_number", e.target.value)}
-                            className={`h-8 sm:h-9 rounded-lg text-xs font-mono w-full min-w-0 transition-colors ${
-                              formErrors[item.id]?.batch
-                                ? "bg-rose-50/50 border-rose-500 text-rose-900 placeholder:text-rose-300 ring-1 ring-rose-500 focus-visible:ring-rose-500"
-                                : "bg-white border-slate-200"
-                            }`}
+                            className="h-8 sm:h-9 rounded-lg text-xs font-mono w-full min-w-0 bg-white border-slate-200 focus-visible:ring-1 focus-visible:ring-blue-500"
                           />
-                          {formErrors[item.id]?.batch && (
-                            <span className="text-[9px] text-rose-600 font-medium mt-1 flex items-center gap-1 truncate">
-                              <AlertCircle className="h-3 w-3 shrink-0" /> Batch required
-                            </span>
-                          )}
                         </div>
 
                         <div className="w-full min-w-0">
                           <Label className="text-[10px] text-slate-500 uppercase font-semibold flex items-center justify-between mb-1">
-                            <span className="truncate">Expiry (YY-MM)</span>
-                            <span className="text-[9px] text-slate-400 font-normal lowercase hidden xs:inline">(req.)</span>
+                            <span className="truncate">Expiry Date</span>
+                            <span className="text-[9px] text-slate-400 font-normal lowercase hidden xs:inline">(optional)</span>
                           </Label>
-                          <Input
-                            placeholder="e.g. 2027-12"
-                            value={item.expiry_date}
-                            onChange={(e) => handleItemChange(item.id, "expiry_date", e.target.value)}
-                            className={`h-8 sm:h-9 rounded-lg text-xs w-full min-w-0 transition-colors ${
-                              formErrors[item.id]?.expiry
-                                ? "bg-rose-50/50 border-rose-500 text-rose-900 placeholder:text-rose-300 ring-1 ring-rose-500 focus-visible:ring-rose-500"
-                                : "bg-white border-slate-200"
-                            }`}
-                          />
-                          {formErrors[item.id]?.expiry && (
-                            <span className="text-[9px] text-rose-600 font-medium mt-1 flex items-center gap-1 truncate">
-                              <AlertCircle className="h-3 w-3 shrink-0" /> Expiry required
-                            </span>
-                          )}
+                          <div className="relative w-full min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenExpiryPicker(item.id, item.expiry_date)}
+                              className="h-8 sm:h-9 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 w-full min-w-0 flex items-center justify-between text-xs transition-colors text-left cursor-pointer active:scale-[0.99]"
+                            >
+                              <span className={item.expiry_date ? "text-slate-900 font-bold font-mono" : "text-slate-400"}>
+                                {item.expiry_date || "MM/YYYY"}
+                              </span>
+                              <Calendar className="h-3.5 w-3.5 text-[#A32D37] shrink-0" />
+                            </button>
+                            {item.expiry_date && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleItemChange(item.id, "expiry_date", "");
+                                }}
+                                className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 p-0.5 rounded transition-colors cursor-pointer"
+                                title="Clear expiry date"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -1980,7 +2181,7 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
                         <span className="text-[11px] text-slate-500 uppercase font-semibold">
                           Line Subtotal:
                         </span>
-                        <span className="text-sm font-bold text-slate-900">
+                        <span className="text-sm font-bold text-slate-900 font-mono">
                           ৳ {lineNet.toFixed(2)}
                         </span>
                       </div>
@@ -2454,6 +2655,96 @@ Extract the data and return ONLY a valid JSON object matching this schema withou
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Custom Month-Year Expiry Dialog (Active Radix Portal Modal) */}
+      <DialogPrimitive.Root open={expiryPickerOpen} onOpenChange={setExpiryPickerOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            className="fixed inset-0 z-[9998] bg-black/50 backdrop-blur-xs animate-in fade-in-0 duration-150"
+            style={{ pointerEvents: "auto" }}
+          />
+          <DialogPrimitive.Content
+            className="fixed left-[50%] top-[50%] z-[9999] translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-2xl border border-gray-200 w-[92vw] max-w-xs p-4 sm:p-5 animate-in zoom-in-95 duration-150 outline-hidden select-none"
+            style={{ pointerEvents: "auto" }}
+            onPointerDownOutside={() => setExpiryPickerOpen(false)}
+          >
+            <DialogPrimitive.Title className="text-sm sm:text-base font-bold text-gray-900 text-center mb-3">
+              Select Expiry Month
+            </DialogPrimitive.Title>
+
+            {/* Year Stepper: < 2026 > with left/right buttons */}
+            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded-xl mb-3.5 border border-gray-200/80">
+              <button
+                type="button"
+                onClick={() => setExpiryPickerYear((y) => y - 1)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-200 transition-colors cursor-pointer active:scale-95"
+                aria-label="Previous Year"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm sm:text-base font-extrabold text-gray-900 tracking-wide font-mono">
+                {expiryPickerYear}
+              </span>
+              <button
+                type="button"
+                onClick={() => setExpiryPickerYear((y) => y + 1)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-200 transition-colors cursor-pointer active:scale-95"
+                aria-label="Next Year"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* 3x4 Grid Containing all 12 Months (Jan - Dec) with solid maroon pill highlight (#A32D37) */}
+            <div className="grid grid-cols-3 gap-1.5 mb-4">
+              {MONTHS_SHORT.map((monthName, idx) => {
+                const isSelected = expiryPickerMonth === idx;
+                return (
+                  <button
+                    key={monthName}
+                    type="button"
+                    onClick={() => setExpiryPickerMonth(idx)}
+                    className={`py-1.5 text-xs font-bold rounded-full transition-all active:scale-95 cursor-pointer ${
+                      isSelected
+                        ? "bg-[#A32D37] text-white shadow-sm shadow-[#A32D37]/30"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {monthName}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Actions: CLEAR, CANCEL, and OK */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={handleClearExpiryPicker}
+                className="text-[11px] font-semibold text-gray-400 hover:text-rose-600 transition-colors cursor-pointer px-1 py-1"
+              >
+                CLEAR
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpiryPickerOpen(false)}
+                  className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmExpiryPicker}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#A32D37] hover:bg-[#8D232C] rounded-lg shadow-sm shadow-[#A32D37]/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </div>
   );
 }

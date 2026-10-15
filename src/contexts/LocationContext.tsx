@@ -116,7 +116,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             .eq("id", profile.pharmacy_id)
             .maybeSingle();
 
-          const fallbackName = pharmacyRecord?.name?.trim() || "Main Branch";
+          const fallbackName = pharmacyRecord?.name?.trim() || "Pharmacy Outlet";
           const fallbackAddress = pharmacyRecord?.address?.trim() || "";
 
           const { data: defaultBranch, error: insertErr } = await supabase
@@ -125,7 +125,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               pharmacy_id: profile.pharmacy_id,
               name: fallbackName,
               type: "branch",
-              code: "MAIN",
+              code: null,
               address: fallbackAddress,
               is_main: true,
               is_active: true,
@@ -138,7 +138,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               id: (defaultBranch as any).id,
               name: (defaultBranch as any).name || fallbackName,
               type: "branch",
-              code: (defaultBranch as any).code || "MAIN",
+              code: (defaultBranch as any).code || undefined,
               address: (defaultBranch as any).address || fallbackAddress,
               is_active: true,
               is_main: true,
@@ -251,17 +251,30 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [fetchTransfers, profile?.pharmacy_id]);
 
-  // Auto-sync activeLocationId when locations list updates
+  // Auto-sync activeLocationId when locations list updates (prefer main branch first, then first available location)
   useEffect(() => {
     if (locations.length > 0) {
       const exists = locations.some((l) => l.id === activeLocationId);
       if (!exists) {
-        const firstId = locations[0].id;
-        setActiveLocationId(firstId);
+        const mainLoc = locations.find((l) => l.is_main);
+        const fallbackLoc = mainLoc || locations[0];
+        const defaultId = fallbackLoc.id;
+        setActiveLocationId(defaultId);
         try {
-          localStorage.setItem(STORAGE_ACTIVE_KEY, firstId);
+          localStorage.setItem(STORAGE_ACTIVE_KEY, defaultId);
         } catch {
           // ignore
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("medinist:workspace-changed", {
+              detail: {
+                locationId: defaultId,
+                location: fallbackLoc,
+                timestamp: Date.now(),
+              },
+            })
+          );
         }
       }
     }
@@ -278,9 +291,10 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       : "owner";
   const currentUserRole: UserRole = mockRoleOverride || profileRole;
 
-  // Derive active location without falling back to mock locations
+  // Derive active location with preference to main branch if current id not matched
   const activeLocation: Location =
     locations.find((l) => l.id === activeLocationId) ||
+    locations.find((l) => l.is_main) ||
     locations[0] ||
     EMPTY_FALLBACK_LOCATION;
 
@@ -300,6 +314,19 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         localStorage.setItem(STORAGE_ACTIVE_KEY, target.id);
       } catch {
         // ignore
+      }
+
+      // Dispatch global event bus notification for non-context subscribers & background tabs
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("medinist:workspace-changed", {
+            detail: {
+              locationId: target.id,
+              location: target,
+              timestamp: Date.now(),
+            },
+          })
+        );
       }
 
       // Ephemeral client-side context switch:

@@ -18,6 +18,7 @@ export const isMissingTableError = (error: any): boolean => {
 export interface SupplierRecord {
   id: string;
   pharmacy_id: string;
+  location_id?: string | null;
   name: string;
   contact_person: string | null;
   phone: string | null;
@@ -121,6 +122,7 @@ export interface SmartRequisitionSupplierSuggestion {
 export interface SupplierLedgerRecord {
   id: string;
   pharmacy_id: string;
+  location_id?: string | null;
   supplier_id: string;
   purchase_order_id?: string | null;
   transaction_type: "opening_balance" | "bill" | "payment" | "return" | "adjustment";
@@ -279,43 +281,32 @@ export const warehouseStorage = {
   // ==========================================
   // 1. SUPPLIERS & LEDGER
   // ==========================================
-  async getSuppliers(pharmacyId: string): Promise<SupplierRecord[]> {
-    const storageKey = `warehouse_suppliers_${pharmacyId}`;
+  async getSuppliers(pharmacyId: string, branchId?: string): Promise<SupplierRecord[]> {
+    const storageKey = branchId
+      ? `warehouse_suppliers_${pharmacyId}_${branchId}`
+      : `warehouse_suppliers_${pharmacyId}`;
     try {
-      const { data, error } = await (supabase.from("suppliers" as any) as any)
+      let query = (supabase.from("suppliers" as any) as any)
         .select("*")
         .eq("pharmacy_id", pharmacyId)
         .is("deleted_at", null)
         .order("name", { ascending: true });
 
+      if (branchId) {
+        query = query.eq("location_id", branchId);
+      }
+
+      const { data, error } = await query;
+
       if (error) {
-        if (isMissingTableError(error)) {
-          // Fall back gracefully to local storage
-          let local = readLocal<SupplierRecord[]>(storageKey, []);
-          local = local.filter((s) => !s.deleted_at);
-          if (local.length === 0) {
-            // Seed defaults
-            local = DEFAULT_BANGLADESH_SUPPLIERS.map((s, idx) => ({
-              id: `sup_seed_${idx + 1}_${Date.now()}`,
-              pharmacy_id: pharmacyId,
-              name: s.name,
-              contact_person: s.contact_person,
-              phone: s.phone,
-              email: s.email,
-              address: s.address,
-              payment_terms: s.payment_terms,
-              balance: 0,
-              opening_balance: 0,
-              is_active: true,
-              deleted_at: null,
-              created_at: new Date().toISOString(),
-            }));
-            writeLocal(storageKey, local);
-          }
-          return local;
-        }
         console.warn("[warehouseStorage] Supabase getSuppliers warning:", error.message);
-      } else if (Array.isArray(data) && data.length > 0) {
+        if (isMissingTableError(error)) {
+          // Fall back gracefully to local storage if table is missing
+          const local = readLocal<SupplierRecord[]>(storageKey, []);
+          return local.filter((s) => !s.deleted_at);
+        }
+      } else if (Array.isArray(data)) {
+        // Legitimate response from Supabase (including empty array [] for an isolated branch with 0 suppliers)
         writeLocal(storageKey, data);
         return data as SupplierRecord[];
       }
@@ -325,38 +316,25 @@ export const warehouseStorage = {
       }
     }
 
-    // Default fallback
-    let local = readLocal<SupplierRecord[]>(storageKey, []);
-    local = local.filter((s) => !s.deleted_at);
-    if (local.length === 0) {
-      local = DEFAULT_BANGLADESH_SUPPLIERS.map((s, idx) => ({
-        id: `sup_seed_${idx + 1}_${Date.now()}`,
-        pharmacy_id: pharmacyId,
-        name: s.name,
-        contact_person: s.contact_person,
-        phone: s.phone,
-        email: s.email,
-        address: s.address,
-        payment_terms: s.payment_terms,
-        balance: 0,
-        opening_balance: 0,
-        is_active: true,
-        deleted_at: null,
-        created_at: new Date().toISOString(),
-      }));
-      writeLocal(storageKey, local);
-    }
-    return local;
+    // Offline / Network Error Fallback: return cached local data for this branch without seeding false mock duplicates
+    const local = readLocal<SupplierRecord[]>(storageKey, []);
+    return local.filter((s) => !s.deleted_at);
   },
 
   async saveSupplier(
     pharmacyId: string,
-    supplier: Partial<SupplierRecord>
+    supplier: Partial<SupplierRecord>,
+    branchId?: string
   ): Promise<SupplierRecord> {
-    const storageKey = `warehouse_suppliers_${pharmacyId}`;
-    const ledgerKey = `warehouse_supplier_ledger_${pharmacyId}`;
+    const storageKey = branchId
+      ? `warehouse_suppliers_${pharmacyId}_${branchId}`
+      : `warehouse_suppliers_${pharmacyId}`;
+    const ledgerKey = branchId
+      ? `warehouse_supplier_ledger_${pharmacyId}_${branchId}`
+      : `warehouse_supplier_ledger_${pharmacyId}`;
     let saved: SupplierRecord | null = null;
     const initialOpening = Number(supplier.opening_balance ?? supplier.balance ?? 0);
+    const targetLocationId = supplier.location_id || branchId || null;
 
     // Optimistic Supabase try
     try {
@@ -377,6 +355,10 @@ export const warehouseStorage = {
           sr_whatsapp: supplier.sr_whatsapp ?? null,
         };
 
+        if (targetLocationId) {
+          updatePayload.location_id = targetLocationId;
+        }
+
         // If opening_balance is provided, update it (the trigger will recompute balance)
         if (supplier.opening_balance !== undefined) {
           updatePayload.opening_balance = initialOpening;
@@ -395,6 +377,7 @@ export const warehouseStorage = {
         const { data, error } = await (supabase.from("suppliers" as any) as any)
           .insert({
             pharmacy_id: pharmacyId,
+            location_id: targetLocationId,
             name: supplier.name,
             contact_person: supplier.contact_person,
             phone: supplier.phone,
@@ -418,11 +401,12 @@ export const warehouseStorage = {
         if (!error && data) {
           saved = data as SupplierRecord;
 
-          // If initial opening balance > 0, log opening ledger entry
+          // If initial opening balance > 0, log opening ledger entry strictly scoped to branch
           if (initialOpening > 0 && saved?.id) {
             try {
               await (supabase.from("supplier_ledger_entries" as any) as any).insert({
                 pharmacy_id: pharmacyId,
+                location_id: targetLocationId,
                 supplier_id: saved.id,
                 transaction_type: "opening_balance",
                 description: "Initial Account Payable Balance",
@@ -446,6 +430,7 @@ export const warehouseStorage = {
         saved = {
           ...(current.find((s) => s.id === supplier.id) as SupplierRecord),
           ...supplier,
+          location_id: targetLocationId,
           balance: Number(supplier.balance ?? supplier.opening_balance ?? 0),
         } as SupplierRecord;
         const updated = current.map((s) => (s.id === supplier.id ? saved! : s));
@@ -455,6 +440,7 @@ export const warehouseStorage = {
         saved = {
           id: newId,
           pharmacy_id: pharmacyId,
+          location_id: targetLocationId,
           name: supplier.name || "Unnamed Supplier",
           contact_person: supplier.contact_person || null,
           phone: supplier.phone || null,
@@ -481,6 +467,7 @@ export const warehouseStorage = {
           localLedger.unshift({
             id: `ledg_${Date.now()}`,
             pharmacy_id: pharmacyId,
+            location_id: targetLocationId,
             supplier_id: newId,
             transaction_type: "opening_balance",
             description: "Initial Account Payable Balance",
@@ -505,8 +492,10 @@ export const warehouseStorage = {
     return saved;
   },
 
-  async deleteSupplier(pharmacyId: string, supplierId: string): Promise<void> {
-    const storageKey = `warehouse_suppliers_${pharmacyId}`;
+  async deleteSupplier(pharmacyId: string, supplierId: string, branchId?: string): Promise<void> {
+    const storageKey = branchId
+      ? `warehouse_suppliers_${pharmacyId}_${branchId}`
+      : `warehouse_suppliers_${pharmacyId}`;
     const nowIso = new Date().toISOString();
     try {
       // TARGET ARCHITECTURE: SOFT DELETE
@@ -534,6 +523,14 @@ export const warehouseStorage = {
       storageKey,
       current.filter((s) => s.id !== supplierId)
     );
+    if (branchId) {
+      const globalKey = `warehouse_suppliers_${pharmacyId}`;
+      const globalCurrent = readLocal<SupplierRecord[]>(globalKey, []);
+      writeLocal(
+        globalKey,
+        globalCurrent.filter((s) => s.id !== supplierId)
+      );
+    }
   },
 
   // ==========================================
@@ -541,16 +538,25 @@ export const warehouseStorage = {
   // ==========================================
   async getSupplierLedger(
     pharmacyId: string,
-    supplierId: string
+    supplierId: string,
+    branchId?: string
   ): Promise<SupplierLedgerRecord[]> {
-    const ledgerKey = `warehouse_supplier_ledger_${pharmacyId}`;
+    const ledgerKey = branchId
+      ? `warehouse_supplier_ledger_${pharmacyId}_${branchId}`
+      : `warehouse_supplier_ledger_${pharmacyId}`;
     try {
-      const { data, error } = await (supabase.from("supplier_ledger_entries" as any) as any)
+      let query = (supabase.from("supplier_ledger_entries" as any) as any)
         .select("*")
-        .eq("supplier_id", supplierId)
-        .order("created_at", { ascending: false });
+        .eq("supplier_id", supplierId);
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (branchId) {
+        query = query.eq("location_id", branchId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        writeLocal(ledgerKey, data);
         return data as SupplierLedgerRecord[];
       }
     } catch {
@@ -558,7 +564,7 @@ export const warehouseStorage = {
     }
 
     const localLedger = readLocal<SupplierLedgerRecord[]>(ledgerKey, []);
-    return localLedger.filter((l) => l.supplier_id === supplierId);
+    return localLedger.filter((l) => l.supplier_id === supplierId && (!branchId || !l.location_id || l.location_id === branchId));
   },
 
   async recordSupplierLedgerEntry(
@@ -569,7 +575,8 @@ export const warehouseStorage = {
       amount: number;
       description?: string;
       purchase_order_id?: string;
-    }
+    },
+    branchId?: string
   ): Promise<void> {
     const isPaymentOrReturn = entry.transaction_type === "payment" || entry.transaction_type === "return";
     const debit = isPaymentOrReturn ? entry.amount : 0;
@@ -578,6 +585,7 @@ export const warehouseStorage = {
     try {
       await (supabase.from("supplier_ledger_entries" as any) as any).insert({
         pharmacy_id: pharmacyId,
+        location_id: branchId || null,
         supplier_id: supplierId,
         purchase_order_id: entry.purchase_order_id || null,
         transaction_type: entry.transaction_type,
@@ -590,11 +598,14 @@ export const warehouseStorage = {
     }
 
     // Always update local cache and supplier balance
-    const ledgerKey = `warehouse_supplier_ledger_${pharmacyId}`;
+    const ledgerKey = branchId
+      ? `warehouse_supplier_ledger_${pharmacyId}_${branchId}`
+      : `warehouse_supplier_ledger_${pharmacyId}`;
     const localLedger = readLocal<SupplierLedgerRecord[]>(ledgerKey, []);
     localLedger.unshift({
       id: `ledg_${Date.now()}`,
       pharmacy_id: pharmacyId,
+      location_id: branchId || null,
       supplier_id: supplierId,
       purchase_order_id: entry.purchase_order_id || null,
       transaction_type: entry.transaction_type,
@@ -606,7 +617,9 @@ export const warehouseStorage = {
     writeLocal(ledgerKey, localLedger);
 
     // Sync supplier balance in local storage
-    const storageKey = `warehouse_suppliers_${pharmacyId}`;
+    const storageKey = branchId
+      ? `warehouse_suppliers_${pharmacyId}_${branchId}`
+      : `warehouse_suppliers_${pharmacyId}`;
     const currentSuppliers = readLocal<SupplierRecord[]>(storageKey, []);
     const supIndex = currentSuppliers.findIndex((s) => s.id === supplierId);
     if (supIndex >= 0) {
@@ -621,17 +634,24 @@ export const warehouseStorage = {
   // ==========================================
   // 2. PURCHASE ORDERS & GRN
   // ==========================================
-  async getPurchaseOrders(pharmacyId: string): Promise<PurchaseOrderRecord[]> {
-    const storageKey = `warehouse_pos_${pharmacyId}`;
+  async getPurchaseOrders(pharmacyId: string, branchLocationId?: string): Promise<PurchaseOrderRecord[]> {
+    const storageKey = branchLocationId
+      ? `warehouse_pos_${pharmacyId}_${branchLocationId}`
+      : `warehouse_pos_${pharmacyId}`;
     try {
-      const { data, error } = await (supabase.from("purchase_orders" as any) as any)
+      let query = (supabase.from("purchase_orders" as any) as any)
         .select(`
           *,
           supplier:suppliers(*),
           items:purchase_order_items(*)
         `)
-        .eq("pharmacy_id", pharmacyId)
-        .order("created_at", { ascending: false });
+        .eq("pharmacy_id", pharmacyId);
+
+      if (branchLocationId) {
+        query = query.or(`warehouse_id.eq.${branchLocationId},warehouse_id.is.null`);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) {
         if (isMissingTableError(error)) {
@@ -681,18 +701,32 @@ export const warehouseStorage = {
         .single();
 
       if (!poErr && newPo) {
-        const itemsPayload = items.map((it) => ({
-          purchase_order_id: newPo.id,
-          pharmacy_id: pharmacyId,
-          medicine_id: it.medicine_id || null,
-          medicine_name: it.medicine_name,
-          order_quantity: it.order_quantity,
-          received_qty: it.received_qty ?? (po.status === "received" ? it.order_quantity : 0),
-          unit_cost: it.unit_cost,
-          total_cost: it.total_cost,
-          batch_number: it.batch_number || null,
-          expiry_date: it.expiry_date || null,
-        }));
+        const itemsPayload = items.map((it) => {
+          let dbExp: string | null = null;
+          if (it.expiry_date && String(it.expiry_date).trim()) {
+            const exp = String(it.expiry_date).trim();
+            if (/^\d{4}-\d{2}$/.test(exp)) {
+              dbExp = `${exp}-01`;
+            } else if (/^\d{1,2}\/\d{4}$/.test(exp)) {
+              const [m, y] = exp.split("/");
+              dbExp = `${y}-${m.padStart(2, "0")}-01`;
+            } else {
+              dbExp = exp;
+            }
+          }
+          return {
+            purchase_order_id: newPo.id,
+            pharmacy_id: pharmacyId,
+            medicine_id: it.medicine_id || null,
+            medicine_name: it.medicine_name,
+            order_quantity: it.order_quantity,
+            received_qty: it.received_qty ?? (po.status === "received" ? it.order_quantity : 0),
+            unit_cost: it.unit_cost,
+            total_cost: it.total_cost,
+            batch_number: it.batch_number || null,
+            expiry_date: dbExp,
+          };
+        });
         const { data: savedItems } = await (
           supabase.from("purchase_order_items" as any) as any
         )

@@ -466,9 +466,14 @@ AS $$
 DECLARE
   _link record;
   _pharmacy record;
+  _location record;
   _supplier record;
   _requisition record;
   _items jsonb;
+  _pharmacy_name text;
+  _pharmacy_address text;
+  _pharmacy_phone text;
+  _branch_code text;
 BEGIN
   -- 1. Validate Token and Expiry
   SELECT * INTO _link 
@@ -493,15 +498,37 @@ BEGIN
       last_accessed_at = now()
   WHERE id = _link.id;
 
-  -- 3. Fetch Pharmacy & Supplier Brand Context
+  -- 3. Fetch Requisition, Location (Branch), Root Pharmacy & Supplier Brand Context
+  SELECT 
+    r.id,
+    r.requisition_number,
+    r.location_id,
+    r.pharmacy_id,
+    r.supplier_id,
+    r.status,
+    r.notes,
+    r.total_estimated_amount,
+    r.created_at
+  INTO _requisition
+  FROM public.requisitions r
+  WHERE r.id = _link.requisition_id;
+
   SELECT name, phone, address INTO _pharmacy 
-  FROM public.pharmacies WHERE id = _link.pharmacy_id;
+  FROM public.pharmacies WHERE id = COALESCE(_requisition.pharmacy_id, _link.pharmacy_id);
+
+  IF _requisition.location_id IS NOT NULL THEN
+    SELECT id, name, phone, address, city, code INTO _location
+    FROM public.shop_locations WHERE id = _requisition.location_id;
+  END IF;
 
   SELECT name, sr_name, sr_phone INTO _supplier 
-  FROM public.suppliers WHERE id = _link.supplier_id;
+  FROM public.suppliers WHERE id = COALESCE(_requisition.supplier_id, _link.supplier_id);
 
-  SELECT requisition_number, status, notes, total_estimated_amount, created_at INTO _requisition
-  FROM public.requisitions WHERE id = _link.requisition_id;
+  -- Branch identity has strict precedence over root tenant to prevent cross-branch leaks
+  _pharmacy_name := COALESCE(_location.name, _pharmacy.name, 'Pharmacy Order');
+  _pharmacy_address := COALESCE(_location.address, _location.city, _pharmacy.address);
+  _pharmacy_phone := COALESCE(_location.phone, _pharmacy.phone);
+  _branch_code := _location.code;
 
   -- 4. Aggregate Sanitized Order Items (No profit margins or cost leaks)
   SELECT jsonb_agg(
@@ -523,9 +550,17 @@ BEGIN
   RETURN jsonb_build_object(
     'valid', true,
     'requisition_number', _requisition.requisition_number,
-    'pharmacy_name', _pharmacy.name,
-    'pharmacy_phone', _pharmacy.phone,
-    'pharmacy_address', _pharmacy.address,
+    'location_id', _requisition.location_id,
+    'branch_code', _branch_code,
+    'issuing_pharmacy_name', _pharmacy_name,
+    'issuing_pharmacy_address', _pharmacy_address,
+    'issuing_pharmacy_phone', _pharmacy_phone,
+    'pharmacy_name', _pharmacy_name,
+    'pharmacy_phone', _pharmacy_phone,
+    'pharmacy_address', _pharmacy_address,
+    'branch_name', _location.name,
+    'branch_address', _location.address,
+    'branch_phone', _location.phone,
     'supplier_name', _supplier.name,
     'sr_name', _supplier.sr_name,
     'created_at', _link.created_at,
@@ -535,7 +570,15 @@ BEGIN
     'sr_acknowledged_at', _link.sr_acknowledged_at,
     'sr_estimated_delivery', _link.sr_estimated_delivery,
     'sr_notes', _link.sr_notes,
-    'items', COALESCE(_items, '[]'::jsonb)
+    'items', COALESCE(_items, '[]'::jsonb),
+    'location', CASE WHEN _location.id IS NOT NULL THEN jsonb_build_object(
+      'id', _location.id,
+      'name', _location.name,
+      'address', _location.address,
+      'city', _location.city,
+      'phone', _location.phone,
+      'code', _location.code
+    ) ELSE NULL END
   );
 END;
 $$;

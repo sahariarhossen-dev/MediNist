@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocationStore } from "@/contexts/LocationContext";
+import { useActiveWorkspace } from "@/hooks/useActiveWorkspace";
 import { warehouseStorage } from "@/services/warehouseStorage";
 import {
   UnifiedStockMovement,
@@ -22,8 +23,8 @@ export function useStockMovements() {
     rejectTransfer: rejectTransferFromStore,
   } = useLocationStore();
 
-  const pharmacyId = profile?.pharmacy_id;
-  const activeLocationId = activeLocation?.id;
+  const { pharmacyId, branchId, branchName } = useActiveWorkspace();
+  const activeLocationId = branchId || activeLocation?.id;
 
   const [requisitions, setRequisitions] = useState<BranchRequisition[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -71,6 +72,17 @@ export function useStockMovements() {
   useEffect(() => {
     setIsLoading(true);
     refetchAll();
+  }, [refetchAll]);
+
+  // Reactive listener to global workspace changes (e.g. switching branch in profile)
+  useEffect(() => {
+    const handleWorkspaceChanged = () => {
+      refetchAll();
+    };
+    window.addEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    return () => {
+      window.removeEventListener("medinist:workspace-changed", handleWorkspaceChanged);
+    };
   }, [refetchAll]);
 
   // Reactive listener to custom window events (e.g., inventory updates)

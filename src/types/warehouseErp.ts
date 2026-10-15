@@ -30,6 +30,7 @@ export interface SupplierManufacturer {
 export interface Supplier {
   id: string;
   pharmacy_id: string;
+  location_id?: string | null;
   name: string;
   contact_person?: string | null;
   phone?: string | null;
@@ -60,6 +61,7 @@ export type SupplierLedgerTransactionType =
 export interface SupplierLedgerEntry {
   id: string;
   pharmacy_id: string;
+  location_id?: string | null;
   supplier_id: string;
   purchase_order_id?: string | null;
   transaction_type: SupplierLedgerTransactionType;

@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocationStore } from "@/contexts/LocationContext";
+import { useActiveWorkspace } from "@/hooks/useActiveWorkspace";
 import { useStockMovements } from "@/hooks/useStockMovements";
+import { toast } from "sonner";
 import { UnifiedStockMovement, MovementDirection } from "@/types/stockMovement";
 import { CreateRequisitionDialog } from "@/components/stock-movements/CreateRequisitionDialog";
 import { DirectTransferDialog } from "@/components/stock-movements/DirectTransferDialog";
@@ -74,7 +76,15 @@ export const StockMovementsPage: React.FC = () => {
   };
 
   const { profile } = useAuth();
-  const { locations } = useLocationStore();
+  const { locations, isLoadingLocations } = useLocationStore();
+  const { branchName } = useActiveWorkspace();
+
+  useEffect(() => {
+    if (!isLoadingLocations && locations.length <= 1) {
+      toast.error("Stock Movements feature is only available for multi-branch/multi-shop accounts.");
+      navigate("/dashboard", { replace: true });
+    }
+  }, [locations, isLoadingLocations, navigate]);
 
   // Dialog States
   const [isCreateRequisitionOpen, setIsCreateRequisitionOpen] = useState(false);
@@ -229,7 +239,7 @@ export const StockMovementsPage: React.FC = () => {
                 </h1>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
                   <Building2 className="h-3 w-3 text-slate-500" />
-                  {activeLocation?.name || "Active Location"}
+                  {branchName || activeLocation?.name || "Active Location"}
                 </div>
               </div>
               <p className="text-xs text-slate-500 mt-1">

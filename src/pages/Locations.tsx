@@ -266,7 +266,7 @@ const LocationsPage: React.FC = () => {
                                 </span>
                                 {isCurrentlyActive && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#CC3333] text-white shadow-xs">
-                                    <Check size={10} className="stroke-[3]" /> Active Head
+                                    <Check size={10} className="stroke-[3]" /> Active
                                   </span>
                                 )}
                               </div>
