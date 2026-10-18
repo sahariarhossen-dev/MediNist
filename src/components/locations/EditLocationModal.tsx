@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,10 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Store, Warehouse, MapPin, Hash, Phone } from "lucide-react";
+import { Store, Warehouse, MapPin, Hash, Phone, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useLocationStore } from "@/contexts/LocationContext";
 import { Location, LocationType } from "@/types/location";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface EditLocationModalProps {
@@ -34,22 +35,73 @@ export const EditLocationModal: React.FC<EditLocationModalProps> = ({
   const [isActive, setIsActive] = useState(true);
   const [errors, setErrors] = useState<{ name?: string; address?: string; code?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLockPopup, setShowLockPopup] = useState(false);
+  const lockPopupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Business Rule: A pharmacy must have > 1 facility to have a warehouse
+  const totalFacilities = locations.length;
+  const isSingleFacility = totalFacilities <= 1;
+  const retailCount = locations.filter(
+    (l) => l.type === "branch" || (l.type as string) === "shop"
+  ).length;
+  const isLastRetailBranch =
+    (location?.type === "branch" || (location?.type as string) === "shop") &&
+    retailCount <= 1;
+
+  useEffect(() => {
+    return () => {
+      if (lockPopupTimeoutRef.current) clearTimeout(lockPopupTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (location) {
       setName(location.name || "");
-      setType(location.type || "branch");
+      // If single facility, strictly force branch type
+      if (isSingleFacility) {
+        setType("branch");
+      } else {
+        setType(location.type || "branch");
+      }
       setCode(location.code || "");
       setAddress(location.address || "");
       setPhone(location.phone || "");
       setIsActive(location.is_active !== false);
       setErrors({});
       setIsSubmitting(false);
+      setShowLockPopup(false);
+      if (lockPopupTimeoutRef.current) clearTimeout(lockPopupTimeoutRef.current);
     }
-  }, [location, open]);
+  }, [location, open, isSingleFacility]);
+
+  const handleWarehouseClick = () => {
+    if (isSingleFacility) {
+      setShowLockPopup(true);
+      if (lockPopupTimeoutRef.current) clearTimeout(lockPopupTimeoutRef.current);
+      lockPopupTimeoutRef.current = setTimeout(() => {
+        setShowLockPopup(false);
+      }, 3500);
+      toast.info("Single Branch Account: Multiple branches thaklei kebol warehouse switch kora jabe.");
+      return;
+    }
+    if (isLastRetailBranch && location?.type === "branch") {
+      setShowLockPopup(true);
+      if (lockPopupTimeoutRef.current) clearTimeout(lockPopupTimeoutRef.current);
+      lockPopupTimeoutRef.current = setTimeout(() => {
+        setShowLockPopup(false);
+      }, 3500);
+      toast.info("At least one retail branch must be maintained for POS operations.");
+      return;
+    }
+    setShowLockPopup(false);
+    setType("warehouse");
+  };
 
   const validate = () => {
-    const newErrors: { name?: string; address?: string; code?: string } = {};
+    const newErrors: { name?: string; address?: string; code?: string; type?: string } = {};
+    if (type === "warehouse" && isSingleFacility) {
+      newErrors.type = "At least two branches are required to configure a warehouse.";
+    }
     if (!name.trim()) {
       newErrors.name = type === "warehouse" ? "Warehouse name is required" : "Branch name is required";
     }
@@ -113,11 +165,23 @@ export const EditLocationModal: React.FC<EditLocationModalProps> = ({
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           {/* Facility Type Selector */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Facility Type</label>
+            <div className="flex items-center justify-between min-h-[22px]">
+              <label className="text-xs font-semibold text-slate-700">Facility Type</label>
+              {showLockPopup && (
+                <div className="animate-in fade-in zoom-in-95 duration-200 flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-xs">
+                  <Lock size={11} className="stroke-[2.5] text-amber-600 animate-pulse" />
+                  <span>Single Branch Account</span>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setType("branch")}
+                onClick={() => {
+                  setShowLockPopup(false);
+                  setType("branch");
+                }}
                 className={cn(
                   "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-semibold transition-all",
                   type === "branch"
@@ -129,17 +193,30 @@ export const EditLocationModal: React.FC<EditLocationModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setType("warehouse")}
+                onClick={handleWarehouseClick}
                 className={cn(
-                  "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-semibold transition-all",
-                  type === "warehouse"
+                  "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-semibold transition-all relative",
+                  isSingleFacility || (isLastRetailBranch && location?.type === "branch")
+                    ? "bg-slate-50 text-slate-400 border-slate-200 hover:border-amber-300 hover:bg-amber-50/40 cursor-pointer"
+                    : type === "warehouse"
                     ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                 )}
+                title={
+                  isSingleFacility
+                    ? "Single Branch Account: Click to see requirements"
+                    : undefined
+                }
               >
-                <Warehouse size={14} /> Warehouse
+                {(isSingleFacility || (isLastRetailBranch && location?.type === "branch")) ? (
+                  <Lock size={12} className="text-slate-400" />
+                ) : (
+                  <Warehouse size={14} />
+                )}
+                Warehouse
               </button>
             </div>
+            {errors.type && <p className="text-[11px] text-rose-500">{errors.type}</p>}
           </div>
 
           {/* Location Name */}

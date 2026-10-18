@@ -352,6 +352,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
     localStorage.removeItem("medinist_demo");
+    localStorage.removeItem("medinist_active_location_id");
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("warehouse_") || k.startsWith("medinist_active_"))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+
     try {
       await supabase.auth.signOut();
     } catch (e) {

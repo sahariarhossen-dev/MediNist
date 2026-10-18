@@ -63,15 +63,19 @@ const ShopProfile = () => {
 
     let isMounted = true;
     const fetchActiveBranch = async () => {
-      // 1. Pre-fill immediately from activeLocation in context
+      // 1. Pre-fill immediately with hierarchical fallback from activeLocation and auth profile
+      const initialProprietor = activeLocation.proprietor_name || profile?.full_name || null;
+      const initialPhone = activeLocation.phone || profile?.phone || null;
+      const initialEmail = activeLocation.email || (profile as any)?.email || null;
+
       const initialBranch: BranchProfileData = {
         id: activeLocation.id,
         name: activeLocation.name || "Branch",
         type: activeLocation.type,
-        proprietor_name: activeLocation.proprietor_name || null,
+        proprietor_name: initialProprietor,
         address: activeLocation.address || null,
-        phone: activeLocation.phone || null,
-        email: activeLocation.email || null,
+        phone: initialPhone,
+        email: initialEmail,
         drug_license: activeLocation.drug_license || null,
         trade_license: activeLocation.trade_license || null,
         invoice_footer: activeLocation.invoice_footer || null,
@@ -96,7 +100,7 @@ const ShopProfile = () => {
         setDefaultDiscount(String(initialBranch.default_discount ?? 10));
       }
 
-      // 2. Fetch fresh details from shop_locations for the active branch
+      // 2. Fetch fresh details from shop_locations for the active branch with hierarchical backfill
       try {
         const { data, error } = await supabase
           .from("shop_locations" as any)
@@ -105,14 +109,48 @@ const ShopProfile = () => {
           .maybeSingle();
 
         if (!error && data && isMounted) {
+          let resolvedProprietor = (data as any).proprietor_name || null;
+          let resolvedPhone = (data as any).phone || null;
+          let resolvedEmail = (data as any).email || null;
+
+          // Hierarchical fallback: if null on branch, resolve from parent pharmacy & owner profile
+          if (!resolvedProprietor || !resolvedPhone || !resolvedEmail) {
+            try {
+              if (profile?.pharmacy_id) {
+                const { data: parentPharm } = await supabase
+                  .from("pharmacies")
+                  .select("proprietor_name, phone, email")
+                  .eq("id", profile.pharmacy_id)
+                  .maybeSingle();
+
+                if (parentPharm) {
+                  if (!resolvedProprietor) resolvedProprietor = parentPharm.proprietor_name || null;
+                  if (!resolvedPhone) resolvedPhone = parentPharm.phone || null;
+                  if (!resolvedEmail) resolvedEmail = parentPharm.email || null;
+                }
+              }
+              if (!resolvedProprietor && profile?.full_name) {
+                resolvedProprietor = profile.full_name;
+              }
+              if (!resolvedPhone && profile?.phone) {
+                resolvedPhone = profile.phone;
+              }
+              if (!resolvedEmail && (profile as any)?.email) {
+                resolvedEmail = (profile as any).email;
+              }
+            } catch (fallbackErr) {
+              console.warn("[ShopProfile] Fallback resolution warning:", fallbackErr);
+            }
+          }
+
           const freshBranch: BranchProfileData = {
             id: (data as any).id,
             name: (data as any).name || "Branch",
             type: (data as any).type as "branch" | "warehouse",
-            proprietor_name: (data as any).proprietor_name || null,
+            proprietor_name: resolvedProprietor,
             address: (data as any).address || null,
-            phone: (data as any).phone || null,
-            email: (data as any).email || null,
+            phone: resolvedPhone,
+            email: resolvedEmail,
             drug_license: (data as any).drug_license || null,
             trade_license: (data as any).trade_license || null,
             invoice_footer: (data as any).invoice_footer || null,
@@ -133,6 +171,24 @@ const ShopProfile = () => {
           });
           setInvoiceFooter(freshBranch.invoice_footer || "");
           setDefaultDiscount(String(freshBranch.default_discount ?? 10));
+
+          // If branch record in database was missing these fields, auto-heal it
+          if (
+            isOwner &&
+            (!(data as any).proprietor_name && resolvedProprietor ||
+             !(data as any).phone && resolvedPhone ||
+             !(data as any).email && resolvedEmail)
+          ) {
+            supabase
+              .from("shop_locations" as any)
+              .update({
+                proprietor_name: resolvedProprietor,
+                phone: resolvedPhone,
+                email: resolvedEmail,
+              })
+              .eq("id", (data as any).id)
+              .then(() => {});
+          }
         }
       } catch (err) {
         console.warn("[ShopProfile] Error fetching fresh shop_locations details:", err);
@@ -144,7 +200,7 @@ const ShopProfile = () => {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeLocation?.id]);
+  }, [activeLocation?.id, profile?.id, profile?.pharmacy_id]);
 
   const handleImageUpload = async (type: "logo" | "cover", e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -189,6 +245,20 @@ const ShopProfile = () => {
       setBranchData((prev) => (prev ? { ...prev, ...updatePayload } : null));
       setEditing(false);
       toast({ title: "Branch outlet details updated successfully!" });
+
+      // Synchronize with parent pharmacy if this is the main branch or single outlet
+      if (profile?.pharmacy_id && (activeLocation.is_main || locations.length <= 1)) {
+        supabase
+          .from("pharmacies")
+          .update({
+            proprietor_name: updatePayload.proprietor_name || null,
+            phone: updatePayload.phone || null,
+            email: updatePayload.email || null,
+            address: updatePayload.address || null,
+          })
+          .eq("id", profile.pharmacy_id)
+          .then(() => {});
+      }
     }
   };
 

@@ -43,6 +43,9 @@ export const AddLocationModal: React.FC<AddLocationModalProps> = ({ open, onOpen
 
   const validate = () => {
     const newErrors: { name?: string; address?: string; code?: string } = {};
+    if (locations.length === 0 && type === "warehouse") {
+      newErrors.name = "Your first facility must be a Retail Branch to enable POS transactions.";
+    }
     if (!name.trim()) {
       newErrors.name = type === "warehouse" ? "Warehouse name is required" : "Branch name is required";
     }

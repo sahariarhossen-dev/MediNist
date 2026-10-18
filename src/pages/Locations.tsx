@@ -16,6 +16,8 @@ import {
   Trash2,
   ArrowRight,
   SlidersHorizontal,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -90,6 +92,13 @@ const LocationsPage: React.FC = () => {
     await toggleLocationStatus(loc.id);
   };
 
+  const handleRestoreToRetail = async (locId: string) => {
+    const success = await updateLocation(locId, { type: "branch" });
+    if (success) {
+      toast.success("Facility successfully converted to Retail Branch. POS billing and sales operations are now active.");
+    }
+  };
+
   // Security Guard: Strictly for 'owner' - immediately redirect to Dashboard without displaying any error splash or locked screen
   const normalizedProfileRole = (profile?.role || "").toLowerCase().trim();
   const isOwner = normalizedProfileRole === "owner" && currentUserRole === "owner";
@@ -138,6 +147,45 @@ const LocationsPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Misconfiguration Recovery Alert Banner (If 0 Retail Branches exist) */}
+        {totalBranches === 0 && locations.length > 0 && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertTriangle size={18} className="stroke-[2.2]" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-rose-900">
+                  Critical Misconfiguration: Retail POS Transactions Blocked
+                </p>
+                <p className="text-xs text-rose-700 leading-relaxed">
+                  Your workspace currently has <strong>0 Retail Branches</strong> and{" "}
+                  <strong>{totalWarehouses} Warehouse(s)</strong>. Counter sales and POS checkout require at least one active Retail Branch.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleRestoreToRetail(locations[0].id)}
+              className="shrink-0 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all"
+            >
+              Restore &quot;{locations[0].name}&quot; to Retail Branch
+            </button>
+          </div>
+        )}
+
+        {/* Single Branch Helpful Guide */}
+        {locations.length === 1 && totalBranches === 1 && (
+          <div className="px-4 py-3 rounded-xl bg-blue-50/70 border border-blue-200/80 text-blue-900 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Info size={15} className="text-blue-600 shrink-0" />
+              <span>
+                <strong>Single-Branch Workspace:</strong> Your location is configured as a <strong>Retail Branch</strong> to handle daily POS billing. Adding a 2nd branch will unlock warehouse conversion and inter-branch stock transfers.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Metric Overview Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

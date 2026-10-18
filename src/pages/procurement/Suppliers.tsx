@@ -235,7 +235,11 @@ export default function Suppliers() {
 
   // 2. Main Suppliers & Metrics Fetch
   const fetchSuppliers = useCallback(async () => {
-    if (!pharmacyId) return;
+    if (!pharmacyId) {
+      setSuppliers([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await warehouseStorage.getSuppliers(pharmacyId, branchId);
@@ -977,23 +981,13 @@ export default function Suppliers() {
               : "Register your pharmaceutical distributors to issue purchase orders and track shipments."}
           </p>
           {!searchQuery && (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+            <div className="flex items-center justify-center">
               <Button
                 onClick={handleOpenAddDialog}
                 size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs h-8 px-3"
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs h-8 px-4 font-semibold shadow-xs"
               >
                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Add First Supplier
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSeedPresets}
-                disabled={isSubmitting}
-                className="rounded-lg border-gray-200 text-slate-700 text-xs h-8 px-3"
-              >
-                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
-                Load Top Pharma Presets
               </Button>
             </div>
           )}
@@ -2185,7 +2179,7 @@ export default function Suppliers() {
                   handleDeleteSupplier(activeLedgerSupplier);
                 }
               }}
-              className="flex-1 sm:flex-initial bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium gap-1.5 h-10 px-5 shadow-xs"
+              className="flex-1 sm:flex-initial bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl font-semibold gap-2 h-10 px-5 shadow-xs hover:shadow-md transition-all active:scale-[0.98] cursor-pointer inline-flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none"
             >
               {isDeleting ? (
                 <>
@@ -2193,7 +2187,10 @@ export default function Suppliers() {
                   <span>Deleting...</span>
                 </>
               ) : (
-                "Delete"
+                <>
+                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <span>Delete Supplier</span>
+                </>
               )}
             </Button>
           </AlertDialogFooter>

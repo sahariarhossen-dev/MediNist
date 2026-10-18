@@ -152,7 +152,16 @@ Deno.serve(async (req) => {
 
     const { data: pharmacy, error: pharmacyError } = await supabaseAdmin
       .from("pharmacies")
-      .insert({ name: trimmedShopName, address: fullAddress, division: division.trim(), district: district.trim(), upazila: upazila.trim() })
+      .insert({
+        name: trimmedShopName,
+        address: fullAddress,
+        division: division.trim(),
+        district: district.trim(),
+        upazila: upazila.trim(),
+        proprietor_name: trimmedFullName,
+        phone: trimmedPhone,
+        email: email.trim(),
+      })
       .select("id")
       .single();
 
@@ -180,7 +189,7 @@ Deno.serve(async (req) => {
           .update({
             name: trimmedShopName,
             type: "branch",
-            code: "MAIN",
+            code: null,
             address: fullAddress,
             phone: trimmedPhone,
             email: email.trim(),
@@ -199,7 +208,7 @@ Deno.serve(async (req) => {
             pharmacy_id: pharmacy.id,
             name: trimmedShopName,
             type: "branch",
-            code: "MAIN",
+            code: null,
             address: fullAddress,
             phone: trimmedPhone,
             email: email.trim(),
@@ -219,11 +228,15 @@ Deno.serve(async (req) => {
       console.warn("register-pharmacy: branch provisioning error:", branchEx);
     }
 
-    // 3. Create auth user
+    // 3. Create auth user with metadata
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim(),
       password,
       email_confirm: true,
+      user_metadata: {
+        full_name: trimmedFullName,
+        phone: trimmedPhone,
+      },
     });
 
     if (authError) {
@@ -247,9 +260,8 @@ Deno.serve(async (req) => {
     }
 
     // 4. Update profile (created by trigger) with pharmacy_id, name, phone, role, assigned_location_id
-    // The first user to register a pharmacy is its admin. We verify the role
-    // landed correctly and roll back the whole signup if it didn't, so an
-    // owner never gets stuck as 'salesman'.
+    // The first user to register a pharmacy is its owner. We support both 'owner' and 'admin' roles
+    // for compatibility across backend migration versions.
     const profileUpdate: Record<string, unknown> = {
       pharmacy_id: pharmacy.id,
       full_name: trimmedFullName,
@@ -262,21 +274,58 @@ Deno.serve(async (req) => {
       profileUpdate.assigned_location_id = initialBranchId;
     }
 
-    const { data: updatedProfile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .update(profileUpdate)
-      .eq("id", authData.user.id)
-      .select("id, role, pharmacy_id, assigned_location_id")
-      .maybeSingle();
+    let updatedProfile: any = null;
+    let profileError: any = null;
 
-    if (profileError || !updatedProfile || (updatedProfile.role !== "owner" && updatedProfile.role !== "admin") || updatedProfile.pharmacy_id !== pharmacy.id) {
+    // Resilient update with upsert fallback to guard against trigger propagation race conditions
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const updateRes = await supabaseAdmin
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", authData.user.id)
+        .select("id, role, pharmacy_id, assigned_location_id")
+        .maybeSingle();
+
+      if (updateRes.data) {
+        updatedProfile = updateRes.data;
+        profileError = null;
+        break;
+      }
+      profileError = updateRes.error;
+
+      // If the row was not present yet, attempt an upsert
+      if (!updateRes.error && !updateRes.data) {
+        const upsertRes = await supabaseAdmin
+          .from("profiles")
+          .upsert({ id: authData.user.id, ...profileUpdate })
+          .select("id, role, pharmacy_id, assigned_location_id")
+          .maybeSingle();
+
+        if (upsertRes.data) {
+          updatedProfile = upsertRes.data;
+          profileError = null;
+          break;
+        }
+        profileError = upsertRes.error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+
+    const effectiveRole = (updatedProfile?.role || "").toLowerCase().trim();
+    if (
+      profileError ||
+      !updatedProfile ||
+      (effectiveRole !== "owner" && effectiveRole !== "admin") ||
+      updatedProfile.pharmacy_id !== pharmacy.id
+    ) {
       console.error("Profile owner promotion failed:", profileError, updatedProfile);
       // Roll back: remove the auth user, branch, and pharmacy so registration can be retried cleanly.
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
       await supabaseAdmin.from("shop_locations").delete().eq("pharmacy_id", pharmacy.id);
       await supabaseAdmin.from("pharmacies").delete().eq("id", pharmacy.id);
       return new Response(
-        JSON.stringify({ error: "Failed to set up owner account. Please try again." }),
+        JSON.stringify({ error: "Failed to set up account. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

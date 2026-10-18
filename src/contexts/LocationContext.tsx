@@ -88,10 +88,10 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         console.warn("[LocationContext] Supabase shop_locations fetch error:", error.message);
         setLocations([]);
       } else if (data && Array.isArray(data) && data.length > 0) {
-        const mapped: Location[] = data.map((item: any) => ({
+        let mapped: Location[] = data.map((item: any) => ({
           id: item.id,
           name: item.name,
-          type: item.type as "branch" | "warehouse",
+          type: (item.type === "warehouse" || item.type === "godown") ? "warehouse" : "branch",
           code: item.code || undefined,
           address: item.address || "",
           phone: item.phone || undefined,
@@ -106,18 +106,40 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           is_active: item.is_active !== undefined ? item.is_active : true,
           is_main: !!item.is_main,
         }));
+
+        // Graceful Recovery: If single-facility account is misconfigured as a warehouse,
+        // automatically heal it back to a Retail Branch so POS checkout is not blocked.
+        if (mapped.length === 1 && mapped[0].type === "warehouse") {
+          console.warn("[LocationContext] Auto-recovering single-branch account from warehouse to branch");
+          const targetId = mapped[0].id;
+          mapped[0] = { ...mapped[0], type: "branch", is_main: true };
+          // Self-heal asynchronously in Supabase
+          supabase
+            .from("shop_locations" as any)
+            .update({ type: "branch", is_main: true })
+            .eq("id", targetId)
+            .then(({ error: healErr }) => {
+              if (!healErr) {
+                toast.info("Notice: Single facility automatically restored to Retail Branch mode to keep POS billing active.");
+              }
+            });
+        }
+
         setLocations(mapped);
       } else {
         // If no locations exist in Supabase yet, dynamically bootstrap from the parent pharmacy profile
         try {
           const { data: pharmacyRecord } = await supabase
             .from("pharmacies")
-            .select("name, address")
+            .select("name, address, phone, email, proprietor_name")
             .eq("id", profile.pharmacy_id)
             .maybeSingle();
 
           const fallbackName = pharmacyRecord?.name?.trim() || "Pharmacy Outlet";
           const fallbackAddress = pharmacyRecord?.address?.trim() || "";
+          const fallbackPhone = pharmacyRecord?.phone?.trim() || profile?.phone?.trim() || undefined;
+          const fallbackEmail = pharmacyRecord?.email?.trim() || undefined;
+          const fallbackProprietor = pharmacyRecord?.proprietor_name?.trim() || profile?.full_name?.trim() || undefined;
 
           const { data: defaultBranch, error: insertErr } = await supabase
             .from("shop_locations" as any)
@@ -127,6 +149,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               type: "branch",
               code: null,
               address: fallbackAddress,
+              phone: fallbackPhone || null,
+              email: fallbackEmail || null,
+              proprietor_name: fallbackProprietor || null,
               is_main: true,
               is_active: true,
             })
@@ -140,6 +165,9 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               type: "branch",
               code: (defaultBranch as any).code || undefined,
               address: (defaultBranch as any).address || fallbackAddress,
+              phone: (defaultBranch as any).phone || fallbackPhone,
+              email: (defaultBranch as any).email || fallbackEmail,
+              proprietor_name: (defaultBranch as any).proprietor_name || fallbackProprietor,
               is_active: true,
               is_main: true,
             };
@@ -158,7 +186,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } finally {
       setIsLoadingLocations(false);
     }
-  }, [profile?.pharmacy_id]);
+  }, [profile?.pharmacy_id, profile?.full_name, profile?.phone]);
 
   // Fetch stock transfers strictly from Supabase
   const fetchTransfers = useCallback(async () => {
@@ -345,6 +373,11 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return null;
       }
 
+      if ((data.type === "warehouse" || (data.type as string) === "godown") && locations.length === 0) {
+        toast.error("Your primary facility must be a Retail Branch to process POS transactions.");
+        return null;
+      }
+
       try {
         const { data: inserted, error } = await supabase
           .from("shop_locations" as any)
@@ -391,7 +424,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       return null;
     },
-    [profile?.pharmacy_id]
+    [profile?.pharmacy_id, locations.length]
   );
 
   const updateLocation = useCallback(
@@ -403,6 +436,30 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const target = locations.find((l) => l.id === id);
       if (!target) return false;
+
+      // Business Guard: Restrict Warehouse Conversion for Single-Branch Accounts
+      const targetType = data.type !== undefined ? data.type : target.type;
+      const isConvertingToWarehouse = targetType === "warehouse" || (targetType as string) === "godown";
+
+      if (isConvertingToWarehouse) {
+        if (locations.length <= 1) {
+          toast.error("At least two branches are required to configure a warehouse. Single facilities must operate as a retail branch.");
+          return false;
+        }
+
+        // Ensure at least one other active retail branch remains
+        const remainingRetailBranches = locations.filter(
+          (l) =>
+            l.id !== id &&
+            (l.type === "branch" || (l.type as string) === "shop") &&
+            l.is_active !== false
+        );
+
+        if (remainingRetailBranches.length === 0) {
+          toast.error("Cannot convert to warehouse: At least one active retail branch is required for POS sales.");
+          return false;
+        }
+      }
 
       const updatePayload: Record<string, any> = {};
       if (data.name !== undefined) updatePayload.name = data.name.trim();

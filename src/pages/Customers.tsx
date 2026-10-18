@@ -50,8 +50,18 @@ const Customers = () => {
     <div className="min-h-[calc(100vh-72px)] bg-[#F4F6FB] w-full max-w-md mx-auto pb-24">
 
       <div className="flex items-center justify-between px-page pt-3 pb-2">
-        <h1 className="font-semibold text-fluid-base text-gray-800">Customers</h1>
-        <span className="text-fluid-xs text-gray-500">{rows.length} total</span>
+        <div>
+          <h1 className="font-semibold text-fluid-base text-gray-800">Customers</h1>
+          <span className="text-fluid-xs text-gray-500">{rows.length} total</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs active:scale-95 transition-all"
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          <span>Add Customer</span>
+        </button>
       </div>
 
       <div className="px-page sticky top-0 z-10 bg-[#F4F6FB] pt-1 pb-2">
@@ -75,10 +85,20 @@ const Customers = () => {
         {loading ? (
           <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
-            <UserIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No customers yet</p>
-            <p className="text-xs text-gray-400 mt-1">Tap + to add your first customer.</p>
+          <div className="bg-white rounded-2xl p-6 text-center shadow-sm space-y-3">
+            <UserIcon className="w-10 h-10 text-gray-300 mx-auto" />
+            <div>
+              <p className="text-sm font-semibold text-gray-700">No customers yet</p>
+              <p className="text-xs text-gray-400 mt-1">Tap below or the (+) button to add your first customer.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm active:scale-95 transition-all"
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Add First Customer</span>
+            </button>
           </div>
         ) : (
           rows.map((c) => {
@@ -116,24 +136,15 @@ const Customers = () => {
       </div>
 
       {profile?.pharmacy_id && (
-        <>
-          <button
-            onClick={() => setAddOpen(true)}
-            aria-label="Add customer"
-            className="fixed bottom-6 right-1/2 translate-x-[calc(min(50vw,224px)-1.25rem)] h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white transition-colors z-40"
-          >
-            <Plus size={26} strokeWidth={2.5} />
-          </button>
-          <QuickAddCustomerSheet
-            open={addOpen}
-            onOpenChange={setAddOpen}
-            pharmacyId={profile.pharmacy_id}
-            onSaved={(c) => {
-              load();
-              navigate(`/more/customers/${c.id}`);
-            }}
-          />
-        </>
+        <QuickAddCustomerSheet
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          pharmacyId={profile.pharmacy_id}
+          onSaved={(c) => {
+            load();
+            navigate(`/more/customers/${c.id}`);
+          }}
+        />
       )}
     </div>
   );

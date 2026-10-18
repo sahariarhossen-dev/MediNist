@@ -214,50 +214,6 @@ export interface StockAuditRecord {
   items?: StockAuditItemRecord[];
 }
 
-// Default Bangladesh Pharmaceutical Suppliers for initial seeding
-const DEFAULT_BANGLADESH_SUPPLIERS = [
-  {
-    name: "Square Pharmaceuticals PLC",
-    contact_person: "Tariqul Islam (Key Accounts)",
-    phone: "+880 1711-223344",
-    email: "institutional@squarepharma.com.bd",
-    address: "Square Centre, 48 Mohakhali C/A, Dhaka-1212",
-    payment_terms: "net_30" as const,
-  },
-  {
-    name: "Beximco Pharmaceuticals Ltd",
-    contact_person: "M. S. Al-Mamun (Depot Manager)",
-    phone: "+880 1713-001122",
-    email: "supplychain@bpl.net",
-    address: "19 Dhanmondi R/A, Road 7, Dhaka-1205",
-    payment_terms: "net_30" as const,
-  },
-  {
-    name: "Incepta Pharmaceuticals Ltd",
-    contact_person: "Dr. K. Rahman (Institutional Lead)",
-    phone: "+880 1755-667788",
-    email: "orders@inceptapharma.com",
-    address: "40 Shahid Tajuddin Ahmed Sarani, Tejgaon, Dhaka",
-    payment_terms: "net_15" as const,
-  },
-  {
-    name: "Renata PLC",
-    contact_person: "Ashiqur Zaman (Supply Chain)",
-    phone: "+880 1819-998877",
-    email: "sales@renata-ltd.com",
-    address: "Plot 1, Milk Vita Road, Section 7, Mirpur, Dhaka",
-    payment_terms: "net_30" as const,
-  },
-  {
-    name: "ACI Limited (Healthcare Division)",
-    contact_person: "Farhan Kabir (Area Depot)",
-    phone: "+880 1912-112233",
-    email: "pharma.sales@aci-bd.com",
-    address: "ACI Centre, 245 Tejgaon I/A, Dhaka",
-    payment_terms: "cash" as const,
-  },
-];
-
 // Helper to safely read and write localStorage
 const readLocal = <T>(key: string, defaultValue: T): T => {
   try {
@@ -282,9 +238,14 @@ export const warehouseStorage = {
   // 1. SUPPLIERS & LEDGER
   // ==========================================
   async getSuppliers(pharmacyId: string, branchId?: string): Promise<SupplierRecord[]> {
+    if (!pharmacyId || typeof pharmacyId !== "string" || !pharmacyId.trim()) {
+      return [];
+    }
+
     const storageKey = branchId
       ? `warehouse_suppliers_${pharmacyId}_${branchId}`
       : `warehouse_suppliers_${pharmacyId}`;
+
     try {
       let query = (supabase.from("suppliers" as any) as any)
         .select("*")
@@ -293,7 +254,8 @@ export const warehouseStorage = {
         .order("name", { ascending: true });
 
       if (branchId) {
-        query = query.eq("location_id", branchId);
+        // Return suppliers scoped to this specific branch or pharmacy-wide (location_id is null)
+        query = query.or(`location_id.eq.${branchId},location_id.is.null`);
       }
 
       const { data, error } = await query;
@@ -301,12 +263,12 @@ export const warehouseStorage = {
       if (error) {
         console.warn("[warehouseStorage] Supabase getSuppliers warning:", error.message);
         if (isMissingTableError(error)) {
-          // Fall back gracefully to local storage if table is missing
+          // Fall back gracefully to local storage if table is missing, strictly scoped to this pharmacy
           const local = readLocal<SupplierRecord[]>(storageKey, []);
-          return local.filter((s) => !s.deleted_at);
+          return local.filter((s) => s.pharmacy_id === pharmacyId && !s.deleted_at);
         }
       } else if (Array.isArray(data)) {
-        // Legitimate response from Supabase (including empty array [] for an isolated branch with 0 suppliers)
+        // Legitimate response from Supabase (including empty array [] for an isolated newly registered pharmacy)
         writeLocal(storageKey, data);
         return data as SupplierRecord[];
       }
@@ -316,9 +278,9 @@ export const warehouseStorage = {
       }
     }
 
-    // Offline / Network Error Fallback: return cached local data for this branch without seeding false mock duplicates
+    // Offline / Network Error Fallback: return cached local data strictly matching pharmacyId
     const local = readLocal<SupplierRecord[]>(storageKey, []);
-    return local.filter((s) => !s.deleted_at);
+    return local.filter((s) => s.pharmacy_id === pharmacyId && !s.deleted_at);
   },
 
   async saveSupplier(
